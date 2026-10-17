@@ -1,5 +1,5 @@
 // Round-trip test for NeighborSnapshot. Game-free, Windows-free.
-//   g++ -std=c++20 -I src tests/snapshot_roundtrip.cpp src/NeighborSnapshot.cpp -o /tmp/snap && /tmp/snap
+//   make test   (or: g++ -std=c++20 -I src tests/snapshot_roundtrip.cpp src/NeighborSnapshot.cpp -o snap && ./snap <scratch dir>)
 #include "NeighborSnapshot.h"
 #include <cmath>
 #include <cstdio>
@@ -10,7 +10,7 @@ using namespace regionsync;
 static int failures = 0;
 #define CHECK(c) do { if (!(c)) { std::printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #c); failures++; } } while (0)
 
-int main()
+int main(int argc, char** argv)
 {
 	NeighborSnapshot a;
 	a.regionX = 3; a.regionZ = 7; a.sizeX = 2; a.sizeZ = 4;
@@ -26,7 +26,8 @@ int main()
 	a.rciGroupCount = 3;
 	a.rciGroups[0] = { 0x1010, 100 }; a.rciGroups[1] = { 0x3110, 200 }; a.rciGroups[2] = { 0x4400, -1 };
 
-	const std::filesystem::path dir = std::filesystem::temp_directory_path() / "sc4rs-test";
+	// Scratch dir under the build tree, not the shared system temp dir.
+	const std::filesystem::path dir = argc > 1 ? std::filesystem::path(argv[1]) : std::filesystem::path("build/snapshot-test");
 	const std::filesystem::path path = dir / SnapshotFileName(a.regionX, a.regionZ);
 	std::string error;
 	CHECK(SnapshotFileName(3, 7) == "3_7.snapshot");

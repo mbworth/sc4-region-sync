@@ -111,4 +111,4 @@ clean:
 test:
 	mkdir -p $(BUILD)
 	g++ -std=c++20 -Wall -I src tests/snapshot_roundtrip.cpp src/NeighborSnapshot.cpp -o $(BUILD)/snapshot_roundtrip
-	$(BUILD)/snapshot_roundtrip
+	$(BUILD)/snapshot_roundtrip $(BUILD)/snapshot-test

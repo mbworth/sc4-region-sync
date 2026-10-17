@@ -26,7 +26,7 @@ make                                 # -> build/SC4RegionSync.dll
 On Windows with Visual Studio 2022:
 
 ```
-msbuild src\SC4RegionSync.sln /p:Configuration=Release /p:Platform=Win32 /p:SC4PluginsDir="C:\Path\To\SimCity 4 Deluxe Edition\Plugins"
+msbuild src\SC4RegionSync.sln /p:Configuration=Release /p:Platform=x86 /p:SC4PluginsDir="C:\Path\To\SimCity 4 Deluxe Edition\Plugins"
 ```
 
 Pushing to GitHub also builds it: `.github/workflows/build.yml` runs MSVC on a Windows runner and uploads the DLL as an artifact.
