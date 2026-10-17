@@ -632,3 +632,78 @@ Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 mar
 Apply: done, changed=0
 Pull: applied (4,6) changedFields=0
 Pull (month tick): files=2 applied=1 changedFields=0
+Publish (month tick): (6,6) 'TuggersVille' pop=17384 com=1063 ind=918 simDate=2010-06-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=12171, snapshot pop=12234). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
+Apply: population 12171 -> 12234
+Apply: commercialJobs 921 -> 920
+Apply: SetBudget(1102570)
+Apply: SetProduced(2, 3553.00) was 3554.00
+Apply: SetProduced(3, 2078.00) was 2122.67
+Apply: SetDemanded(3, 20536.00) was 22988.00
+Apply: SetCostPerUnit(3, 0.03) was 0.03
+Apply: done, changed=7
+Pull: applied (4,6) changedFields=7
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=7
+Publish (month tick): (6,6) 'TuggersVille' pop=17391 com=1063 ind=920 simDate=2010-07-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=12234, snapshot pop=12232). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
+Apply: population 12234 -> 12232
+Apply: SetIncome(7260)
+Apply: done, changed=2
+Pull: applied (4,6) changedFields=2
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=2
+Publish (month tick): (6,6) 'TuggersVille' pop=17391 com=1063 ind=919 simDate=2010-08-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=12232, snapshot pop=12234). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
+Apply: population 12232 -> 12234
+Apply: commercialJobs 920 -> 919
+Apply: SetBudget(1109930)
+Apply: SetProduced(1, 7430.00) was 7431.00
+Apply: SetProduced(3, 3500.00) was 2078.00
+Apply: SetDemanded(3, 22148.00) was 20536.00
+Apply: SetCostPerUnit(3, 0.02) was 0.03
+Apply: done, changed=7
+Pull: applied (4,6) changedFields=7
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=7
+Publish (month tick): (6,6) 'TuggersVille' pop=17382 com=1063 ind=922 simDate=2010-09-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=12234, snapshot pop=12196). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
+Apply: population 12234 -> 12196
+Apply: SetBudget(1113610)
+Apply: SetProduced(3, 2000.00) was 3500.00
+Apply: SetDemanded(3, 23136.00) was 22148.00
+Apply: SetCostPerUnit(3, 0.02) was 0.02
+Apply: done, changed=5
+Pull: applied (4,6) changedFields=5
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=5
+Publish (month tick): (6,6) 'TuggersVille' pop=17375 com=1063 ind=922 simDate=2010-10-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=12196, snapshot pop=12196). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
+Apply: done, changed=0
+Pull: applied (4,6) changedFields=0
+Pull (month tick): files=2 applied=1 changedFields=0
+Publish (month tick): (6,6) 'TuggersVille' pop=17379 com=1063 ind=922 simDate=2010-11-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=12196, snapshot pop=12233). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
+Apply: population 12196 -> 12233
+Apply: commercialJobs 919 -> 920
+Apply: industrialJobs 3882 -> 3881
+Apply: SetBudget(1117390)
+Apply: SetIncome(7259)
+Apply: SetProduced(3, 3500.00) was 2000.00
+Apply: SetDemanded(3, 21620.00) was 23136.00
+Apply: SetCostPerUnit(3, 0.02) was 0.02
+Apply: done, changed=8
+Pull: applied (4,6) changedFields=8
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=8

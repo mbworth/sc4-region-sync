@@ -13,8 +13,8 @@ Exit criterion: the plugin loads, the cheats work, and the log tells us what the
 
 - [x] Answer Q5 (two instances). Done 2026-10-17: mutex closed by the plugin plus steam_appid.txt for the Steam build.
 - [ ] Answer Q1 (UpdateCityCache side effects).
-- [ ] With `Enabled=1`, run two adjacent tiles. Confirm each instance's log shows monthly publishes and pulls, and that pull reports `changedFields > 0` after the other instance grows.
-- [ ] Answer Q2 (does demand move). This is the go/no-go for the whole approach.
+- [x] With `Enabled=1`, run two adjacent tiles. Confirm each instance's log shows monthly publishes and pulls, and that pull reports `changedFields > 0` after the other instance grows. Done 2026-10-17.
+- [x] Answer Q2 (does demand move). No: records update live, demand does not (2026-10-17). Phase 1b.
 
 Exit criterion: growth in instance B visibly changes regional demand in instance A without A reloading its city.
 

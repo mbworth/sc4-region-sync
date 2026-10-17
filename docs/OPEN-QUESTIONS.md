@@ -27,7 +27,14 @@ This decides whether a pull moves regional demand immediately. Note that `cISC4R
 
 **If the record does not update at all,** we need the population setter. The regional record is a concrete class in the game binary; the vtable has setters for other fields, and the population fields are almost certainly plain members. Finding their offsets from the getters is a small Ghidra task.
 
-**Observed.** (unknown)
+**Observed (2026-10-17): the record updates, demand does not move.** Two instances: TuggersVille grew from 1,285 to 17,375 residents in instance 2 and BumperVille's instance pulled every step of it into its record of TuggersVille (population, jobs, per-RCI-group values via direct field writes, see Q6 notes and `RegionalCity641.h`). BumperVille's RCI graph showed no visible change. Numeric check with `RegionSyncDemand` and `RegionSyncFakeNeighbor` (single instance): with DumpsVille's record holding +500,000 residents and +200,000 of each job type for 14 sim months, BumperVille's demand values moved about 5%, matching its own population growth over the same months (11,450 to 12,107). `regionUse` is 0 on every demand object.
+
+```
+  0x1010 demand=26464.2 active=16465.8 supply=11559.0 cap=0.1545 regionUse=0   (before, pop 11450)
+  0x1010 demand=27851.6 active=17509.7 supply=11983.0 cap=0.1630 regionUse=0   (14 months later, pop 12107)
+```
+
+So the simulator takes its regional inputs at city load (or from somewhere other than the live records). Phase 1b: find where it caches them and refresh that after a pull, or `ReloadCity` (Q3).
 
 ## Q3. Does `cISC4Region::ReloadCity` work mid-game, and what does it do to pointers?
 
