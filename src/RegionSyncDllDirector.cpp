@@ -34,6 +34,9 @@
 #include "cIGZMessageServer2.h"
 #include "cISC4App.h"
 #include "cISC4City.h"
+#include "cISC4Demand.h"
+#include "cISC4DemandSimulator.h"
+#include "SC4Percentage.h"
 #include "cISC4NeighborConnection.h"
 #include "cISC4NeighborDeal.h"
 #include "cISC4NeighborsSimulator.h"
@@ -84,6 +87,8 @@ static constexpr uint32_t kCheatSaveID = 0x7A3C9E57;
 static constexpr uint32_t kCheatUnlockID = 0x7A3C9E58;
 static constexpr uint32_t kCheatSetterTestID = 0x7A3C9E59;
 static constexpr uint32_t kCheatProbeID = 0x7A3C9E5A;
+static constexpr uint32_t kCheatDemandID = 0x7A3C9E5B;
+static constexpr uint32_t kCheatFakeNeighborID = 0x7A3C9E5C;
 
 static constexpr std::string_view kCheatDump = "RegionSyncDump";
 static constexpr std::string_view kCheatPublish = "RegionSyncPublish";
@@ -94,6 +99,8 @@ static constexpr std::string_view kCheatSave = "RegionSyncSave";
 static constexpr std::string_view kCheatUnlock = "RegionSyncUnlock";
 static constexpr std::string_view kCheatSetterTest = "RegionSyncSetterTest";
 static constexpr std::string_view kCheatProbe = "RegionSyncProbe";
+static constexpr std::string_view kCheatDemand = "RegionSyncDemand";
+static constexpr std::string_view kCheatFakeNeighbor = "RegionSyncFakeNeighbor";
 
 namespace
 {
@@ -349,6 +356,8 @@ private:
 			pCheatCodeManager->RegisterCheatCode(kCheatUnlockID, cRZBaseString(kCheatUnlock));
 			pCheatCodeManager->RegisterCheatCode(kCheatSetterTestID, cRZBaseString(kCheatSetterTest));
 			pCheatCodeManager->RegisterCheatCode(kCheatProbeID, cRZBaseString(kCheatProbe));
+			pCheatCodeManager->RegisterCheatCode(kCheatDemandID, cRZBaseString(kCheatDemand));
+			pCheatCodeManager->RegisterCheatCode(kCheatFakeNeighborID, cRZBaseString(kCheatFakeNeighbor));
 			pCheatCodeManager->AddNotification2(this, 0);
 		}
 	}
@@ -432,6 +441,8 @@ private:
 			pCheatCodeManager->UnregisterCheatCode(kCheatUnlockID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatSetterTestID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatProbeID);
+			pCheatCodeManager->UnregisterCheatCode(kCheatDemandID);
+			pCheatCodeManager->UnregisterCheatCode(kCheatFakeNeighborID);
 			pCheatCodeManager->RemoveNotification2(this, 0);
 		}
 	}
@@ -563,6 +574,11 @@ private:
 			if (snapshot.regionX == ownX && snapshot.regionZ == ownZ)
 			{
 				continue; // our own tile
+			}
+			if (fakeNeighborHeld && snapshot.regionX == fakeNeighborX && snapshot.regionZ == fakeNeighborZ)
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "Pull: (%d,%d) held by RegionSyncFakeNeighbor, skipped.", snapshot.regionX, snapshot.regionZ);
+				continue;
 			}
 
 			cISC4RegionalCity* pTarget = regionsync::FindRegionalCity(pRegion, snapshot.regionX, snapshot.regionZ);
@@ -973,6 +989,90 @@ private:
 		logger.Flush();
 	}
 
+	// DemandDump: numeric regional demand readout per RCI group, the
+	// instrument for Q2 (the demand graph is too coarse to read by eye).
+	void DemandDump()
+	{
+		Logger& logger = Logger::GetInstance();
+		cISC4DemandSimulator* pDemandSim = pCity ? pCity->GetDemandSimulator() : nullptr;
+		if (!pDemandSim)
+		{
+			logger.WriteLine(LogLevel::Error, "Demand: no demand simulator.");
+			return;
+		}
+		constexpr uint32_t kTotalsDemandIndex = 0x20000;
+		logger.WriteLine(LogLevel::Info, "==== RegionSyncDemand begin ====");
+		for (uint32_t groupId : regionsync::kRCIGroupIds)
+		{
+			cISC4Demand* pDemand = pDemandSim->GetDemand(groupId, kTotalsDemandIndex);
+			if (!pDemand)
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "  0x%04X: no demand object", groupId);
+				continue;
+			}
+			const SC4Percentage* pCap = pDemand->GetDemandCap();
+			logger.WriteLineFormatted(
+				LogLevel::Info,
+				"  0x%04X demand=%.1f active=%.1f supply=%.1f max=%.1f min=%.1f cap=%.4f regionUse=%u",
+				groupId,
+				pDemand->QueryDemandValue(), pDemand->QueryActiveDemandValue(), pDemand->QuerySupplyValue(),
+				pDemand->QueryActiveDemandMax(), pDemand->QueryActiveDemandMin(),
+				pCap ? pCap->percentage : -1.0f, pDemand->GetRegionUse());
+		}
+		logger.WriteLine(LogLevel::Info, "==== RegionSyncDemand end ====");
+		logger.Flush();
+	}
+
+	// FakeNeighbor: toggle. First call writes a huge population into the
+	// first other established tile's record and holds it against the
+	// monthly pull; second call releases the hold (the next pull restores
+	// the real values). RegionSyncDemand before and a month after tells
+	// whether the demand simulator reads regional records live (Q2).
+	void FakeNeighbor()
+	{
+		Logger& logger = Logger::GetInstance();
+		if (fakeNeighborHeld)
+		{
+			fakeNeighborHeld = false;
+			logger.WriteLineFormatted(LogLevel::Info, "FakeNeighbor: released (%d,%d); next pull restores it.", fakeNeighborX, fakeNeighborZ);
+			logger.Flush();
+			return;
+		}
+		if (!pRegion || !pOwnRegionalCity)
+		{
+			logger.WriteLine(LogLevel::Error, "FakeNeighbor: no region.");
+			return;
+		}
+		int32_t ox = 0, oz = 0;
+		pOwnRegionalCity->GetPosition(ox, oz);
+		SC4Vector<cISC4Region::cLocation> locations;
+		pRegion->GetCityLocations(locations);
+		for (size_t i = 0; i < locations.size(); i++)
+		{
+			const int32_t x = static_cast<int32_t>(locations[i].x);
+			const int32_t z = static_cast<int32_t>(locations[i].z);
+			if (x == ox && z == oz) continue;
+			cISC4RegionalCity* p = regionsync::FindRegionalCity(pRegion, x, z);
+			if (!p || !p->GetEstablished()) continue;
+
+			const int32_t pop = regionsync::rc641::GetPopulation(p);
+			const int32_t fake = pop + 500000;
+			regionsync::rc641::SetPopulation(p, fake);
+			int32_t* pR1 = regionsync::rc641::FindPopulationByType(p, 0x1010);
+			const int32_t r1 = pR1 ? *pR1 : -1;
+			if (pR1) *pR1 = r1 + 500000;
+			regionsync::rc641::SetCommercialJobs(p, regionsync::rc641::GetCommercialJobs(p) + 200000);
+			regionsync::rc641::SetIndustrialJobs(p, regionsync::rc641::GetIndustrialJobs(p) + 200000);
+			fakeNeighborHeld = true; fakeNeighborX = x; fakeNeighborZ = z;
+			logger.WriteLineFormatted(LogLevel::Info, "FakeNeighbor: (%d,%d) '%s' pop %d -> %d, R$ %d -> %d, jobs +200000 each. Held until typed again.",
+				x, z, GetRegionalCityName(p).c_str(), pop, fake, r1, pR1 ? *pR1 : -1);
+			logger.Flush();
+			if (pNeighborsSim) pNeighborsSim->MarkDealsDirty();
+			return;
+		}
+		logger.WriteLine(LogLevel::Info, "FakeNeighbor: no other established tile.");
+	}
+
 	void Status()
 	{
 		int32_t x = -1, z = -1;
@@ -1007,6 +1107,8 @@ private:
 		case kCheatUnlockID:  Unlock("cheat"); break;
 		case kCheatSetterTestID: SetterTest(); break;
 		case kCheatProbeID: Probe(); break;
+		case kCheatDemandID: DemandDump(); break;
+		case kCheatFakeNeighborID: FakeNeighbor(); break;
 		}
 	}
 
@@ -1032,6 +1134,10 @@ private:
 	int publishCount;
 	int pullCount;
 	uint32_t instanceId;
+
+	bool fakeNeighborHeld = false;
+	int32_t fakeNeighborX = -1;
+	int32_t fakeNeighborZ = -1;
 };
 
 cRZCOMDllDirector* RZGetCOMDllDirector()
