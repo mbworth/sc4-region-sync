@@ -94,7 +94,7 @@ namespace regionsync
 		}
 	}
 
-	int ApplySnapshotToRegionalCity(const NeighborSnapshot& s, cISC4RegionalCity* pRegionalCity)
+	int ApplySnapshotToRegionalCity(const NeighborSnapshot& s, cISC4RegionalCity* pRegionalCity, const ApplyOptions& opt)
 	{
 		if (!pRegionalCity)
 		{
@@ -112,7 +112,7 @@ namespace regionsync
 
 		Logger& logger = Logger::GetInstance();
 
-		if (pRegionalCity->GetEstablished() != s.established)
+		if (opt.established && pRegionalCity->GetEstablished() != s.established)
 		{
 			logger.WriteLineFormatted(LogLevel::Info, "Apply: SetEstablished(%d)", s.established ? 1 : 0);
 			logger.Flush();
@@ -120,7 +120,7 @@ namespace regionsync
 			changed++;
 		}
 
-		if (Differs(pRegionalCity->GetBudget(), s.budget))
+		if (opt.budget && Differs(pRegionalCity->GetBudget(), s.budget))
 		{
 			logger.WriteLineFormatted(LogLevel::Info, "Apply: SetBudget(%.0f)", s.budget);
 			logger.Flush();
@@ -128,7 +128,7 @@ namespace regionsync
 			changed++;
 		}
 
-		if (Differs(pRegionalCity->GetIncome(), s.income))
+		if (opt.income && Differs(pRegionalCity->GetIncome(), s.income))
 		{
 			logger.WriteLineFormatted(LogLevel::Info, "Apply: SetIncome(%.0f)", s.income);
 			logger.Flush();
@@ -136,7 +136,7 @@ namespace regionsync
 			changed++;
 		}
 
-		for (size_t i = 0; i < kApplyCommoditySlots; i++)
+		for (size_t i = 0; opt.commodities && i < kApplyCommoditySlots; i++)
 		{
 			const int32_t commodity = static_cast<int32_t>(i);
 			const CommodityStats& c = s.commodities[i];
@@ -163,6 +163,7 @@ namespace regionsync
 		}
 
 		logger.WriteLineFormatted(LogLevel::Info, "Apply: done, changed=%d", changed);
+		logger.Flush();
 		return changed;
 	}
 

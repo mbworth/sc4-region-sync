@@ -86,6 +86,18 @@ namespace regionsync
 				storeDirectory = sync->get_value("StoreDirectory", "");
 				releaseInstanceMutexOnStart = ParseBool(sync->get_value("ReleaseInstanceMutexOnStart", ""), releaseInstanceMutexOnStart);
 				applyPulledSnapshots = ParseBool(sync->get_value("ApplyPulledSnapshots", ""), applyPulledSnapshots);
+
+				const std::string fields = sync->get_value("ApplyFields", "");
+				if (!fields.empty())
+				{
+					std::string f = fields;
+					std::transform(f.begin(), f.end(), f.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+					applyEstablished = f.find("established") != std::string::npos;
+					applyBudget = f.find("budget") != std::string::npos;
+					applyIncome = f.find("income") != std::string::npos;
+					applyCommodities = f.find("commodities") != std::string::npos;
+				}
+				markDealsDirty = ParseBool(sync->get_value("MarkDealsDirty", ""), markDealsDirty);
 			}
 
 			auto logging = reader.get_section_optional("Logging");

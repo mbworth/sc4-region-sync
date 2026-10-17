@@ -578,6 +578,12 @@ private:
 				pTarget->GetPopulation(),
 				snapshot.population,
 				settings.applyPulledSnapshots ? 1 : 0);
+			logger.WriteLineFormatted(
+				LogLevel::Info,
+				"Pull: applyFields established=%d budget=%d income=%d commodities=%d markDealsDirty=%d",
+				settings.applyEstablished ? 1 : 0, settings.applyBudget ? 1 : 0,
+				settings.applyIncome ? 1 : 0, settings.applyCommodities ? 1 : 0,
+				settings.markDealsDirty ? 1 : 0);
 			logger.Flush();
 
 			if (!settings.applyPulledSnapshots)
@@ -585,7 +591,13 @@ private:
 				continue;
 			}
 
-			const int changed = regionsync::ApplySnapshotToRegionalCity(snapshot, pTarget);
+			regionsync::ApplyOptions opt;
+			opt.established = settings.applyEstablished;
+			opt.budget = settings.applyBudget;
+			opt.income = settings.applyIncome;
+			opt.commodities = settings.applyCommodities;
+
+			const int changed = regionsync::ApplySnapshotToRegionalCity(snapshot, pTarget, opt);
 			applied++;
 			totalChanged += changed;
 
@@ -593,9 +605,10 @@ private:
 				LogLevel::Info,
 				"Pull: applied (%d,%d) changedFields=%d",
 				snapshot.regionX, snapshot.regionZ, changed);
+			logger.Flush();
 		}
 
-		if (totalChanged > 0 && pNeighborsSim)
+		if (totalChanged > 0 && pNeighborsSim && settings.markDealsDirty)
 		{
 			// Ask the neighbors simulator to recompute deal state from the
 			// updated records.

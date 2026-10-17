@@ -42,6 +42,19 @@ namespace regionsync
 		// 0 = read the store and log, touch nothing (crash isolation).
 		bool applyPulledSnapshots = true;
 
+		// Which record fields a pull writes. Comma list of
+		// established, budget, income, commodities. Each setter is a
+		// reverse-engineered vtable slot; the 2026-10-17 crash on city
+		// load is being bisected with this.
+		bool applyEstablished = false;
+		bool applyBudget = false;
+		bool applyIncome = false;
+		bool applyCommodities = true;
+
+		// Call cISC4NeighborsSimulator::MarkDealsDirty after a pull changed
+		// something.
+		bool markDealsDirty = true;
+
 		// Where snapshots live. Empty means "<DLL folder>\RegionSync\<region dir>".
 		// Both game instances share the install, so the default is already a
 		// shared location. Set it explicitly if the instances use separate

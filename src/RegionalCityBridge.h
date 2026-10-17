@@ -44,7 +44,14 @@ namespace regionsync
 	// Returns the number of fields that changed value (0 means nothing new).
 	// Only summary values are written. Deals and connections are never
 	// touched here: see docs/DESIGN.md for why.
-	int ApplySnapshotToRegionalCity(const NeighborSnapshot& snapshot, cISC4RegionalCity* pRegionalCity);
+	struct ApplyOptions
+	{
+		bool established = true;
+		bool budget = true;
+		bool income = true;
+		bool commodities = true;
+	};
+	int ApplySnapshotToRegionalCity(const NeighborSnapshot& snapshot, cISC4RegionalCity* pRegionalCity, const ApplyOptions& options);
 
 	// Convenience: find the regional record for a tile position, or null.
 	cISC4RegionalCity* FindRegionalCity(cISC4Region* pRegion, int32_t regionX, int32_t regionZ);
