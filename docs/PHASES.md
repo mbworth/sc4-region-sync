@@ -16,13 +16,13 @@ Exit criterion: the plugin loads, the cheats work, and the log tells us what the
 - [x] With `Enabled=1`, run two adjacent tiles. Confirm each instance's log shows monthly publishes and pulls, and that pull reports `changedFields > 0` after the other instance grows. Done 2026-10-17.
 - [x] Answer Q2 (does demand move). No: records update live, demand does not (2026-10-17). Phase 1b.
 
-Exit criterion: growth in instance B visibly changes regional demand in instance A without A reloading its city.
+Exit criterion: growth in instance B visibly changes regional demand in instance A without A reloading its city. Met 2026-10-17 via Phase 1b (fake neighbor test; a real two-instance repeat is still worth one run).
 
-## Phase 1b: reload path (only if Q2 says the simulator caches at load)
+## Phase 1b: demand refresh (done)
 
-- [ ] Answer Q3 (`ReloadCity` mid-game).
-- [ ] If it works: `AutoSaveEveryMonths=N` in B, a `ReloadEveryMonths` setting in A, and a save lock in the store so saves never overlap.
-- [ ] If it does not: find the simulator's cached regional values (start with `cISC4DemandSimulator`) and refresh them directly after a pull.
+- [x] The simulator caches regional population at load (Q2). Instead of `ReloadCity`, the director mirrors the simulator's own init: after every pull it feeds the change in regional extrapolated population into the 12 region-use demand objects (`AddToSupplyValue`). Verified in game 2026-10-17.
+- [ ] Two-instance confirmation: grow B, watch A's RCI graph move within a month.
+- [ ] Q3 (`ReloadCity`) is now optional; keep for the thumbnail refresh in Phase 3.
 
 ## Phase 2: hardening
 

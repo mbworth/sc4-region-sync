@@ -1137,8 +1137,8 @@ private:
 
 	// FakeNeighbor: toggle. First call writes a huge population into the
 	// first other established tile's record and holds it against the
-	// monthly pull; second call releases the hold (the next pull restores
-	// the real values). RegionSyncDemand before and a month after tells
+	// monthly pull; second call restores the saved values and feeds the
+	// negative delta to the demand simulator. RegionSyncDemand before and a month after tells
 	// whether the demand simulator reads regional records live (Q2).
 	void FakeNeighbor()
 	{
@@ -1146,8 +1146,20 @@ private:
 		if (fakeNeighborHeld)
 		{
 			fakeNeighborHeld = false;
-			logger.WriteLineFormatted(LogLevel::Info, "FakeNeighbor: released (%d,%d); next pull restores it.", fakeNeighborX, fakeNeighborZ);
+			cISC4RegionalCity* p = pRegion ? regionsync::FindRegionalCity(pRegion, fakeNeighborX, fakeNeighborZ) : nullptr;
+			if (p)
+			{
+				regionsync::rc641::SetPopulation(p, fakeSaved.pop);
+				regionsync::rc641::SetCommercialJobs(p, fakeSaved.com);
+				regionsync::rc641::SetIndustrialJobs(p, fakeSaved.ind);
+				if (int32_t* v = regionsync::rc641::FindPopulationByType(p, 0x1010)) *v = fakeSaved.r1;
+				if (int32_t* v = regionsync::rc641::FindExtrapolatedPopulationByType(p, 0x1010)) *v = fakeSaved.r1x;
+			}
+			logger.WriteLineFormatted(LogLevel::Info, "FakeNeighbor: released (%d,%d); restored pop=%d R$=%d (extrapolated %d).",
+				fakeNeighborX, fakeNeighborZ, fakeSaved.pop, fakeSaved.r1, fakeSaved.r1x);
 			logger.Flush();
+			if (pNeighborsSim) pNeighborsSim->MarkDealsDirty();
+			ApplyRegionalDemandDelta("fake neighbor release");
 			return;
 		}
 		if (!pRegion || !pOwnRegionalCity)
@@ -1169,11 +1181,12 @@ private:
 
 			const int32_t pop = regionsync::rc641::GetPopulation(p);
 			const int32_t fake = pop + 500000;
-			regionsync::rc641::SetPopulation(p, fake);
 			int32_t* pR1 = regionsync::rc641::FindPopulationByType(p, 0x1010);
 			const int32_t r1 = pR1 ? *pR1 : -1;
-			if (pR1) *pR1 = r1 + 500000;
 			int32_t* pR1x = regionsync::rc641::FindExtrapolatedPopulationByType(p, 0x1010);
+			fakeSaved = FakeSaved{ pop, regionsync::rc641::GetCommercialJobs(p), regionsync::rc641::GetIndustrialJobs(p), r1, pR1x ? *pR1x : -1 };
+			regionsync::rc641::SetPopulation(p, fake);
+			if (pR1) *pR1 = r1 + 500000;
 			if (pR1x) *pR1x = *pR1x + 500000;
 			logger.WriteLineFormatted(LogLevel::Info, "FakeNeighbor: extrapolated R$ node %s; GetExtrapolatedPopulation(0x1010) now %d",
 				pR1x ? "updated" : "absent", p->GetExtrapolatedPopulation(0x1010));
@@ -1256,6 +1269,8 @@ private:
 	bool fakeNeighborHeld = false;
 	int32_t fakeNeighborX = -1;
 	int32_t fakeNeighborZ = -1;
+	struct FakeSaved { int32_t pop, com, ind, r1, r1x; };
+	FakeSaved fakeSaved{};
 };
 
 cRZCOMDllDirector* RZGetCOMDllDirector()

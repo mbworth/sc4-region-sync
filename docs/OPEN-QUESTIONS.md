@@ -36,7 +36,21 @@ This decides whether a pull moves regional demand immediately. Note that `cISC4R
 
 So the simulator takes its regional inputs at city load. Ghidra (cSC4DemandSimulator, vtable `0x00ab0e48`, class id `0x2990BFF2`): the routine at `0x006a5cb0` runs at `Init` and on message `0xEA0D163E`; it sums every neighbor's `GetExtrapolatedPopulation(type)` over the old and the new neighbor list and adds the difference into the demand objects whose `GetRegionUse()` is 1 (`AddToSupplyValue`) or 2 (`AddToDemandValue`). At load the old list is empty, so the whole regional population lands once; afterwards only a neighbor-list change triggers it, and record changes are never re-read. Note the per-type reader is slot 17, which prefers the extrapolated map at `+0x48` over the plain one at `+0x3c`.
 
-Phase 1b implementation (2026-10-17): the pull writes the `+0x48` node too, and the director keeps the same per-type regional sums and feeds the delta into the region-using demand objects after every pull (`ApplyRegionalDemand`). The totals objects (index `0x20000`) have region use 0; `DiscoverRegionalDemand` searches other indices at city load and logs what it finds. Experiment: `RegionSyncDemand`, `RegionSyncFakeNeighbor`, two months, `RegionSyncDemand`.
+Phase 1b implementation (2026-10-17): the pull writes the `+0x48` node too, and the director keeps the same per-type regional sums and feeds the delta into the region-using demand objects after every pull (`ApplyRegionalDemand`). The totals objects (index `0x20000`) have region use 0; `DiscoverRegionalDemand` searches other indices at city load and logs what it finds.
+
+**Observed (2026-10-17, Phase 1b): the delta feed moves demand, visibly.** At city load the search found 12 demand objects with region use 1 (one per RCI group, all at index `0x00000`); none with region use 2. `AddToSupplyValue` does not change `QuerySupplyValue` at the call (`before supply=25733.0`, `after supply=25733.0`); the simulator folds it in on its next tick. With `RegionSyncFakeNeighbor` adding 500,000 R$ residents to DumpsVille's record:
+
+```
+RegionalDemand (fake neighbor): 0x1010 ... regional pop 19812 -> 519812, AddToSupplyValue(500000); before supply=25733.0
+  ... 10 sim months later, second press (the release had not restored the record, see below):
+RegionalDemand (fake neighbor): 0x1010 ... regional pop 519812 -> 1019812, AddToSupplyValue(500000); before supply=524093.0
+```
+
+In game: the first press produced a burst of popup events and reward offers and BumperVille grew from 11,881 to 18,757 residents in four months; the second press (regional R$ now at a million) made the RCI graph plummet. That is the Phase 1 exit criterion: a neighbor's record change moves this city's demand without a reload. Pull-side deltas during the same run (`0x4300` supply 92 -> 217 -> 360 as TuggersVille's extrapolated I-d rose) show the monthly path works too.
+
+Bug found and fixed: the release half of `RegionSyncFakeNeighbor` relied on the next pull to restore the record, but there is no snapshot for DumpsVille, so the +500,000 stayed and the second press stacked on top. The release now restores the saved values and feeds the negative delta.
+
+Still open: the extrapolated map at `+0x48` is what the simulator reads at load; the pull writes both nodes, but we have not checked what the game's own extrapolation does to our value on the following month tick (the `Apply: rci ... (extrapolated N)` lines show it drifting on its own).
 
 ## Q3. Does `cISC4Region::ReloadCity` work mid-game, and what does it do to pointers?
 
