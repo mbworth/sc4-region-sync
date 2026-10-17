@@ -26,7 +26,7 @@ namespace regionsync
 		// Publish/pull at city load and publish at shutdown.
 		bool publishOnLoad = true;
 		bool pullOnLoad = true;
-		bool publishOnShutdown = true;
+		bool publishOnShutdown = false;
 
 		// Call cISC4RegionalCity::UpdateCityCache(cISC4City*) before capturing.
 		// Needed for the snapshot to reflect the live city rather than the

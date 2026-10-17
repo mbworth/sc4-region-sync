@@ -519,9 +519,24 @@ private:
 
 	void PostCityShutdown()
 	{
-		if (settings.enabled && settings.publishOnShutdown && pCity)
+		if (settings.enabled && pCity && pOwnRegionalCity)
 		{
-			Publish("city shutdown");
+			if (settings.publishOnShutdown)
+			{
+				Publish("city shutdown");
+			}
+			else
+			{
+				// A snapshot that outlives its writer is stale by definition:
+				// the next instance to load this region would pull it over
+				// the saved record (observed 2026-10-17, Q2 notes).
+				int32_t x = 0, z = 0;
+				pOwnRegionalCity->GetPosition(x, z);
+				std::error_code ec;
+				const std::filesystem::path path = storeDirectory / regionsync::SnapshotFileName(x, z);
+				const bool removed = std::filesystem::remove(path, ec);
+				Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "Shutdown: snapshot %s %s", path.string().c_str(), removed ? "removed" : "not present");
+			}
 		}
 
 		pCity = nullptr;
