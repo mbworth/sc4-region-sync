@@ -10,3 +10,5 @@ vendor/xwin/
 .xwin-cache/
 build/
 *.obj
+ingame_tests/*.exe
+ingame_tests/*.dll
