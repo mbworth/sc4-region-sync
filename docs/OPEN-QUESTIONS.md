@@ -86,7 +86,17 @@ Unlock (cheat): closed 1 handle(s) named 'SimCity 4 Mutex'.
 - Slot 9 takes a `uint32` type (the cache-update routine calls it with `0x4401`, and `GetExtrapolatedPopulation` falls back to it), so it is `GetPopulation(type)`. The headline getters are one slot later than the header: 10 pop `[+0x24]`, 11 com `[+0x28]`, 12 ind `[+0x2c]`, 13 returns a pointer to `this+0x30` (the workforce struct), 14 mayor rating `int8 [+0x34]`, 15 difficulty `[+0x38]`, 16 `GetTaxRate(type)` (float switch over the RCI groups). Explains the NaN "workforce" and the odd ratings in the first dump.
 - Everything else in the header (order and argument counts from slot 17 on) matches the binary.
 
-Fix: `src/RegionalCity641.h` calls those slots through the raw vtable with the real signatures; the bridge uses it. Null45's newest header (sc4-region-census) has the same float signatures, so this is worth reporting upstream. `RegionSyncProbe` (getters only) checks the slot 9..16 reading against the UI; `RegionSyncSetterTest` now uses the corrected setters.
+Fix: `src/RegionalCity641.h` calls those slots through the raw vtable with the real signatures; the bridge uses it. Null45's newest header (sc4-region-census) has the same float signatures, so this is worth reporting upstream. Verified in-game 2026-10-17: `RegionSyncProbe` reads sane values through the corrected slots (per-group populations sum to the total, mayor rating sits right after the workforce float, tax rates 9%/7%), and `RegionSyncSetterTest` with double arguments writes, reads back exactly and restores on both the own record and a neighbor's, no crash. `ApplyPulledSnapshots=1` again.
+
+```
+slot10 GetPopulation=11843 slot11 GetCommercialJobs=894 slot12 GetIndustrialJobs=3856
+slot9 GetPopulation(0x1010)=8924 ... slot16 GetTaxRate(0x1010)=9.000
+slot13 GetWorkforce ptr=1B9A9244 floats=0.6250 ... ints=1059061760 52 0
+SetterTest: neighbor SetBudget(+1) ...   readback = 987433
+SetterTest: all steps survived.
+```
+
+Commodity balance from the probe: slot 1 has `prod=7440 dem=5440 balance=2000`, a city with a power surplus, which supports 1 = power; 2 and 3 run negative (water and garbage short). Still needs a deal to be certain (Q6).
 
 ```
 SetterTest: own SetProduced(2, +1) ...

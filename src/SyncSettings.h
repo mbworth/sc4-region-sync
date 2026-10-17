@@ -43,12 +43,10 @@ namespace regionsync
 		bool applyPulledSnapshots = true;
 
 		// Which record fields a pull writes. Comma list of
-		// established, budget, income, commodities. Each setter is a
-		// reverse-engineered vtable slot; the 2026-10-17 crash on city
-		// load is being bisected with this.
-		bool applyEstablished = false;
-		bool applyBudget = false;
-		bool applyIncome = false;
+		// established, budget, income, commodities.
+		bool applyEstablished = true;
+		bool applyBudget = true;
+		bool applyIncome = true;
 		bool applyCommodities = true;
 
 		// Call cISC4NeighborsSimulator::MarkDealsDirty after a pull changed
