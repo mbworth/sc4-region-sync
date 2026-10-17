@@ -1,0 +1,7 @@
+src/Debug/
+src/Release/
+src/.vs/
+src/*.user
+src/x64/
+*.log
+RegionSync/
