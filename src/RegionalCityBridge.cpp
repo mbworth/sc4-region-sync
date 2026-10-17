@@ -19,6 +19,13 @@ namespace
 	{
 		return std::fabs(a - b) > 0.0001f;
 	}
+
+	// The game returns NaN for some fields (GetWorkforcePercentage on every
+	// tile, observed 2026-10-17). Keep the snapshot file finite.
+	float Finite(float v)
+	{
+		return std::isfinite(v) ? v : 0.0f;
+	}
 }
 
 namespace regionsync
@@ -57,20 +64,20 @@ namespace regionsync
 		out.population = pRegionalCity->GetPopulation();
 		out.commercialJobs = pRegionalCity->GetCommercialJobs();
 		out.industrialJobs = pRegionalCity->GetIndustrialJobs();
-		out.workforcePercentage = pRegionalCity->GetWorkforcePercentage();
+		out.workforcePercentage = Finite(pRegionalCity->GetWorkforcePercentage());
 		out.mayorRating = pRegionalCity->GetMayorRating();
-		out.budget = pRegionalCity->GetBudget();
-		out.income = pRegionalCity->GetIncome();
+		out.budget = Finite(pRegionalCity->GetBudget());
+		out.income = Finite(pRegionalCity->GetIncome());
 
 		for (size_t i = 0; i < kCommoditySlots; i++)
 		{
 			const int32_t commodity = static_cast<int32_t>(i);
 			CommodityStats& c = out.commodities[i];
-			c.exported = pRegionalCity->GetExported(commodity);
-			c.imported = pRegionalCity->GetImported(commodity);
-			c.produced = pRegionalCity->GetProduced(commodity);
-			c.demanded = pRegionalCity->GetDemanded(commodity);
-			c.costPerUnit = pRegionalCity->GetCostPerUnit(commodity);
+			c.exported = Finite(pRegionalCity->GetExported(commodity));
+			c.imported = Finite(pRegionalCity->GetImported(commodity));
+			c.produced = Finite(pRegionalCity->GetProduced(commodity));
+			c.demanded = Finite(pRegionalCity->GetDemanded(commodity));
+			c.costPerUnit = Finite(pRegionalCity->GetCostPerUnit(commodity));
 		}
 
 		out.rciGroupCount = 0;

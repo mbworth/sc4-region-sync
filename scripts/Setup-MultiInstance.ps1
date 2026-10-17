@@ -63,6 +63,7 @@ if (-not (Test-Path $SourceUserDir)) {
 
 $instanceRoot = Join-Path (Split-Path $SourceUserDir -Parent) 'SimCity 4 Instances'
 $sharedRegions = Join-Path $SourceUserDir 'Regions'
+$sharedStore = Join-Path $instanceRoot 'RegionSync'
 
 function Get-InstanceDir([int]$i) {
     return Join-Path $instanceRoot ("Instance{0}" -f $i)
@@ -98,6 +99,21 @@ if ($Setup) {
         $prefs = Join-Path $SourceUserDir 'SimCity 4.cfg'
         if (Test-Path $prefs) {
             Copy-Item -Force $prefs (Join-Path $dir 'SimCity 4.cfg')
+        }
+
+        # If SC4RegionSync.dll lives in the (now private) Plugins copy, its
+        # default store would be private too and the instances would never
+        # see each other. Point every instance at one shared store.
+        $ini = Join-Path $dir 'Plugins\SC4RegionSync.ini'
+        if (Test-Path (Join-Path $dir 'Plugins\SC4RegionSync.dll')) {
+            if (Test-Path $ini) {
+                $text = Get-Content -Raw $ini
+                $text = $text -replace '(?m)^StoreDirectory=.*$', "StoreDirectory=$sharedStore"
+            } else {
+                $text = "[Sync]`r`nStoreDirectory=$sharedStore`r`n"
+            }
+            Set-Content -Path $ini -Value $text -NoNewline
+            Write-Host "Set StoreDirectory=$sharedStore in $ini"
         }
     }
 

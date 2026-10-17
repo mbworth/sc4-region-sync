@@ -3,9 +3,9 @@
 ## Phase 0: build and load (this scaffold)
 
 - [x] Build `SC4RegionSync.dll` (x86, C++20). Done 2026-10-17 on Linux via clang-cl 20 + xwin; see CLAUDE.md.
-- [ ] Copy to Plugins with `SC4RegionSync.ini`. Load a city. Confirm `SC4RegionSync.log` appears next to the DLL and shows "City loaded".
-- [ ] `RegionSyncStatus` shows a dialog. `RegionSyncDump` writes the region table, connections and deals to the log.
-- [ ] Answer Q6 (commodity indices) from the dump.
+- [x] Copy to Plugins with `SC4RegionSync.ini`. Load a city. Confirm `SC4RegionSync.log` appears next to the DLL and shows "City loaded". Done 2026-10-17 (`ingame_tests/`).
+- [x] `RegionSyncStatus` shows a dialog. `RegionSyncDump` writes the region table, connections and deals to the log. Done 2026-10-17.
+- [~] Answer Q6 (commodity indices) from the dump. Slots 1..3 are the live ones; which is which needs a deal (Q6).
 
 Exit criterion: the plugin loads, the cheats work, and the log tells us what the game thinks the region looks like.
 

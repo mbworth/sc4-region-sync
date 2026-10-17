@@ -36,7 +36,7 @@ Or open `src\SC4RegionSync.sln` in Visual Studio, pick Release | x86, and build.
 
 ## Install
 
-Copy `SC4RegionSync.dll` and `SC4RegionSync.ini` into `<game install>\Plugins`. The plugin writes `SC4RegionSync.log` next to the DLL.
+Copy `SC4RegionSync.dll` and `SC4RegionSync.ini` into `<game install>\Plugins` (or `Documents\SimCity 4\Plugins`; both load). The plugin writes `SC4RegionSync.log` next to the DLL. With the multi-instance script, prefer the install folder: the Documents one is copied per instance, and the script then has to point each copy at a shared `StoreDirectory`, which it does.
 
 ## Running two instances
 

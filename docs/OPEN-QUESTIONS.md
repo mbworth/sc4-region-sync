@@ -10,7 +10,12 @@ The game calls it on save. We call it before every publish. If it also writes to
 
 **Expected.** Own record's pop/jobs change to match the live city; nothing else. If a file changed, set `RefreshCacheBeforePublish=0` and reassess.
 
-**Observed.** (unknown)
+**Observed (partial, 2026-10-17, single instance).** The in-memory refresh works: the monthly publish shows live values moving (`pop=11328` at load, `11942` ten sim-months later, no save in between), and the dump's own-tile row matched the latest publish. No dialog or UI change. Whether the save file or region folder changed was not checked; still open.
+
+```
+Publish (city load): (4,6) 'BumperVille' pop=11328 com=768 ind=3817 simDate=2055-01-20
+Publish (month tick): (4,6) 'BumperVille' pop=11942 com=937 ind=3878 simDate=2055-10-01
+```
 
 ## Q2. Does the demand simulator re-read regional records every tick, or cache them at city load?
 
@@ -54,10 +59,27 @@ Needed before autosave can be turned on with two instances. Expected: deal recor
 
 **Experiment.** `RegionSyncDump` in a city with one active power deal and no other deals; whichever commodity slot has non-zero exported/imported is power. Repeat for water and garbage.
 
-**Observed.** (unknown)
+**Observed (partial, 2026-10-17).** Only slots 1, 2 and 3 are populated; 0 and 4..7 are always zero. No deals existed, so the mapping is a hypothesis from magnitudes: 1 = power, 2 = water, 3 = garbage. Needs one deal of each type to confirm.
+
+```
+  tile (4,6) size=1 'BumperVille' est=1 ... pop=11914 com=922 ind=3873
+    commodity[1] exp=0.00 imp=0.00 prod=7439.00 dem=5455.00 cost=0.0418
+    commodity[2] exp=0.00 imp=0.00 prod=3557.00 dem=13174.00 cost=0.0512
+    commodity[3] exp=0.00 imp=0.00 prod=7368.67 dem=22984.00 cost=0.0121
+```
+
+Also seen: `GetWorkforcePercentage` returns NaN for every tile, established or not. The bridge now stores 0 for non-finite floats. `GetCityLocations` returned 49 tiles for a 16x16 region with mixed tile sizes; large tiles appear once at their origin.
 
 ## Q7. Does the month message fire while paused, and does the game's own save trigger `PostCityShutdown`?
 
 Affects cadence and the "publish on shutdown" path. Low risk either way, but worth confirming from the log.
 
-**Observed.** (unknown)
+**Observed (partial, 2026-10-17).** The month message fires once per sim month while running (ten publishes for 2055-01 through 2055-10). Paused behaviour and the save path were not exercised. Side note: `PostRegionInit` logged "Region loaded" twice on one region open; harmless.
+
+## Q8. Where does the game load the DLL from, and where does the store end up?
+
+**Observed (2026-10-17).** The DLL loaded from `Documents\SimCity 4\Plugins`, not the install's Plugins folder, so both locations work. That breaks the "store is shared by construction" assumption in DESIGN.md: `Setup-MultiInstance.ps1` copies the Documents Plugins folder into each instance's private user dir, so each instance would get its own DLL and its own `RegionSync\<region>` store. Fix applied: the script now writes an `SC4RegionSync.ini` into each instance's Plugins with `StoreDirectory` pointing at a shared `SimCity 4 Instances\RegionSync` folder. Putting the DLL in the install Plugins folder instead also works and needs no INI change.
+
+```
+Region loaded: 'New York'. Store directory: C:\Users\player\Documents\SimCity 4\Plugins\RegionSync\New York
+```
