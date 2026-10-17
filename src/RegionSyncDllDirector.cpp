@@ -24,6 +24,7 @@
 #include "RegionalCityBridge.h"
 #include "SyncSettings.h"
 #include "InstanceMutex.h"
+#include "RegionalCity641.h"
 
 #include "cIGZCheatCodeManager.h"
 #include "cIGZCOM.h"
@@ -82,6 +83,7 @@ static constexpr uint32_t kCheatStatusID = 0x7A3C9E56;
 static constexpr uint32_t kCheatSaveID = 0x7A3C9E57;
 static constexpr uint32_t kCheatUnlockID = 0x7A3C9E58;
 static constexpr uint32_t kCheatSetterTestID = 0x7A3C9E59;
+static constexpr uint32_t kCheatProbeID = 0x7A3C9E5A;
 
 static constexpr std::string_view kCheatDump = "RegionSyncDump";
 static constexpr std::string_view kCheatPublish = "RegionSyncPublish";
@@ -91,6 +93,7 @@ static constexpr std::string_view kCheatStatus = "RegionSyncStatus";
 static constexpr std::string_view kCheatSave = "RegionSyncSave";
 static constexpr std::string_view kCheatUnlock = "RegionSyncUnlock";
 static constexpr std::string_view kCheatSetterTest = "RegionSyncSetterTest";
+static constexpr std::string_view kCheatProbe = "RegionSyncProbe";
 
 namespace
 {
@@ -345,6 +348,7 @@ private:
 			pCheatCodeManager->RegisterCheatCode(kCheatSaveID, cRZBaseString(kCheatSave));
 			pCheatCodeManager->RegisterCheatCode(kCheatUnlockID, cRZBaseString(kCheatUnlock));
 			pCheatCodeManager->RegisterCheatCode(kCheatSetterTestID, cRZBaseString(kCheatSetterTest));
+			pCheatCodeManager->RegisterCheatCode(kCheatProbeID, cRZBaseString(kCheatProbe));
 			pCheatCodeManager->AddNotification2(this, 0);
 		}
 	}
@@ -427,6 +431,7 @@ private:
 			pCheatCodeManager->UnregisterCheatCode(kCheatSaveID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatUnlockID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatSetterTestID);
+			pCheatCodeManager->UnregisterCheatCode(kCheatProbeID);
 			pCheatCodeManager->RemoveNotification2(this, 0);
 		}
 	}
@@ -868,16 +873,16 @@ private:
 
 		auto probe = [&](const char* who, cISC4RegionalCity* p)
 		{
-			float v = 0.0f;
-			step((std::string(who) + " GetProduced(2)").c_str(), [&] { v = p->GetProduced(2); logger.WriteLineFormatted(LogLevel::Info, "  = %.2f", v); });
-			step((std::string(who) + " SetProduced(2, same)").c_str(), [&] { p->SetProduced(2, v); });
-			step((std::string(who) + " SetProduced(2, +1)").c_str(), [&] { p->SetProduced(2, v + 1.0f); logger.WriteLineFormatted(LogLevel::Info, "  readback = %.2f", p->GetProduced(2)); });
-			step((std::string(who) + " SetProduced(2, restore)").c_str(), [&] { p->SetProduced(2, v); });
+			using namespace regionsync::rc641;
+			double v = 0.0;
+			step((std::string(who) + " GetProduced(2)").c_str(), [&] { v = GetCommodity(p, kGetProduced, 2); logger.WriteLineFormatted(LogLevel::Info, "  = %.2f", v); });
+			step((std::string(who) + " SetProduced(2, +1)").c_str(), [&] { SetCommodity(p, kSetProduced, 2, v + 1.0); logger.WriteLineFormatted(LogLevel::Info, "  readback = %.2f", GetCommodity(p, kGetProduced, 2)); });
+			step((std::string(who) + " SetProduced(2, restore)").c_str(), [&] { SetCommodity(p, kSetProduced, 2, v); logger.WriteLineFormatted(LogLevel::Info, "  readback = %.2f", GetCommodity(p, kGetProduced, 2)); });
 
-			float b = 0.0f;
-			step((std::string(who) + " GetBudget").c_str(), [&] { b = p->GetBudget(); logger.WriteLineFormatted(LogLevel::Info, "  = %.0f", b); });
-			step((std::string(who) + " SetBudget(+1)").c_str(), [&] { p->SetBudget(b + 1.0f); logger.WriteLineFormatted(LogLevel::Info, "  readback = %.0f", p->GetBudget()); });
-			step((std::string(who) + " SetBudget(restore)").c_str(), [&] { p->SetBudget(b); });
+			double b = 0.0;
+			step((std::string(who) + " GetBudget").c_str(), [&] { b = GetBudget(p); logger.WriteLineFormatted(LogLevel::Info, "  = %.0f", b); });
+			step((std::string(who) + " SetBudget(+1)").c_str(), [&] { SetBudget(p, b + 1.0); logger.WriteLineFormatted(LogLevel::Info, "  readback = %.0f", GetBudget(p)); });
+			step((std::string(who) + " SetBudget(restore)").c_str(), [&] { SetBudget(p, b); logger.WriteLineFormatted(LogLevel::Info, "  readback = %.0f", GetBudget(p)); });
 		};
 
 		probe("own", pOwnRegionalCity);
@@ -907,6 +912,54 @@ private:
 		step("neighbor GetCityName", [&] { logger.WriteLineFormatted(LogLevel::Info, "  = '%s'", GetRegionalCityName(pOther).c_str()); });
 		probe("neighbor", pOther);
 		logger.WriteLine(LogLevel::Info, "SetterTest: all steps survived.");
+		logger.Flush();
+	}
+
+	// Probe: getters only, through the corrected slots, so the slot 9..16
+	// semantics read from the binary can be checked against the UI.
+	void Probe()
+	{
+		using namespace regionsync::rc641;
+		Logger& logger = Logger::GetInstance();
+		cISC4RegionalCity* p = pOwnRegionalCity;
+		if (!p)
+		{
+			logger.WriteLine(LogLevel::Error, "Probe: no city.");
+			return;
+		}
+		logger.WriteLine(LogLevel::Info, "==== RegionSyncProbe begin ====");
+		logger.Flush();
+		logger.WriteLineFormatted(LogLevel::Info, "slot10 GetPopulation=%d slot11 GetCommercialJobs=%d slot12 GetIndustrialJobs=%d",
+			GetPopulation(p), GetCommercialJobs(p), GetIndustrialJobs(p));
+		logger.Flush();
+		logger.WriteLineFormatted(LogLevel::Info, "slot14 GetMayorRating=%d slot15 GetDifficultyLevel=%d",
+			static_cast<int32_t>(GetMayorRating(p)), GetDifficultyLevel(p));
+		logger.Flush();
+		const uint32_t types[] = { 0x1010, 0x1020, 0x1030, 0x3110, 0x3320, 0x4200, 0x4401 };
+		for (uint32_t t : types)
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "slot9 GetPopulation(0x%04X)=%d slot16 GetTaxRate(0x%04X)=%.3f",
+				t, GetPopulation(p, t), t, GetTaxRate(p, t));
+			logger.Flush();
+		}
+		const float* wf = static_cast<const float*>(GetWorkforce(p));
+		if (wf)
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "slot13 GetWorkforce ptr=%p floats=%.4f %.4f %.4f ints=%d %d %d",
+				static_cast<const void*>(wf), wf[0], wf[1], wf[2],
+				reinterpret_cast<const int32_t*>(wf)[0], reinterpret_cast<const int32_t*>(wf)[1], reinterpret_cast<const int32_t*>(wf)[2]);
+			logger.Flush();
+		}
+		logger.WriteLineFormatted(LogLevel::Info, "slot50 GetBudget=%.2f slot52 GetIncome=%.2f", GetBudget(p), GetIncome(p));
+		logger.Flush();
+		for (int32_t c = 0; c < 4; c++)
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "commodity %d exp=%.2f imp=%.2f prod=%.2f dem=%.2f cost=%.4f balance=%.2f",
+				c, GetCommodity(p, kGetExported, c), GetCommodity(p, kGetImported, c), GetCommodity(p, kGetProduced, c),
+				GetCommodity(p, kGetDemanded, c), GetCommodity(p, kGetCostPerUnit, c), GetCommodity(p, kGetCommodityBalance, c));
+			logger.Flush();
+		}
+		logger.WriteLine(LogLevel::Info, "==== RegionSyncProbe end ====");
 		logger.Flush();
 	}
 
@@ -943,6 +996,7 @@ private:
 		case kCheatSaveID:    Save("cheat"); break;
 		case kCheatUnlockID:  Unlock("cheat"); break;
 		case kCheatSetterTestID: SetterTest(); break;
+		case kCheatProbeID: Probe(); break;
 		}
 	}
 

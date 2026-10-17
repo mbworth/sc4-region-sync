@@ -5,6 +5,7 @@
  */
 
 #include "RegionalCityBridge.h"
+#include "RegionalCity641.h"
 #include "cISC4Region.h"
 #include "cISC4RegionalCity.h"
 #include "cISC4Simulator.h"
@@ -21,12 +22,27 @@ namespace
 		return std::fabs(a - b) > 0.0001f;
 	}
 
-	// The game returns NaN for some fields (GetWorkforcePercentage on every
-	// tile, observed 2026-10-17). Keep the snapshot file finite.
-	float Finite(float v)
+	float Finite(double v)
 	{
-		return std::isfinite(v) ? v : 0.0f;
+		return std::isfinite(v) ? static_cast<float>(v) : 0.0f;
 	}
+
+	struct CommoditySlots
+	{
+		regionsync::rc641::Slot get;
+		regionsync::rc641::Slot set;
+		float regionsync::CommodityStats::* field;
+		const char* name;
+	};
+
+	constexpr CommoditySlots kCommodityAccess[] =
+	{
+		{ regionsync::rc641::kGetExported, regionsync::rc641::kSetExported, &regionsync::CommodityStats::exported, "SetExported" },
+		{ regionsync::rc641::kGetImported, regionsync::rc641::kSetImported, &regionsync::CommodityStats::imported, "SetImported" },
+		{ regionsync::rc641::kGetProduced, regionsync::rc641::kSetProduced, &regionsync::CommodityStats::produced, "SetProduced" },
+		{ regionsync::rc641::kGetDemanded, regionsync::rc641::kSetDemanded, &regionsync::CommodityStats::demanded, "SetDemanded" },
+		{ regionsync::rc641::kGetCostPerUnit, regionsync::rc641::kSetCostPerUnit, &regionsync::CommodityStats::costPerUnit, "SetCostPerUnit" },
+	};
 }
 
 namespace regionsync
@@ -62,23 +78,23 @@ namespace regionsync
 			out.simDay = day;
 		}
 
-		out.population = pRegionalCity->GetPopulation();
-		out.commercialJobs = pRegionalCity->GetCommercialJobs();
-		out.industrialJobs = pRegionalCity->GetIndustrialJobs();
-		out.workforcePercentage = Finite(pRegionalCity->GetWorkforcePercentage());
-		out.mayorRating = pRegionalCity->GetMayorRating();
-		out.budget = Finite(pRegionalCity->GetBudget());
-		out.income = Finite(pRegionalCity->GetIncome());
+		// Summary fields through the corrected slots (see RegionalCity641.h).
+		out.population = rc641::GetPopulation(pRegionalCity);
+		out.commercialJobs = rc641::GetCommercialJobs(pRegionalCity);
+		out.industrialJobs = rc641::GetIndustrialJobs(pRegionalCity);
+		const float* pWorkforce = static_cast<const float*>(rc641::GetWorkforce(pRegionalCity));
+		out.workforcePercentage = pWorkforce ? Finite(*pWorkforce) : 0.0f;
+		out.mayorRating = rc641::GetMayorRating(pRegionalCity);
+		out.budget = Finite(rc641::GetBudget(pRegionalCity));
+		out.income = Finite(rc641::GetIncome(pRegionalCity));
 
 		for (size_t i = 0; i < kCommoditySlots; i++)
 		{
 			const int32_t commodity = static_cast<int32_t>(i);
-			CommodityStats& c = out.commodities[i];
-			c.exported = Finite(pRegionalCity->GetExported(commodity));
-			c.imported = Finite(pRegionalCity->GetImported(commodity));
-			c.produced = Finite(pRegionalCity->GetProduced(commodity));
-			c.demanded = Finite(pRegionalCity->GetDemanded(commodity));
-			c.costPerUnit = Finite(pRegionalCity->GetCostPerUnit(commodity));
+			for (const CommoditySlots& a : kCommodityAccess)
+			{
+				out.commodities[i].*(a.field) = Finite(rc641::GetCommodity(pRegionalCity, a.get, commodity));
+			}
 		}
 
 		out.rciGroupCount = 0;
@@ -90,7 +106,7 @@ namespace regionsync
 			}
 			RCIGroupPopulation& g = out.rciGroups[out.rciGroupCount++];
 			g.groupId = groupId;
-			g.population = pRegionalCity->GetPopulation(groupId);
+			g.population = rc641::GetPopulation(pRegionalCity, groupId);
 		}
 	}
 
@@ -101,16 +117,11 @@ namespace regionsync
 			return 0;
 		}
 
+		Logger& logger = Logger::GetInstance();
 		int changed = 0;
 
-		// Phase 1 deliberately only writes the fields that have a declared
-		// setter on cISC4RegionalCity. There is no public setter for the
-		// headline population/jobs numbers (they come from UpdateCityCache
-		// when the live city saves), so those are reported but not applied
-		// until we confirm how the demand simulator reads them. See
-		// docs/OPEN-QUESTIONS.md, Q2.
-
-		Logger& logger = Logger::GetInstance();
+		// No setter exists for population/jobs on the interface; those are
+		// plain fields (this+0x24/0x28/0x2c) and are Phase 2 work.
 
 		if (opt.established && pRegionalCity->GetEstablished() != s.established)
 		{
@@ -120,19 +131,19 @@ namespace regionsync
 			changed++;
 		}
 
-		if (opt.budget && Differs(pRegionalCity->GetBudget(), s.budget))
+		if (opt.budget && Differs(Finite(rc641::GetBudget(pRegionalCity)), s.budget))
 		{
 			logger.WriteLineFormatted(LogLevel::Info, "Apply: SetBudget(%.0f)", s.budget);
 			logger.Flush();
-			pRegionalCity->SetBudget(s.budget);
+			rc641::SetBudget(pRegionalCity, s.budget);
 			changed++;
 		}
 
-		if (opt.income && Differs(pRegionalCity->GetIncome(), s.income))
+		if (opt.income && Differs(Finite(rc641::GetIncome(pRegionalCity)), s.income))
 		{
 			logger.WriteLineFormatted(LogLevel::Info, "Apply: SetIncome(%.0f)", s.income);
 			logger.Flush();
-			pRegionalCity->SetIncome(s.income);
+			rc641::SetIncome(pRegionalCity, s.income);
 			changed++;
 		}
 
@@ -141,25 +152,19 @@ namespace regionsync
 			const int32_t commodity = static_cast<int32_t>(i);
 			const CommodityStats& c = s.commodities[i];
 
-			// Each setter logged and flushed before the call: these had
-			// never been exercised before 2026-10-17.
-			auto set = [&](const char* name, float current, float target, void (cISC4RegionalCity::*setter)(int32_t, float))
+			for (const CommoditySlots& a : kCommodityAccess)
 			{
+				const float current = Finite(rc641::GetCommodity(pRegionalCity, a.get, commodity));
+				const float target = c.*(a.field);
 				if (!Differs(current, target))
 				{
-					return;
+					continue;
 				}
-				logger.WriteLineFormatted(LogLevel::Info, "Apply: %s(%d, %.2f) was %.2f", name, commodity, target, current);
+				logger.WriteLineFormatted(LogLevel::Info, "Apply: %s(%d, %.2f) was %.2f", a.name, commodity, target, current);
 				logger.Flush();
-				(pRegionalCity->*setter)(commodity, target);
+				rc641::SetCommodity(pRegionalCity, a.set, commodity, target);
 				changed++;
-			};
-
-			set("SetExported", pRegionalCity->GetExported(commodity), c.exported, &cISC4RegionalCity::SetExported);
-			set("SetImported", pRegionalCity->GetImported(commodity), c.imported, &cISC4RegionalCity::SetImported);
-			set("SetProduced", pRegionalCity->GetProduced(commodity), c.produced, &cISC4RegionalCity::SetProduced);
-			set("SetDemanded", pRegionalCity->GetDemanded(commodity), c.demanded, &cISC4RegionalCity::SetDemanded);
-			set("SetCostPerUnit", pRegionalCity->GetCostPerUnit(commodity), c.costPerUnit, &cISC4RegionalCity::SetCostPerUnit);
+			}
 		}
 
 		logger.WriteLineFormatted(LogLevel::Info, "Apply: done, changed=%d", changed);
