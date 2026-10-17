@@ -119,7 +119,7 @@ Also seen: `GetWorkforcePercentage` returns NaN for every tile, established or n
 
 Affects cadence and the "publish on shutdown" path. Low risk either way, but worth confirming from the log.
 
-**Observed (partial, 2026-10-17).** The month message fires once per sim month while running (ten publishes for 2055-01 through 2055-10). Paused behaviour and the save path were not exercised. Side note: `PostRegionInit` logged "Region loaded" twice on one region open; harmless.
+**Observed (partial, 2026-10-17).** The month message fires once per sim month while running (ten publishes for 2055-01 through 2055-10). Closing the game with the window's close button produces no `PostCityShutdown` in the log at all: the last lines are an ordinary month tick, so "publish on shutdown" never runs that way. Exiting to the region view and the save path were not exercised; paused behaviour unknown. Side note: `PostRegionInit` logged "Region loaded" twice on one region open; harmless.
 
 ## Q8. Where does the game load the DLL from, and where does the store end up?
 

@@ -635,3 +635,70 @@ Pull: applied (4,6) changedFields=6
 Pull: calling MarkDealsDirty
 Pull: MarkDealsDirty returned
 Pull (month tick): files=2 applied=1 changedFields=6
+Publish (month tick): (6,6) 'TuggersVille' pop=8134 com=1119 ind=876 simDate=2012-02-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=11328, snapshot pop=12585). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(1115980)
+Apply: SetIncome(7629)
+Apply: SetProduced(2, 3552.00) was 3553.00
+Apply: SetExported(3, 38960.00) was 0.00
+Apply: SetProduced(3, 55963.80) was 62107.50
+Apply: SetDemanded(3, 21780.00) was 22912.00
+Apply: SetCostPerUnit(3, 0.01) was 0.01
+Apply: done, changed=7
+Pull: applied (4,6) changedFields=7
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=7
+Publish (month tick): (6,6) 'TuggersVille' pop=8145 com=1119 ind=874 simDate=2012-03-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=11328, snapshot pop=12604). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(1119010)
+Apply: SetIncome(7627)
+Apply: SetProduced(1, 7429.00) was 7430.00
+Apply: SetExported(3, 38960.00) was 0.00
+Apply: SetProduced(3, 52805.90) was 55963.80
+Apply: SetDemanded(3, 23176.00) was 21780.00
+Apply: SetCostPerUnit(3, 0.01) was 0.01
+Apply: done, changed=7
+Pull: applied (4,6) changedFields=7
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=7
+Publish (month tick): (6,6) 'TuggersVille' pop=8343 com=1119 ind=873 simDate=2012-04-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=11328, snapshot pop=12604). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetExported(3, 38960.00) was 0.00
+Apply: done, changed=1
+Pull: applied (4,6) changedFields=1
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=1
+Publish (month tick): (6,6) 'TuggersVille' pop=8342 com=1119 ind=872 simDate=2012-05-02 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=11328, snapshot pop=12604). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetExported(3, 38960.00) was 0.00
+Apply: done, changed=1
+Pull: applied (4,6) changedFields=1
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=1
+Publish (month tick): (6,6) 'TuggersVille' pop=8386 com=1118 ind=871 simDate=2012-06-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=11328, snapshot pop=12604). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetExported(3, 38960.00) was 0.00
+Apply: done, changed=1
+Pull: applied (4,6) changedFields=1
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=1
+Publish (month tick): (6,6) 'TuggersVille' pop=8417 com=1119 ind=871 simDate=2012-07-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=11328, snapshot pop=12604). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetIncome(7628)
+Apply: SetExported(3, 38960.00) was 0.00
+Apply: done, changed=2
+Pull: applied (4,6) changedFields=2
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=2

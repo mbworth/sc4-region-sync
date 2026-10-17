@@ -528,3 +528,53 @@ Local deals: 2
   deal type=1198784485 amount=23630 used=16541 cost=197 flags=0x2 other=(6,6) 'TuggersVille'
   deal type=1198784485 amount=15330 used=10731 cost=127 flags=0x2 other=(5,5) 'DumpsVille'
 ==== RegionSyncDump end ====
+Publish (month tick): (4,6) 'BumperVille' pop=12585 com=916 ind=3878 simDate=2057-07-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=8109). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(1048710)
+Apply: SetIncome(3053)
+Apply: SetDemanded(2, 3276.00) was 3270.00
+Apply: SetImported(3, 0.00) was 23630.00
+Apply: SetDemanded(3, 10808.00) was 10516.00
+Apply: done, changed=5
+Pull: applied (6,6) changedFields=5
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=5
+Publish (month tick): (4,6) 'BumperVille' pop=12604 com=916 ind=3877 simDate=2057-08-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=8134). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetImported(3, 0.00) was 23630.00
+Apply: done, changed=1
+Pull: applied (6,6) changedFields=1
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=1
+Publish (month tick): (4,6) 'BumperVille' pop=12604 com=916 ind=3878 simDate=2057-09-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=8386). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(1060860)
+Apply: SetIncome(3088)
+Apply: SetProduced(1, 7489.00) was 7490.00
+Apply: SetDemanded(1, 888.00) was 892.00
+Apply: SetProduced(2, 3587.00) was 3588.00
+Apply: SetDemanded(2, 3299.00) was 3276.00
+Apply: SetCostPerUnit(2, 0.04) was 0.04
+Apply: SetImported(3, 0.00) was 23630.00
+Apply: SetDemanded(3, 10636.00) was 10808.00
+Apply: done, changed=9
+Pull: applied (6,6) changedFields=9
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=9
+Publish (month tick): (4,6) 'BumperVille' pop=12607 com=916 ind=3878 simDate=2057-10-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=8417). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(1063310)
+Apply: SetImported(3, 0.00) was 23630.00
+Apply: SetDemanded(3, 10648.00) was 10636.00
+Apply: done, changed=3
+Pull: applied (6,6) changedFields=3
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=3
