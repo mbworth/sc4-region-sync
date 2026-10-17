@@ -11,6 +11,18 @@
 
 XWIN     ?= vendor/xwin
 BUILD    ?= build
+
+# LLVM 19+ is required by the MSVC STL that xwin fetches. If LLVM is not on
+# PATH (no root on the box), scripts/setup-toolchain.sh --prebuilt installs
+# it under ~/.local/llvm-20 and this picks it up automatically.
+LLVM     ?= $(firstword $(wildcard $(HOME)/.local/llvm-20 $(HOME)/.local/llvm-19))
+ifneq ($(LLVM),)
+CLANG_CL ?= $(LLVM)/bin/clang-cl
+LLVM_RC  ?= $(LLVM)/bin/llvm-rc
+LLD_LINK ?= $(LLVM)/bin/lld-link
+export PATH := $(LLVM)/bin:$(PATH)
+export LD_LIBRARY_PATH := $(LLVM)/shimlib:$(LD_LIBRARY_PATH)
+endif
 CLANG_CL ?= clang-cl
 LLVM_RC  ?= llvm-rc
 
@@ -62,22 +74,24 @@ LIBS = version.lib ole32.lib user32.lib
 
 RES = $(BUILD)/version.res
 
-.PHONY: all release debug clean check-toolchain
+.PHONY: all release debug clean check-toolchain test
 
 all: release
 
 check-toolchain:
 	@test -d $(XWIN)/crt/include || (echo "xwin splat not found at $(XWIN). Run scripts/setup-toolchain.sh" && exit 1)
-	@command -v $(CLANG_CL) >/dev/null || (echo "$(CLANG_CL) not found. Install clang + lld (apt: clang lld llvm)" && exit 1)
+	@command -v $(CLANG_CL) >/dev/null || (echo "$(CLANG_CL) not found. Install clang + lld (apt: clang lld llvm) or run scripts/setup-toolchain.sh --prebuilt" && exit 1)
 	@command -v lld-link >/dev/null || (echo "lld-link not found. Install lld" && exit 1)
 	@command -v $(LLVM_RC) >/dev/null || (echo "$(LLVM_RC) not found. Install llvm" && exit 1)
 
 $(BUILD):
 	mkdir -p $(BUILD)
 
-# version.rc is UTF-16 with a BOM; llvm-rc handles that directly.
+# version.rc is UTF-16 with a BOM (MSVC rc wants that). llvm-rc's clang
+# preprocessor does not read UTF-16, so compile a UTF-8 copy from build/.
 $(RES): src/version.rc src/version.h src/resource.h | $(BUILD)
-	$(LLVM_RC) /I src /I $(XWIN)/sdk/include/um /I $(XWIN)/sdk/include/shared /FO $@ src/version.rc
+	iconv -f UTF-16 -t UTF-8 src/version.rc > $(BUILD)/version.rc
+	$(LLVM_RC) /I src /I $(XWIN)/sdk/include/um /I $(XWIN)/sdk/include/shared /FO $@ $(BUILD)/version.rc
 
 release: check-toolchain $(RES)
 	$(CLANG_CL) $(COMMON_FLAGS) $(RELEASE_FLAGS) /o $(BUILD)/SC4RegionSync.dll $(SRCS) \
@@ -92,3 +106,9 @@ debug: check-toolchain $(RES)
 
 clean:
 	rm -rf $(BUILD) src/*.obj *.obj
+
+# Host-side unit test for the game-free snapshot format.
+test:
+	mkdir -p $(BUILD)
+	g++ -std=c++20 -Wall -I src tests/snapshot_roundtrip.cpp src/NeighborSnapshot.cpp -o $(BUILD)/snapshot_roundtrip
+	$(BUILD)/snapshot_roundtrip

@@ -2,7 +2,7 @@
 
 ## Phase 0: build and load (this scaffold)
 
-- [ ] Build `SC4RegionSync.dll` (x86, VS 2022, C++20).
+- [x] Build `SC4RegionSync.dll` (x86, C++20). Done 2026-10-17 on Linux via clang-cl 20 + xwin; see CLAUDE.md.
 - [ ] Copy to Plugins with `SC4RegionSync.ini`. Load a city. Confirm `SC4RegionSync.log` appears next to the DLL and shows "City loaded".
 - [ ] `RegionSyncStatus` shows a dialog. `RegionSyncDump` writes the region table, connections and deals to the log.
 - [ ] Answer Q6 (commodity indices) from the dump.

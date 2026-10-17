@@ -22,11 +22,12 @@ Then skim `vendor/gzcom-dll/gzcom-dll/include/` for `cISC4RegionalCity.h`, `cISC
 
 ```
 git submodule update --init --recursive      # if vendor/ dirs are empty
-scripts/setup-toolchain.sh --apt             # installs clang/lld/llvm, fetches MSVC/SDK via xwin (~1 GB, once)
+scripts/setup-toolchain.sh --prebuilt        # LLVM 20 into ~/.local/llvm-20 (no root), fetches MSVC/SDK via xwin (~1 GB, once)
 make                                         # -> build/SC4RegionSync.dll + .ini
+make test                                    # host-side snapshot round-trip test
 ```
 
-Expect the first `make` to surface a handful of compile errors in the director: this code was syntax-checked on Linux with clang but never compiled against the real Windows SDK. Fix them in our files, not in `vendor/`. Likely spots: `cRZBaseString` construction from `std::string_view`, `const` mismatches on interface methods, `SC4String*` handling from `cISC4Region::GetDirectoryName`, and anything around `snprintf`/`std::filesystem::path::string()` under `/UNICODE`.
+`--apt` instead of `--prebuilt` only works where apt ships clang 19+; the MSVC STL that xwin fetches refuses older compilers (Debian 12 apt has clang 14). The Makefile finds `~/.local/llvm-20` on its own. The build compiled clean on 2026-10-17 with zero warnings from our sources.
 
 A clean build is the Phase 0 entry point. The build output then goes to the Windows machine's `<install>\Plugins` folder (DLL + INI), the game is started, a city is opened, and `SC4RegionSync.log` next to the DLL is read. That log is the only instrument we have; treat it as such.
 
@@ -34,7 +35,7 @@ A clean build is the Phase 0 entry point. The build output then goes to the Wind
 
 - **Vendored headers are the contract.** Every `cISC4*` interface is reverse-engineered. Never reorder, insert, or remove virtual methods. If a header is wrong, the fix is a local wrapper or a documented upstream change, not an edit under `vendor/`.
 - **`vendor/` is submodules.** Do not edit. `vendor/xwin/` is generated and gitignored.
-- **`NeighborSnapshot.{h,cpp}` stays game-free and Windows-free.** It is the one piece that can be unit-tested on any machine. Keep a round-trip test passing (`g++ -std=c++20 -I src test.cpp src/NeighborSnapshot.cpp`).
+- **`NeighborSnapshot.{h,cpp}` stays game-free and Windows-free.** It is the one piece that can be unit-tested on any machine. Keep `make test` (tests/snapshot_roundtrip.cpp) passing.
 - **Only the director talks to the game's message system and cheat manager.** Game-object plumbing lives there; logic lives in the bridge, settings, and snapshot files.
 - **Log first, infer second.** When a code path touches a game method we have not exercised before, log inputs and outputs at Info, not Debug. If an experiment's conclusion depends on it, it is Info.
 - **Record observations.** Finishing an experiment means writing what happened into the matching "Observed" slot in `docs/OPEN-QUESTIONS.md`, including the negative result and the log excerpt that shows it. An experiment without a recorded observation is not done.
