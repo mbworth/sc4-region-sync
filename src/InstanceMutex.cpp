@@ -9,7 +9,7 @@
 #include <winternl.h>
 #include <algorithm>
 #include <cwctype>
-\n#ifndef STATUS_INFO_LENGTH_MISMATCH
+#ifndef STATUS_INFO_LENGTH_MISMATCH
 #define STATUS_INFO_LENGTH_MISMATCH ((NTSTATUS)0xC0000004L)
 #endif
 
