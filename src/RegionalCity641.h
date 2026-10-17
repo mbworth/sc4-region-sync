@@ -91,4 +91,46 @@ namespace regionsync::rc641
 
 	inline double GetCommodity(cISC4RegionalCity* p, Slot getter, int32_t commodity) { return At<GetDblByIdxFn>(p, getter)(p, commodity); }
 	inline void SetCommodity(cISC4RegionalCity* p, Slot setter, int32_t commodity, double v) { At<SetDblByIdxFn>(p, setter)(p, commodity, v); }
+
+	// Population and jobs have no setter on the interface. They are plain
+	// int32 fields read by slots 10..12 (mov eax,[this+0x24/0x28/0x2c]).
+	inline int32_t* FieldI32(cISC4RegionalCity* p, size_t offset)
+	{
+		return reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(p) + offset);
+	}
+	inline void SetPopulation(cISC4RegionalCity* p, int32_t v) { *FieldI32(p, 0x24) = v; }
+	inline void SetCommercialJobs(cISC4RegionalCity* p, int32_t v) { *FieldI32(p, 0x28) = v; }
+	inline void SetIndustrialJobs(cISC4RegionalCity* p, int32_t v) { *FieldI32(p, 0x2c) = v; }
+
+	// Per-type population lives in a tree map at this+0x3c, as slot 9
+	// (FUN_004a8500) walks it: header = *(this+0x3c), root = header+4,
+	// node { +0x8 left, +0xc right, +0x10 key, +0x14 value }. Returns the
+	// value slot for an existing key, or null; we never insert.
+	inline int32_t* FindPopulationByType(cISC4RegionalCity* p, uint32_t type)
+	{
+		uint8_t* header = *reinterpret_cast<uint8_t**>(reinterpret_cast<uint8_t*>(p) + 0x3c);
+		if (!header)
+		{
+			return nullptr;
+		}
+		uint8_t* node = *reinterpret_cast<uint8_t**>(header + 4);
+		uint8_t* candidate = header;
+		while (node)
+		{
+			if (*reinterpret_cast<uint32_t*>(node + 0x10) < type)
+			{
+				node = *reinterpret_cast<uint8_t**>(node + 0xc);
+			}
+			else
+			{
+				candidate = node;
+				node = *reinterpret_cast<uint8_t**>(node + 0x8);
+			}
+		}
+		if (candidate == header || *reinterpret_cast<uint32_t*>(candidate + 0x10) != type)
+		{
+			return nullptr;
+		}
+		return reinterpret_cast<int32_t*>(candidate + 0x14);
+	}
 }

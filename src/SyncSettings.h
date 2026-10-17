@@ -43,11 +43,12 @@ namespace regionsync
 		bool applyPulledSnapshots = true;
 
 		// Which record fields a pull writes. Comma list of
-		// established, budget, income, commodities.
+		// established, budget, income, commodities, population.
 		bool applyEstablished = true;
 		bool applyBudget = true;
 		bool applyIncome = true;
 		bool applyCommodities = true;
+		bool applyPopulation = true;
 
 		// Call cISC4NeighborsSimulator::MarkDealsDirty after a pull changed
 		// something.

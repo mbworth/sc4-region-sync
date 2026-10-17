@@ -589,10 +589,10 @@ private:
 				settings.applyPulledSnapshots ? 1 : 0);
 			logger.WriteLineFormatted(
 				LogLevel::Info,
-				"Pull: applyFields established=%d budget=%d income=%d commodities=%d markDealsDirty=%d",
+				"Pull: applyFields established=%d budget=%d income=%d commodities=%d population=%d markDealsDirty=%d",
 				settings.applyEstablished ? 1 : 0, settings.applyBudget ? 1 : 0,
 				settings.applyIncome ? 1 : 0, settings.applyCommodities ? 1 : 0,
-				settings.markDealsDirty ? 1 : 0);
+				settings.applyPopulation ? 1 : 0, settings.markDealsDirty ? 1 : 0);
 			logger.Flush();
 
 			if (!settings.applyPulledSnapshots)
@@ -605,6 +605,7 @@ private:
 			opt.budget = settings.applyBudget;
 			opt.income = settings.applyIncome;
 			opt.commodities = settings.applyCommodities;
+			opt.population = settings.applyPopulation;
 
 			const int changed = regionsync::ApplySnapshotToRegionalCity(snapshot, pTarget, opt);
 			applied++;
@@ -641,23 +642,32 @@ private:
 	{
 		Logger& logger = Logger::GetInstance();
 
-		if (!pRegion || !pNeighborsSim)
+		if (!pRegion || !pNeighborsSim || !pOwnRegionalCity)
 		{
 			logger.WriteLine(LogLevel::Error, "Reload: no region or neighbors simulator.");
 			return;
 		}
 
-		SC4List<cISC4RegionalCity*> adjacent;
-		pNeighborsSim->GetAdjacentCities(adjacent, true);
+		// GetAdjacentCities' list elements crashed on first use (2026-10-17);
+		// walk the region's tile list instead and keep only established
+		// tiles other than ours. Adjacency is not checked.
+		int32_t ownX = -1, ownZ = -1;
+		pOwnRegionalCity->GetPosition(ownX, ownZ);
+		SC4Vector<cISC4Region::cLocation> locations;
+		pRegion->GetCityLocations(locations);
+		std::vector<cISC4RegionalCity*> adjacent;
+		for (size_t i = 0; i < locations.size(); i++)
+		{
+			const int32_t x = static_cast<int32_t>(locations[i].x);
+			const int32_t z = static_cast<int32_t>(locations[i].z);
+			if (x == ownX && z == ownZ) continue;
+			cISC4RegionalCity* p = regionsync::FindRegionalCity(pRegion, x, z);
+			if (p && p->GetEstablished()) adjacent.push_back(p);
+		}
 
 		int reloaded = 0;
 		for (cISC4RegionalCity* pAdj : adjacent)
 		{
-			if (!pAdj)
-			{
-				continue;
-			}
-
 			int32_t x = -1, z = -1;
 			pAdj->GetPosition(x, z);
 			const int32_t popBefore = pAdj->GetPopulation();

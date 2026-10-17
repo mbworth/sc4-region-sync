@@ -48,6 +48,7 @@ namespace regionsync
 		bool budget = true;
 		bool income = true;
 		bool commodities = true;
+		bool population = true;   // totals and per-RCI-group, direct field writes
 	};
 	int ApplySnapshotToRegionalCity(const NeighborSnapshot& snapshot, cISC4RegionalCity* pRegionalCity, const ApplyOptions& options);
 

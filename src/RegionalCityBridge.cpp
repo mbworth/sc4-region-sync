@@ -120,8 +120,51 @@ namespace regionsync
 		Logger& logger = Logger::GetInstance();
 		int changed = 0;
 
-		// No setter exists for population/jobs on the interface; those are
-		// plain fields (this+0x24/0x28/0x2c) and are Phase 2 work.
+		// Population and jobs: no setter on the interface, written straight
+		// into the record's fields (see RegionalCity641.h).
+		if (opt.population)
+		{
+			struct Total { const char* name; int32_t current; int32_t target; void (*set)(cISC4RegionalCity*, int32_t); };
+			const Total totals[] =
+			{
+				{ "population", rc641::GetPopulation(pRegionalCity), s.population, &rc641::SetPopulation },
+				{ "commercialJobs", rc641::GetCommercialJobs(pRegionalCity), s.commercialJobs, &rc641::SetCommercialJobs },
+				{ "industrialJobs", rc641::GetIndustrialJobs(pRegionalCity), s.industrialJobs, &rc641::SetIndustrialJobs },
+			};
+			for (const Total& t : totals)
+			{
+				if (t.current == t.target)
+				{
+					continue;
+				}
+				logger.WriteLineFormatted(LogLevel::Info, "Apply: %s %d -> %d", t.name, t.current, t.target);
+				logger.Flush();
+				t.set(pRegionalCity, t.target);
+				changed++;
+			}
+
+			for (size_t i = 0; i < s.rciGroupCount && i < kRCIGroupSlots; i++)
+			{
+				const RCIGroupPopulation& g = s.rciGroups[i];
+				int32_t* pValue = rc641::FindPopulationByType(pRegionalCity, g.groupId);
+				if (!pValue)
+				{
+					if (g.population != 0)
+					{
+						logger.WriteLineFormatted(LogLevel::Debug, "Apply: rci 0x%04X has no node in the record, skipped (snapshot %d)", g.groupId, g.population);
+					}
+					continue;
+				}
+				if (*pValue == g.population)
+				{
+					continue;
+				}
+				logger.WriteLineFormatted(LogLevel::Info, "Apply: rci 0x%04X %d -> %d", g.groupId, *pValue, g.population);
+				logger.Flush();
+				*pValue = g.population;
+				changed++;
+			}
+		}
 
 		if (opt.established && pRegionalCity->GetEstablished() != s.established)
 		{

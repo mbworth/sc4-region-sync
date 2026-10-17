@@ -96,6 +96,7 @@ namespace regionsync
 					applyBudget = f.find("budget") != std::string::npos;
 					applyIncome = f.find("income") != std::string::npos;
 					applyCommodities = f.find("commodities") != std::string::npos;
+					applyPopulation = f.find("population") != std::string::npos;
 				}
 				markDealsDirty = ParseBool(sync->get_value("MarkDealsDirty", ""), markDealsDirty);
 			}
