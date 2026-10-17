@@ -81,6 +81,7 @@ static constexpr uint32_t kCheatReloadID = 0x7A3C9E55;
 static constexpr uint32_t kCheatStatusID = 0x7A3C9E56;
 static constexpr uint32_t kCheatSaveID = 0x7A3C9E57;
 static constexpr uint32_t kCheatUnlockID = 0x7A3C9E58;
+static constexpr uint32_t kCheatSetterTestID = 0x7A3C9E59;
 
 static constexpr std::string_view kCheatDump = "RegionSyncDump";
 static constexpr std::string_view kCheatPublish = "RegionSyncPublish";
@@ -89,6 +90,7 @@ static constexpr std::string_view kCheatReload = "RegionSyncReload";
 static constexpr std::string_view kCheatStatus = "RegionSyncStatus";
 static constexpr std::string_view kCheatSave = "RegionSyncSave";
 static constexpr std::string_view kCheatUnlock = "RegionSyncUnlock";
+static constexpr std::string_view kCheatSetterTest = "RegionSyncSetterTest";
 
 namespace
 {
@@ -342,6 +344,7 @@ private:
 			pCheatCodeManager->RegisterCheatCode(kCheatStatusID, cRZBaseString(kCheatStatus));
 			pCheatCodeManager->RegisterCheatCode(kCheatSaveID, cRZBaseString(kCheatSave));
 			pCheatCodeManager->RegisterCheatCode(kCheatUnlockID, cRZBaseString(kCheatUnlock));
+			pCheatCodeManager->RegisterCheatCode(kCheatSetterTestID, cRZBaseString(kCheatSetterTest));
 			pCheatCodeManager->AddNotification2(this, 0);
 		}
 	}
@@ -423,6 +426,7 @@ private:
 			pCheatCodeManager->UnregisterCheatCode(kCheatStatusID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatSaveID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatUnlockID);
+			pCheatCodeManager->UnregisterCheatCode(kCheatSetterTestID);
 			pCheatCodeManager->RemoveNotification2(this, 0);
 		}
 	}
@@ -839,6 +843,61 @@ private:
 		logger.WriteLineFormatted(LogLevel::Info, "Unlock (%s): closed %d handle(s) named 'SimCity 4 Mutex'.", reason, closed);
 	}
 
+	// SetterTest: every cISC4RegionalCity setter crashed the game when
+	// called on another tile's record during a pull (2026-10-17). Call
+	// each with its current value, first on our own loaded record, then on
+	// a neighbor's, one step per flushed log line, so the crash point says
+	// whether the setters need a loaded city or are simply wrong slots.
+	void SetterTest()
+	{
+		Logger& logger = Logger::GetInstance();
+		if (!pOwnRegionalCity || !pRegion)
+		{
+			logger.WriteLine(LogLevel::Error, "SetterTest: no city.");
+			return;
+		}
+
+		cISC4RegionalCity* pOther = nullptr;
+		if (pNeighborsSim)
+		{
+			SC4List<cISC4RegionalCity*> adjacent;
+			pNeighborsSim->GetAdjacentCities(adjacent, false);
+			for (cISC4RegionalCity* p : adjacent)
+			{
+				if (p && p->GetEstablished()) { pOther = p; break; }
+			}
+		}
+
+		auto step = [&](const char* what, auto&& fn)
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "SetterTest: %s ...", what);
+			logger.Flush();
+			fn();
+			logger.WriteLineFormatted(LogLevel::Info, "SetterTest: %s ok", what);
+			logger.Flush();
+		};
+
+		cISC4RegionalCity* own = pOwnRegionalCity;
+		step("own GetProduced(2)", [&] { logger.WriteLineFormatted(LogLevel::Info, "  = %.2f", own->GetProduced(2)); });
+		step("own SetProduced(2, same)", [&] { own->SetProduced(2, own->GetProduced(2)); });
+		step("own SetBudget(same)", [&] { own->SetBudget(own->GetBudget()); });
+		step("own SetIncome(same)", [&] { own->SetIncome(own->GetIncome()); });
+		step("own SetEstablished(same)", [&] { own->SetEstablished(own->GetEstablished()); });
+
+		if (!pOther)
+		{
+			logger.WriteLine(LogLevel::Info, "SetterTest: no established adjacent city, neighbor steps skipped.");
+			return;
+		}
+		logger.WriteLineFormatted(LogLevel::Info, "SetterTest: neighbor '%s'", GetRegionalCityName(pOther).c_str());
+		step("neighbor GetProduced(2)", [&] { logger.WriteLineFormatted(LogLevel::Info, "  = %.2f", pOther->GetProduced(2)); });
+		step("neighbor SetEstablished(same)", [&] { pOther->SetEstablished(pOther->GetEstablished()); });
+		step("neighbor SetProduced(2, same)", [&] { pOther->SetProduced(2, pOther->GetProduced(2)); });
+		step("neighbor SetBudget(same)", [&] { pOther->SetBudget(pOther->GetBudget()); });
+		logger.WriteLine(LogLevel::Info, "SetterTest: all steps survived.");
+		logger.Flush();
+	}
+
 	void Status()
 	{
 		int32_t x = -1, z = -1;
@@ -871,6 +930,7 @@ private:
 		case kCheatStatusID:  Status(); break;
 		case kCheatSaveID:    Save("cheat"); break;
 		case kCheatUnlockID:  Unlock("cheat"); break;
+		case kCheatSetterTestID: SetterTest(); break;
 		}
 	}
 
