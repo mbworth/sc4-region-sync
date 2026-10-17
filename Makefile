@@ -75,7 +75,7 @@ LIBS = version.lib ole32.lib user32.lib
 
 RES = $(BUILD)/version.res
 
-.PHONY: all release debug clean check-toolchain test
+.PHONY: all release debug clean check-toolchain test deploy logs
 
 all: release
 
@@ -113,3 +113,20 @@ test:
 	mkdir -p $(BUILD)
 	g++ -std=c++20 -Wall -I src tests/snapshot_roundtrip.cpp src/NeighborSnapshot.cpp -o $(BUILD)/snapshot_roundtrip
 	$(BUILD)/snapshot_roundtrip $(BUILD)/snapshot-test
+
+# ---------------------------------------------------------------------------
+# Windows game box over SSH (OpenSSH server on the Windows side, key auth).
+#   make deploy   -> copy build/ DLL + INI into the game's Documents Plugins
+#   make logs     -> pull each instance's SC4RegionSync.log into ingame_tests/
+SC4_HOST    ?= user@gamebox
+SC4_PLUGINS ?= C:/Users/player/Documents/SimCity 4/Plugins
+SC4_INSTANCES ?= C:/Users/player/Documents/SimCity 4 Instances
+
+deploy: release
+	@ssh -o BatchMode=yes $(SC4_HOST) 'if (Get-Process "SimCity 4" -ErrorAction SilentlyContinue) { Write-Error "SimCity 4 is running; close it first"; exit 1 }'
+	scp -o BatchMode=yes -q $(BUILD)/SC4RegionSync.dll $(BUILD)/SC4RegionSync.ini "$(SC4_HOST):$(SC4_PLUGINS)/"
+	@echo "Deployed to $(SC4_HOST):$(SC4_PLUGINS)"
+
+logs:
+	@mkdir -p ingame_tests
+	@for i in 1 2; do scp -o BatchMode=yes -q "$(SC4_HOST):$(SC4_INSTANCES)/Instance$$i/SC4RegionSync.log" ingame_tests/instance$$i.log 2>/dev/null && echo "ingame_tests/instance$$i.log" || echo "Instance$$i: no log"; done
