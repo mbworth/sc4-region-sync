@@ -174,6 +174,7 @@ public:
 		Logger& logger = Logger::GetInstance();
 		logger.Init(LogFilePath(), LogLevel::Info);
 		logger.WriteLogFileHeader("SC4RegionSync v" PLUGIN_VERSION_STR);
+		logger.Flush();
 	}
 
 	uint32_t GetDirectorID() const
@@ -254,6 +255,8 @@ public:
 			settings.pullEveryMonths,
 			settings.autoSaveEveryMonths);
 
+		logger.Flush();
+
 		if (settings.releaseInstanceMutexOnStart)
 		{
 			Unlock("startup");
@@ -291,6 +294,8 @@ public:
 			break;
 		}
 
+		// The logger buffers; flush so the file is live and survives a crash.
+		Logger::GetInstance().Flush();
 		return true;
 	}
 
@@ -380,15 +385,18 @@ private:
 			pCity->GetEstablished() ? 1 : 0,
 			static_cast<void*>(pNeighborsSim),
 			static_cast<void*>(pSimulator));
+		logger.Flush();
 
 		if (settings.enabled && settings.publishOnLoad)
 		{
 			logger.WriteLine(LogLevel::Info, "City load: publishing");
+			logger.Flush();
 			Publish("city load");
 		}
 		if (settings.enabled && settings.pullOnLoad)
 		{
 			logger.WriteLine(LogLevel::Info, "City load: pulling");
+			logger.Flush();
 			Pull("city load");
 		}
 		logger.WriteLine(LogLevel::Info, "City load: done");
@@ -570,6 +578,7 @@ private:
 				pTarget->GetPopulation(),
 				snapshot.population,
 				settings.applyPulledSnapshots ? 1 : 0);
+			logger.Flush();
 
 			if (!settings.applyPulledSnapshots)
 			{
@@ -591,6 +600,7 @@ private:
 			// Ask the neighbors simulator to recompute deal state from the
 			// updated records.
 			logger.WriteLine(LogLevel::Info, "Pull: calling MarkDealsDirty");
+			logger.Flush();
 			pNeighborsSim->MarkDealsDirty();
 			logger.WriteLine(LogLevel::Info, "Pull: MarkDealsDirty returned");
 		}

@@ -115,6 +115,7 @@ namespace regionsync
 		if (pRegionalCity->GetEstablished() != s.established)
 		{
 			logger.WriteLineFormatted(LogLevel::Info, "Apply: SetEstablished(%d)", s.established ? 1 : 0);
+			logger.Flush();
 			pRegionalCity->SetEstablished(s.established);
 			changed++;
 		}
@@ -122,6 +123,7 @@ namespace regionsync
 		if (Differs(pRegionalCity->GetBudget(), s.budget))
 		{
 			logger.WriteLineFormatted(LogLevel::Info, "Apply: SetBudget(%.0f)", s.budget);
+			logger.Flush();
 			pRegionalCity->SetBudget(s.budget);
 			changed++;
 		}
@@ -129,11 +131,13 @@ namespace regionsync
 		if (Differs(pRegionalCity->GetIncome(), s.income))
 		{
 			logger.WriteLineFormatted(LogLevel::Info, "Apply: SetIncome(%.0f)", s.income);
+			logger.Flush();
 			pRegionalCity->SetIncome(s.income);
 			changed++;
 		}
 
 		logger.WriteLine(LogLevel::Info, "Apply: commodity setters");
+		logger.Flush();
 
 		for (size_t i = 0; i < kCommoditySlots; i++)
 		{
