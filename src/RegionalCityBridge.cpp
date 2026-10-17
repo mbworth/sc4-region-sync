@@ -10,6 +10,7 @@
 #include "cISC4Simulator.h"
 #include "cRZAutoRefCount.h"
 #include "cRZBaseString.h"
+#include "Logger.h"
 #include <cmath>
 #include <ctime>
 
@@ -109,23 +110,30 @@ namespace regionsync
 		// until we confirm how the demand simulator reads them. See
 		// docs/OPEN-QUESTIONS.md, Q2.
 
+		Logger& logger = Logger::GetInstance();
+
 		if (pRegionalCity->GetEstablished() != s.established)
 		{
+			logger.WriteLineFormatted(LogLevel::Info, "Apply: SetEstablished(%d)", s.established ? 1 : 0);
 			pRegionalCity->SetEstablished(s.established);
 			changed++;
 		}
 
 		if (Differs(pRegionalCity->GetBudget(), s.budget))
 		{
+			logger.WriteLineFormatted(LogLevel::Info, "Apply: SetBudget(%.0f)", s.budget);
 			pRegionalCity->SetBudget(s.budget);
 			changed++;
 		}
 
 		if (Differs(pRegionalCity->GetIncome(), s.income))
 		{
+			logger.WriteLineFormatted(LogLevel::Info, "Apply: SetIncome(%.0f)", s.income);
 			pRegionalCity->SetIncome(s.income);
 			changed++;
 		}
+
+		logger.WriteLine(LogLevel::Info, "Apply: commodity setters");
 
 		for (size_t i = 0; i < kCommoditySlots; i++)
 		{
@@ -159,6 +167,7 @@ namespace regionsync
 			}
 		}
 
+		logger.WriteLineFormatted(LogLevel::Info, "Apply: done, changed=%d", changed);
 		return changed;
 	}
 

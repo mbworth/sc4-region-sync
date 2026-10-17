@@ -383,12 +383,15 @@ private:
 
 		if (settings.enabled && settings.publishOnLoad)
 		{
+			logger.WriteLine(LogLevel::Info, "City load: publishing");
 			Publish("city load");
 		}
 		if (settings.enabled && settings.pullOnLoad)
 		{
+			logger.WriteLine(LogLevel::Info, "City load: pulling");
 			Pull("city load");
 		}
+		logger.WriteLine(LogLevel::Info, "City load: done");
 	}
 
 	void PostCityShutdown()
@@ -555,25 +558,41 @@ private:
 				continue;
 			}
 
+			// Log before and after: these setters and MarkDealsDirty are
+			// reverse-engineered vtable slots that had never been exercised
+			// with real changes before 2026-10-17 (instance 2 crashed on
+			// city load that day).
+			logger.WriteLineFormatted(
+				LogLevel::Info,
+				"Pull: record for (%d,%d) '%s' found (record pop=%d, snapshot pop=%d). apply=%d",
+				snapshot.regionX, snapshot.regionZ,
+				snapshot.cityName.c_str(),
+				pTarget->GetPopulation(),
+				snapshot.population,
+				settings.applyPulledSnapshots ? 1 : 0);
+
+			if (!settings.applyPulledSnapshots)
+			{
+				continue;
+			}
+
 			const int changed = regionsync::ApplySnapshotToRegionalCity(snapshot, pTarget);
 			applied++;
 			totalChanged += changed;
 
 			logger.WriteLineFormatted(
-				LogLevel::Debug,
-				"Pull: applied (%d,%d) '%s' changedFields=%d (snapshot pop=%d, record pop=%d)",
-				snapshot.regionX, snapshot.regionZ,
-				snapshot.cityName.c_str(),
-				changed,
-				snapshot.population,
-				pTarget->GetPopulation());
+				LogLevel::Info,
+				"Pull: applied (%d,%d) changedFields=%d",
+				snapshot.regionX, snapshot.regionZ, changed);
 		}
 
 		if (totalChanged > 0 && pNeighborsSim)
 		{
 			// Ask the neighbors simulator to recompute deal state from the
 			// updated records.
+			logger.WriteLine(LogLevel::Info, "Pull: calling MarkDealsDirty");
 			pNeighborsSim->MarkDealsDirty();
+			logger.WriteLine(LogLevel::Info, "Pull: MarkDealsDirty returned");
 		}
 
 		pullCount++;

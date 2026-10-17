@@ -38,6 +38,10 @@ namespace regionsync
 		// is safe; the RegionSyncUnlock cheat does the same on demand.
 		bool releaseInstanceMutexOnStart = false;
 
+		// Write pulled snapshots into the other tiles' regional records.
+		// 0 = read the store and log, touch nothing (crash isolation).
+		bool applyPulledSnapshots = true;
+
 		// Where snapshots live. Empty means "<DLL folder>\RegionSync\<region dir>".
 		// Both game instances share the install, so the default is already a
 		// shared location. Set it explicitly if the instances use separate

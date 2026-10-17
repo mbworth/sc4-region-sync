@@ -85,6 +85,7 @@ namespace regionsync
 				refreshCacheBeforePublish = ParseBool(sync->get_value("RefreshCacheBeforePublish", ""), refreshCacheBeforePublish);
 				storeDirectory = sync->get_value("StoreDirectory", "");
 				releaseInstanceMutexOnStart = ParseBool(sync->get_value("ReleaseInstanceMutexOnStart", ""), releaseInstanceMutexOnStart);
+				applyPulledSnapshots = ParseBool(sync->get_value("ApplyPulledSnapshots", ""), applyPulledSnapshots);
 			}
 
 			auto logging = reader.get_section_optional("Logging");
