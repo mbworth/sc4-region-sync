@@ -23,6 +23,7 @@
 #include "NeighborSnapshot.h"
 #include "RegionalCityBridge.h"
 #include "SyncSettings.h"
+#include "InstanceMutex.h"
 
 #include "cIGZCheatCodeManager.h"
 #include "cIGZCOM.h"
@@ -79,6 +80,7 @@ static constexpr uint32_t kCheatPullID = 0x7A3C9E54;
 static constexpr uint32_t kCheatReloadID = 0x7A3C9E55;
 static constexpr uint32_t kCheatStatusID = 0x7A3C9E56;
 static constexpr uint32_t kCheatSaveID = 0x7A3C9E57;
+static constexpr uint32_t kCheatUnlockID = 0x7A3C9E58;
 
 static constexpr std::string_view kCheatDump = "RegionSyncDump";
 static constexpr std::string_view kCheatPublish = "RegionSyncPublish";
@@ -86,6 +88,7 @@ static constexpr std::string_view kCheatPull = "RegionSyncPull";
 static constexpr std::string_view kCheatReload = "RegionSyncReload";
 static constexpr std::string_view kCheatStatus = "RegionSyncStatus";
 static constexpr std::string_view kCheatSave = "RegionSyncSave";
+static constexpr std::string_view kCheatUnlock = "RegionSyncUnlock";
 
 namespace
 {
@@ -124,10 +127,13 @@ namespace
 		size_t pos = lower.find(key);
 		if (pos != std::wstring::npos)
 		{
+			// Accept -UserDir:"C:\x\" and "-UserDir:C:\x\" (the latter is
+			// what PowerShell's Start-Process produces).
+			const bool quoteBefore = pos > 0 && cmd[pos - 1] == L'"';
 			pos += key.size();
 			const bool quoted = pos < cmd.size() && cmd[pos] == L'"';
 			if (quoted) pos++;
-			const size_t end = cmd.find(quoted ? L'"' : L' ', pos);
+			const size_t end = cmd.find((quoted || quoteBefore) ? L'"' : L' ', pos);
 			std::wstring dir = cmd.substr(pos, end == std::wstring::npos ? std::wstring::npos : end - pos);
 			if (!dir.empty())
 			{
@@ -248,6 +254,11 @@ public:
 			settings.pullEveryMonths,
 			settings.autoSaveEveryMonths);
 
+		if (settings.releaseInstanceMutexOnStart)
+		{
+			Unlock("startup");
+		}
+
 		return true;
 	}
 
@@ -325,6 +336,7 @@ private:
 			pCheatCodeManager->RegisterCheatCode(kCheatReloadID, cRZBaseString(kCheatReload));
 			pCheatCodeManager->RegisterCheatCode(kCheatStatusID, cRZBaseString(kCheatStatus));
 			pCheatCodeManager->RegisterCheatCode(kCheatSaveID, cRZBaseString(kCheatSave));
+			pCheatCodeManager->RegisterCheatCode(kCheatUnlockID, cRZBaseString(kCheatUnlock));
 			pCheatCodeManager->AddNotification2(this, 0);
 		}
 	}
@@ -399,6 +411,7 @@ private:
 			pCheatCodeManager->UnregisterCheatCode(kCheatReloadID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatStatusID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatSaveID);
+			pCheatCodeManager->UnregisterCheatCode(kCheatUnlockID);
 			pCheatCodeManager->RemoveNotification2(this, 0);
 		}
 	}
@@ -763,6 +776,27 @@ private:
 		SC4NotificationDialog::ShowDialog(cRZBaseString("Dump written to SC4RegionSync.log"), cRZBaseString("RegionSync"));
 	}
 
+	// Unlock: close the game's single-instance mutex so another instance
+	// can start. Lists what it found first so the log shows the names.
+	void Unlock(const char* reason)
+	{
+		Logger& logger = Logger::GetInstance();
+		int closed = 0;
+		try
+		{
+			for (const auto& h : regionsync::FindNamedMutexHandles(L""))
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "Unlock (%s): mutex handle 0x%04X '%ls'", reason, h.handle, h.name.c_str());
+			}
+			closed = regionsync::CloseNamedMutexHandles(L"SimCity 4 Mutex");
+		}
+		catch (const std::exception& e)
+		{
+			logger.WriteLineFormatted(LogLevel::Error, "Unlock (%s) failed: %s", reason, e.what());
+		}
+		logger.WriteLineFormatted(LogLevel::Info, "Unlock (%s): closed %d handle(s) named 'SimCity 4 Mutex'.", reason, closed);
+	}
+
 	void Status()
 	{
 		int32_t x = -1, z = -1;
@@ -794,6 +828,7 @@ private:
 		case kCheatReloadID:  ReloadAdjacent(); break;
 		case kCheatStatusID:  Status(); break;
 		case kCheatSaveID:    Save("cheat"); break;
+		case kCheatUnlockID:  Unlock("cheat"); break;
 		}
 	}
 

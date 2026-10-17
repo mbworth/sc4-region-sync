@@ -33,6 +33,11 @@ namespace regionsync
 		// values from the last save. See docs/OPEN-QUESTIONS.md, Q1.
 		bool refreshCacheBeforePublish = true;
 
+		// Close the game's single-instance mutex ("SimCity 4 Mutex") at
+		// startup so a second instance can launch. Off until Q5 confirms it
+		// is safe; the RegionSyncUnlock cheat does the same on demand.
+		bool releaseInstanceMutexOnStart = false;
+
 		// Where snapshots live. Empty means "<DLL folder>\RegionSync\<region dir>".
 		// Both game instances share the install, so the default is already a
 		// shared location. Set it explicitly if the instances use separate

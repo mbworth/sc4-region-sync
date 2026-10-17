@@ -116,12 +116,19 @@ if ($Launch) {
             throw "Instance dir missing, run with -Setup first: $dir"
         }
 
-        # -UserDir must end with a trailing backslash.
+        # -UserDir must end with a trailing backslash. Start-Process re-quotes
+        # its argument string (it wrapped the whole thing in one pair of
+        # quotes and dropped ours), so hand the raw string to .NET instead.
         $userDirArg = '-UserDir:"' + $dir.TrimEnd('\') + '\"'
         $argList = "$userDirArg $ExtraArgs".Trim()
 
         Write-Host "Launching instance $i : `"$GameExe`" $argList"
-        Start-Process -FilePath $GameExe -ArgumentList $argList -WorkingDirectory (Split-Path $GameExe -Parent)
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $GameExe
+        $psi.Arguments = $argList
+        $psi.WorkingDirectory = Split-Path $GameExe -Parent
+        $psi.UseShellExecute = $false
+        [System.Diagnostics.Process]::Start($psi) | Out-Null
 
         # Give the first instance a head start so both do not hammer the disk
         # on the same startup files at once.
