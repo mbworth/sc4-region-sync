@@ -78,7 +78,7 @@ Affects cadence and the "publish on shutdown" path. Low risk either way, but wor
 
 ## Q8. Where does the game load the DLL from, and where does the store end up?
 
-**Observed (2026-10-17).** The DLL loaded from `Documents\SimCity 4\Plugins`, not the install's Plugins folder, so both locations work. That breaks the "store is shared by construction" assumption in DESIGN.md: `Setup-MultiInstance.ps1` copies the Documents Plugins folder into each instance's private user dir, so each instance would get its own DLL and its own `RegionSync\<region>` store. Fix applied: the script now writes an `SC4RegionSync.ini` into each instance's Plugins with `StoreDirectory` pointing at a shared `SimCity 4 Instances\RegionSync` folder. Putting the DLL in the install Plugins folder instead also works and needs no INI change.
+**Observed (2026-10-17).** The DLL loaded from `Documents\SimCity 4\Plugins`, not the install's Plugins folder, so both locations work. That breaks the "store is shared by construction" assumption in DESIGN.md: `Setup-MultiInstance.ps1` copies the Documents Plugins folder into each instance's private user dir, so each instance would get its own DLL and its own `RegionSync\<region>` store. Fix applied: the script now junctions Plugins into each instance (the per-instance copy also failed on the 260-char path limit inside NAM), so both instances load the same DLL and share its store, and the plugin writes its log into the `-UserDir` folder so the two logs do not collide.
 
 ```
 Region loaded: 'New York'. Store directory: C:\Users\player\Documents\SimCity 4\Plugins\RegionSync\New York

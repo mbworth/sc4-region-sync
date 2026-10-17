@@ -52,6 +52,7 @@
 #include "SC4VersionDetection.h"
 
 #include <Windows.h>
+#include <cwctype>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -110,6 +111,32 @@ namespace
 		}
 	}
 
+	// With Setup-MultiInstance.ps1 every instance shares one Plugins folder,
+	// so a log next to the DLL would be fought over by two processes. When
+	// the game was started with -UserDir:"<dir>" the log goes there instead.
+	std::filesystem::path LogFilePath()
+	{
+		std::wstring cmd = GetCommandLineW();
+		std::wstring lower = cmd;
+		for (wchar_t& c : lower) c = static_cast<wchar_t>(towlower(c));
+
+		const std::wstring key = L"-userdir:";
+		size_t pos = lower.find(key);
+		if (pos != std::wstring::npos)
+		{
+			pos += key.size();
+			const bool quoted = pos < cmd.size() && cmd[pos] == L'"';
+			if (quoted) pos++;
+			const size_t end = cmd.find(quoted ? L'"' : L' ', pos);
+			std::wstring dir = cmd.substr(pos, end == std::wstring::npos ? std::wstring::npos : end - pos);
+			if (!dir.empty())
+			{
+				return std::filesystem::path(dir) / L"SC4RegionSync.log";
+			}
+		}
+		return FileSystem::GetDllLogFilePath();
+	}
+
 	std::string GetRegionalCityName(cISC4RegionalCity* pCity)
 	{
 		cRZBaseString name;
@@ -139,7 +166,7 @@ public:
 		  instanceId(static_cast<uint32_t>(GetCurrentProcessId()))
 	{
 		Logger& logger = Logger::GetInstance();
-		logger.Init(FileSystem::GetDllLogFilePath(), LogLevel::Info);
+		logger.Init(LogFilePath(), LogLevel::Info);
 		logger.WriteLogFileHeader("SC4RegionSync v" PLUGIN_VERSION_STR);
 	}
 

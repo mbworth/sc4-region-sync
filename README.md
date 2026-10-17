@@ -36,7 +36,7 @@ Or open `src\SC4RegionSync.sln` in Visual Studio, pick Release | x86, and build.
 
 ## Install
 
-Copy `SC4RegionSync.dll` and `SC4RegionSync.ini` into `<game install>\Plugins` (or `Documents\SimCity 4\Plugins`; both load). The plugin writes `SC4RegionSync.log` next to the DLL. With the multi-instance script, prefer the install folder: the Documents one is copied per instance, and the script then has to point each copy at a shared `StoreDirectory`, which it does.
+Copy `SC4RegionSync.dll` and `SC4RegionSync.ini` into `<game install>\Plugins` (or `Documents\SimCity 4\Plugins`; both load). The plugin writes `SC4RegionSync.log` next to the DLL. With the multi-instance script both locations are shared between instances, and each instance's log goes into its own user dir.
 
 ## Running two instances
 
@@ -45,7 +45,7 @@ powershell -ExecutionPolicy Bypass -File scripts\Setup-MultiInstance.ps1 -GameEx
 powershell -ExecutionPolicy Bypass -File scripts\Setup-MultiInstance.ps1 -GameExe "C:\...\Apps\SimCity 4.exe" -Launch -ExtraArgs "-w -CustomResolution:enabled -r1600x900x32"
 ```
 
-Setup makes a private user dir per instance under `Documents\SimCity 4 Instances\InstanceN` with its own Plugins and Albums and a junction back to your real `Regions` folder. Launch starts each instance with `-UserDir` pointing at its own dir. Open a different tile in each instance.
+Setup makes a private user dir per instance under `Documents\SimCity 4 Instances\InstanceN` with its own Albums and preferences, and junctions back to your real `Regions` and `Plugins` folders. Launch starts each instance with `-UserDir` pointing at its own dir. Open a different tile in each instance.
 
 ## Cheat console commands
 

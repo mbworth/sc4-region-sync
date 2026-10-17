@@ -7,9 +7,11 @@
     (Documents\SimCity 4 by default): Regions, Plugins, Albums, preferences.
     Two instances pointed at the same user dir will fight over preferences
     and the region thumbnail cache, so this script gives each instance its
-    own user dir and makes the Regions folder a directory junction back to
-    the real one. Each instance then sees the same region and the same city
-    save files, while everything else stays separate.
+    own user dir with Regions and Plugins as directory junctions back to
+    the real ones. Each instance then sees the same region, the same city
+    save files and the same plugins (including SC4RegionSync.dll and its
+    store), while preferences and Albums stay separate. The plugin writes
+    its log into the instance's user dir when -UserDir is set.
 
     Run once with -Setup to create the per-instance user dirs, then run
     with -Launch to start the instances.
@@ -63,7 +65,6 @@ if (-not (Test-Path $SourceUserDir)) {
 
 $instanceRoot = Join-Path (Split-Path $SourceUserDir -Parent) 'SimCity 4 Instances'
 $sharedRegions = Join-Path $SourceUserDir 'Regions'
-$sharedStore = Join-Path $instanceRoot 'RegionSync'
 
 function Get-InstanceDir([int]$i) {
     return Join-Path $instanceRoot ("Instance{0}" -f $i)
@@ -76,44 +77,32 @@ if ($Setup) {
         $dir = Get-InstanceDir $i
         New-Item -ItemType Directory -Force -Path $dir | Out-Null
 
-        # Everything except Regions is a private copy (or empty).
-        foreach ($sub in @('Albums', 'Plugins', 'Downloads')) {
+        # Albums is private and starts empty.
+        New-Item -ItemType Directory -Force -Path (Join-Path $dir 'Albums') | Out-Null
+
+        # Regions and Plugins are shared through junctions. Plugins is
+        # read-only to the game and often NAM-sized, so copying it is slow
+        # and trips the 260-char path limit. Sharing it also means both
+        # instances load the same SC4RegionSync.dll and share its store.
+        foreach ($sub in @('Regions', 'Plugins')) {
             $src = Join-Path $SourceUserDir $sub
             $dst = Join-Path $dir $sub
-            if ((Test-Path $src) -and -not (Test-Path $dst)) {
-                Write-Host "Copying $sub into $dst"
-                Copy-Item -Recurse -Force $src $dst
-            } elseif (-not (Test-Path $dst)) {
-                New-Item -ItemType Directory -Force -Path $dst | Out-Null
+            if (-not (Test-Path $src)) { continue }
+            if (Test-Path $dst) {
+                $item = Get-Item $dst -Force
+                if (-not $item.Attributes.HasFlag([IO.FileAttributes]::ReparsePoint)) {
+                    throw "$dst exists and is a real folder (leftover from an earlier run?). Delete it and rerun."
+                }
+            } else {
+                Write-Host "Linking $dst -> $src"
+                cmd /c mklink /J "`"$dst`"" "`"$src`"" | Out-Null
             }
-        }
-
-        # Regions is shared through a junction.
-        $regionsLink = Join-Path $dir 'Regions'
-        if (-not (Test-Path $regionsLink)) {
-            Write-Host "Linking $regionsLink -> $sharedRegions"
-            cmd /c mklink /J "`"$regionsLink`"" "`"$sharedRegions`"" | Out-Null
         }
 
         # Copy preferences so each instance starts from your settings.
         $prefs = Join-Path $SourceUserDir 'SimCity 4.cfg'
         if (Test-Path $prefs) {
             Copy-Item -Force $prefs (Join-Path $dir 'SimCity 4.cfg')
-        }
-
-        # If SC4RegionSync.dll lives in the (now private) Plugins copy, its
-        # default store would be private too and the instances would never
-        # see each other. Point every instance at one shared store.
-        $ini = Join-Path $dir 'Plugins\SC4RegionSync.ini'
-        if (Test-Path (Join-Path $dir 'Plugins\SC4RegionSync.dll')) {
-            if (Test-Path $ini) {
-                $text = Get-Content -Raw $ini
-                $text = $text -replace '(?m)^StoreDirectory=.*$', "StoreDirectory=$sharedStore"
-            } else {
-                $text = "[Sync]`r`nStoreDirectory=$sharedStore`r`n"
-            }
-            Set-Content -Path $ini -Value $text -NoNewline
-            Write-Host "Set StoreDirectory=$sharedStore in $ini"
         }
     }
 
