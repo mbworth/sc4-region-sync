@@ -34,7 +34,9 @@ This decides whether a pull moves regional demand immediately. Note that `cISC4R
   0x1010 demand=27851.6 active=17509.7 supply=11983.0 cap=0.1630 regionUse=0   (14 months later, pop 12107)
 ```
 
-So the simulator takes its regional inputs at city load (or from somewhere other than the live records). Phase 1b: find where it caches them and refresh that after a pull, or `ReloadCity` (Q3).
+So the simulator takes its regional inputs at city load. Ghidra (cSC4DemandSimulator, vtable `0x00ab0e48`, class id `0x2990BFF2`): the routine at `0x006a5cb0` runs at `Init` and on message `0xEA0D163E`; it sums every neighbor's `GetExtrapolatedPopulation(type)` over the old and the new neighbor list and adds the difference into the demand objects whose `GetRegionUse()` is 1 (`AddToSupplyValue`) or 2 (`AddToDemandValue`). At load the old list is empty, so the whole regional population lands once; afterwards only a neighbor-list change triggers it, and record changes are never re-read. Note the per-type reader is slot 17, which prefers the extrapolated map at `+0x48` over the plain one at `+0x3c`.
+
+Phase 1b implementation (2026-10-17): the pull writes the `+0x48` node too, and the director keeps the same per-type regional sums and feeds the delta into the region-using demand objects after every pull (`ApplyRegionalDemand`). The totals objects (index `0x20000`) have region use 0; `DiscoverRegionalDemand` searches other indices at city load and logs what it finds. Experiment: `RegionSyncDemand`, `RegionSyncFakeNeighbor`, two months, `RegionSyncDemand`.
 
 ## Q3. Does `cISC4Region::ReloadCity` work mid-game, and what does it do to pointers?
 

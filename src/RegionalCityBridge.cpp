@@ -161,13 +161,18 @@ namespace regionsync
 					}
 					continue;
 				}
-				if (*pValue == g.population)
+				int32_t* pExtrapolated = rc641::FindExtrapolatedPopulationByType(pRegionalCity, g.groupId);
+				const bool plainDiffers = *pValue != g.population;
+				const bool extrapolatedDiffers = pExtrapolated && *pExtrapolated != g.population;
+				if (!plainDiffers && !extrapolatedDiffers)
 				{
 					continue;
 				}
-				logger.WriteLineFormatted(LogLevel::Info, "Apply: rci 0x%04X %d -> %d", g.groupId, *pValue, g.population);
+				logger.WriteLineFormatted(LogLevel::Info, "Apply: rci 0x%04X %d (extrapolated %d) -> %d",
+					g.groupId, *pValue, pExtrapolated ? *pExtrapolated : -1, g.population);
 				logger.Flush();
 				*pValue = g.population;
+				if (pExtrapolated) *pExtrapolated = g.population;
 				changed++;
 			}
 		}

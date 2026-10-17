@@ -106,9 +106,9 @@ namespace regionsync::rc641
 	// (FUN_004a8500) walks it: header = *(this+0x3c), root = header+4,
 	// node { +0x8 left, +0xc right, +0x10 key, +0x14 value }. Returns the
 	// value slot for an existing key, or null; we never insert.
-	inline int32_t* FindPopulationByType(cISC4RegionalCity* p, uint32_t type)
+	inline int32_t* FindTypeMapValue(cISC4RegionalCity* p, size_t mapOffset, uint32_t type)
 	{
-		uint8_t* header = *reinterpret_cast<uint8_t**>(reinterpret_cast<uint8_t*>(p) + 0x3c);
+		uint8_t* header = *reinterpret_cast<uint8_t**>(reinterpret_cast<uint8_t*>(p) + mapOffset);
 		if (!header)
 		{
 			return nullptr;
@@ -133,4 +133,9 @@ namespace regionsync::rc641
 		}
 		return reinterpret_cast<int32_t*>(candidate + 0x14);
 	}
+	// Plain per-type population (+0x3c) and the extrapolated one (+0x48)
+	// that GetExtrapolatedPopulation (slot 17) prefers when a node exists.
+	// The demand simulator reads the extrapolated one.
+	inline int32_t* FindPopulationByType(cISC4RegionalCity* p, uint32_t type) { return FindTypeMapValue(p, 0x3c, type); }
+	inline int32_t* FindExtrapolatedPopulationByType(cISC4RegionalCity* p, uint32_t type) { return FindTypeMapValue(p, 0x48, type); }
 }

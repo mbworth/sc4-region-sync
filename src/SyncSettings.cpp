@@ -99,6 +99,7 @@ namespace regionsync
 					applyPopulation = f.find("population") != std::string::npos;
 				}
 				markDealsDirty = ParseBool(sync->get_value("MarkDealsDirty", ""), markDealsDirty);
+				applyRegionalDemand = ParseBool(sync->get_value("ApplyRegionalDemand", ""), applyRegionalDemand);
 			}
 
 			auto logging = reader.get_section_optional("Logging");

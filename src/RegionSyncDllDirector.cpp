@@ -57,6 +57,7 @@
 #include "SC4VersionDetection.h"
 
 #include <Windows.h>
+#include <cmath>
 #include <cwctype>
 #include <filesystem>
 #include <string>
@@ -403,6 +404,8 @@ private:
 			static_cast<void*>(pSimulator));
 		logger.Flush();
 
+		DiscoverRegionalDemand();
+
 		if (settings.enabled && settings.publishOnLoad)
 		{
 			logger.WriteLine(LogLevel::Info, "City load: publishing");
@@ -418,6 +421,102 @@ private:
 		logger.WriteLine(LogLevel::Info, "City load: done");
 	}
 
+	// ---------------------------------------------------------------
+	// Regional demand feed (Phase 1b)
+	//
+	// cSC4DemandSimulator adds the region's extrapolated per-type
+	// population into the demand objects whose GetRegionUse() is 1
+	// (AddToSupplyValue) or 2 (AddToDemandValue), but only as a delta when
+	// its neighbor list changes, and once at city load (FUN_006a5cb0 in
+	// 1.1.641). Records updated by a pull are therefore never seen. We do
+	// the same bookkeeping: baseline sums at city load, delta after each
+	// pull.
+	// ---------------------------------------------------------------
+
+	struct RegionalDemandEntry
+	{
+		uint32_t groupId;
+		uint32_t demandIndex;
+		uint32_t regionUse;
+		cISC4Demand* pDemand;
+		float lastSum;
+	};
+
+	float SumOtherTiles(uint32_t groupId)
+	{
+		if (!pRegion || !pOwnRegionalCity) return 0.0f;
+		int32_t ox = 0, oz = 0;
+		pOwnRegionalCity->GetPosition(ox, oz);
+		SC4Vector<cISC4Region::cLocation> locations;
+		pRegion->GetCityLocations(locations);
+		float sum = 0.0f;
+		for (size_t i = 0; i < locations.size(); i++)
+		{
+			const int32_t x = static_cast<int32_t>(locations[i].x);
+			const int32_t z = static_cast<int32_t>(locations[i].z);
+			if (x == ox && z == oz) continue;
+			cISC4RegionalCity* p = regionsync::FindRegionalCity(pRegion, x, z);
+			if (!p || !p->GetEstablished()) continue;
+			sum += static_cast<float>(p->GetExtrapolatedPopulation(groupId));
+		}
+		return sum;
+	}
+
+	void DiscoverRegionalDemand()
+	{
+		Logger& logger = Logger::GetInstance();
+		regionalDemand.clear();
+		cISC4DemandSimulator* pDemandSim = pCity ? pCity->GetDemandSimulator() : nullptr;
+		if (!pDemandSim)
+		{
+			logger.WriteLine(LogLevel::Info, "RegionalDemand: no demand simulator.");
+			return;
+		}
+		// Demand index is "the upper bytes of the instance id"; 0x20000 is
+		// the totals set (region use 0). Try the others.
+		const uint32_t indices[] = { 0x00000, 0x10000, 0x20000, 0x30000, 0x40000, 0x50000, 0x60000, 0x70000, 0x80000 };
+		for (uint32_t groupId : regionsync::kRCIGroupIds)
+		{
+			for (uint32_t idx : indices)
+			{
+				cISC4Demand* pDemand = pDemandSim->GetDemand(groupId, idx);
+				if (!pDemand) continue;
+				const uint32_t use = pDemand->GetRegionUse();
+				if (use == 1 || use == 2)
+				{
+					const float base = SumOtherTiles(groupId);
+					regionalDemand.push_back(RegionalDemandEntry{ groupId, idx, use, pDemand, base });
+					logger.WriteLineFormatted(LogLevel::Info, "RegionalDemand: 0x%04X index 0x%05X regionUse=%u baseline regional pop=%.0f demand=%.1f supply=%.1f",
+						groupId, idx, use, base, pDemand->QueryDemandValue(), pDemand->QuerySupplyValue());
+				}
+			}
+		}
+		logger.WriteLineFormatted(LogLevel::Info, "RegionalDemand: %zu region-using demand objects found.", regionalDemand.size());
+		logger.Flush();
+	}
+
+	void ApplyRegionalDemandDelta(const char* reason)
+	{
+		if (!settings.applyRegionalDemand || regionalDemand.empty()) return;
+		Logger& logger = Logger::GetInstance();
+		for (RegionalDemandEntry& e : regionalDemand)
+		{
+			const float now = SumOtherTiles(e.groupId);
+			const float delta = now - e.lastSum;
+			if (std::fabs(delta) < 0.5f) continue;
+			logger.WriteLineFormatted(LogLevel::Info, "RegionalDemand (%s): 0x%04X idx 0x%05X use=%u regional pop %.0f -> %.0f, %s(%.0f); before demand=%.1f supply=%.1f",
+				reason, e.groupId, e.demandIndex, e.regionUse, e.lastSum, now,
+				e.regionUse == 1 ? "AddToSupplyValue" : "AddToDemandValue", delta,
+				e.pDemand->QueryDemandValue(), e.pDemand->QuerySupplyValue());
+			logger.Flush();
+			if (e.regionUse == 1) e.pDemand->AddToSupplyValue(delta);
+			else e.pDemand->AddToDemandValue(delta);
+			e.lastSum = now;
+			logger.WriteLineFormatted(LogLevel::Info, "RegionalDemand (%s): after demand=%.1f supply=%.1f", reason, e.pDemand->QueryDemandValue(), e.pDemand->QuerySupplyValue());
+			logger.Flush();
+		}
+	}
+
 	void PostCityShutdown()
 	{
 		if (settings.enabled && settings.publishOnShutdown && pCity)
@@ -429,6 +528,7 @@ private:
 		pOwnRegionalCity = nullptr;
 		pNeighborsSim = nullptr;
 		pSimulator = nullptr;
+		regionalDemand.clear();
 
 		if (pCheatCodeManager)
 		{
@@ -632,6 +732,11 @@ private:
 				"Pull: applied (%d,%d) changedFields=%d",
 				snapshot.regionX, snapshot.regionZ, changed);
 			logger.Flush();
+		}
+
+		if (totalChanged > 0)
+		{
+			ApplyRegionalDemandDelta("pull");
 		}
 
 		if (totalChanged > 0 && pNeighborsSim && settings.markDealsDirty)
@@ -1019,6 +1124,13 @@ private:
 				pDemand->QueryActiveDemandMax(), pDemand->QueryActiveDemandMin(),
 				pCap ? pCap->percentage : -1.0f, pDemand->GetRegionUse());
 		}
+		for (const RegionalDemandEntry& e : regionalDemand)
+		{
+			const SC4Percentage* pCap = e.pDemand->GetDemandCap();
+			logger.WriteLineFormatted(LogLevel::Info, "  regional 0x%04X idx 0x%05X use=%u demand=%.1f active=%.1f supply=%.1f cap=%.4f lastSum=%.0f",
+				e.groupId, e.demandIndex, e.regionUse, e.pDemand->QueryDemandValue(), e.pDemand->QueryActiveDemandValue(),
+				e.pDemand->QuerySupplyValue(), pCap ? pCap->percentage : -1.0f, e.lastSum);
+		}
 		logger.WriteLine(LogLevel::Info, "==== RegionSyncDemand end ====");
 		logger.Flush();
 	}
@@ -1061,6 +1173,10 @@ private:
 			int32_t* pR1 = regionsync::rc641::FindPopulationByType(p, 0x1010);
 			const int32_t r1 = pR1 ? *pR1 : -1;
 			if (pR1) *pR1 = r1 + 500000;
+			int32_t* pR1x = regionsync::rc641::FindExtrapolatedPopulationByType(p, 0x1010);
+			if (pR1x) *pR1x = *pR1x + 500000;
+			logger.WriteLineFormatted(LogLevel::Info, "FakeNeighbor: extrapolated R$ node %s; GetExtrapolatedPopulation(0x1010) now %d",
+				pR1x ? "updated" : "absent", p->GetExtrapolatedPopulation(0x1010));
 			regionsync::rc641::SetCommercialJobs(p, regionsync::rc641::GetCommercialJobs(p) + 200000);
 			regionsync::rc641::SetIndustrialJobs(p, regionsync::rc641::GetIndustrialJobs(p) + 200000);
 			fakeNeighborHeld = true; fakeNeighborX = x; fakeNeighborZ = z;
@@ -1068,6 +1184,7 @@ private:
 				x, z, GetRegionalCityName(p).c_str(), pop, fake, r1, pR1 ? *pR1 : -1);
 			logger.Flush();
 			if (pNeighborsSim) pNeighborsSim->MarkDealsDirty();
+			ApplyRegionalDemandDelta("fake neighbor");
 			return;
 		}
 		logger.WriteLine(LogLevel::Info, "FakeNeighbor: no other established tile.");
@@ -1135,6 +1252,7 @@ private:
 	int pullCount;
 	uint32_t instanceId;
 
+	std::vector<RegionalDemandEntry> regionalDemand;
 	bool fakeNeighborHeld = false;
 	int32_t fakeNeighborX = -1;
 	int32_t fakeNeighborZ = -1;

@@ -54,6 +54,10 @@ namespace regionsync
 		// something.
 		bool markDealsDirty = true;
 
+		// Feed regional population deltas into the demand simulator after a
+		// pull (Phase 1b). See the director's ApplyRegionalDemandDelta.
+		bool applyRegionalDemand = true;
+
 		// Where snapshots live. Empty means "<DLL folder>\RegionSync\<region dir>".
 		// Both game instances share the install, so the default is already a
 		// shared location. Set it explicitly if the instances use separate
