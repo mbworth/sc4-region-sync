@@ -9,16 +9,27 @@ Status: scaffold. Builds against the published SDK, nothing verified in-game yet
 ## Requirements
 
 - SimCity 4 Deluxe, version 1.1.641 (the GOG or Steam digital release). Disc versions and the macOS port will not load DLL plugins.
-- Visual Studio 2022 with the C++ desktop workload (v143 toolset, Windows 10 SDK). The game is 32-bit, so the only target is Win32.
+- Either a Linux box with clang 16+, lld and llvm (for `llvm-rc`), or Visual Studio 2022 with the C++ desktop workload. The game is 32-bit, so the only target is Win32.
 - Git with submodules.
 
 ## Build
 
+On Linux (clang-cl + lld-link against the MSVC headers and libs fetched by xwin, the same way the NAM team builds NAM.dll):
+
 ```
 git clone --recurse-submodules <this repo>
 cd sc4-region-sync
+scripts/setup-toolchain.sh --apt     # once; ~1 GB download from Microsoft
+make                                 # -> build/SC4RegionSync.dll
+```
+
+On Windows with Visual Studio 2022:
+
+```
 msbuild src\SC4RegionSync.sln /p:Configuration=Release /p:Platform=Win32 /p:SC4PluginsDir="C:\Path\To\SimCity 4 Deluxe Edition\Plugins"
 ```
+
+Pushing to GitHub also builds it: `.github/workflows/build.yml` runs MSVC on a Windows runner and uploads the DLL as an artifact.
 
 `SC4PluginsDir` is optional. When set, the DLL and `SC4RegionSync.ini` are copied into the game's Plugins folder after every build. You can also set the `SC4_PLUGINS_DIR` environment variable instead. Note that this is the Plugins folder inside the game install, not the one under Documents.
 
@@ -58,7 +69,7 @@ See `src\SC4RegionSync.ini`. Everything has a default; with no INI the plugin ru
 
 - `src/` the plugin. `RegionSyncDllDirector.cpp` is the entry point and the only file that knows about messages and cheats. `RegionalCityBridge` moves data between the game's regional records and `NeighborSnapshot`, which is the plain struct that crosses between instances and has no game dependency.
 - `vendor/` git submodules: `gzcom-dll` (the SC4 GZCOM SDK), `sc4-dll-utilities` (Null45's logging, INI and version-detection helpers), `wil`.
-- `docs/` design, phases, open questions.
+- `docs/` design, architecture, phases, open questions.
 - `scripts/` multi-instance setup.
 
 ## Credits

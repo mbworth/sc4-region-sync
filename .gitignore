@@ -5,3 +5,7 @@ src/*.user
 src/x64/
 *.log
 RegionSync/
+vendor/xwin/
+.xwin-cache/
+build/
+*.obj
