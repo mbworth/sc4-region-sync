@@ -843,11 +843,11 @@ private:
 		logger.WriteLineFormatted(LogLevel::Info, "Unlock (%s): closed %d handle(s) named 'SimCity 4 Mutex'.", reason, closed);
 	}
 
-	// SetterTest: every cISC4RegionalCity setter crashed the game when
-	// called on another tile's record during a pull (2026-10-17). Call
-	// each with its current value, first on our own loaded record, then on
-	// a neighbor's, one step per flushed log line, so the crash point says
-	// whether the setters need a loaded city or are simply wrong slots.
+	// SetterTest: cISC4RegionalCity setters crashed the game when called on
+	// another tile's record during a pull (2026-10-17). First run showed
+	// same-value writes on the own record pass; this version writes changed
+	// values (then restores) and takes the neighbor from the region slot,
+	// the same path Pull uses. One flushed log line per step.
 	void SetterTest()
 	{
 		Logger& logger = Logger::GetInstance();
@@ -855,17 +855,6 @@ private:
 		{
 			logger.WriteLine(LogLevel::Error, "SetterTest: no city.");
 			return;
-		}
-
-		cISC4RegionalCity* pOther = nullptr;
-		if (pNeighborsSim)
-		{
-			SC4List<cISC4RegionalCity*> adjacent;
-			pNeighborsSim->GetAdjacentCities(adjacent, false);
-			for (cISC4RegionalCity* p : adjacent)
-			{
-				if (p && p->GetEstablished()) { pOther = p; break; }
-			}
 		}
 
 		auto step = [&](const char* what, auto&& fn)
@@ -877,23 +866,46 @@ private:
 			logger.Flush();
 		};
 
-		cISC4RegionalCity* own = pOwnRegionalCity;
-		step("own GetProduced(2)", [&] { logger.WriteLineFormatted(LogLevel::Info, "  = %.2f", own->GetProduced(2)); });
-		step("own SetProduced(2, same)", [&] { own->SetProduced(2, own->GetProduced(2)); });
-		step("own SetBudget(same)", [&] { own->SetBudget(own->GetBudget()); });
-		step("own SetIncome(same)", [&] { own->SetIncome(own->GetIncome()); });
-		step("own SetEstablished(same)", [&] { own->SetEstablished(own->GetEstablished()); });
+		auto probe = [&](const char* who, cISC4RegionalCity* p)
+		{
+			float v = 0.0f;
+			step((std::string(who) + " GetProduced(2)").c_str(), [&] { v = p->GetProduced(2); logger.WriteLineFormatted(LogLevel::Info, "  = %.2f", v); });
+			step((std::string(who) + " SetProduced(2, same)").c_str(), [&] { p->SetProduced(2, v); });
+			step((std::string(who) + " SetProduced(2, +1)").c_str(), [&] { p->SetProduced(2, v + 1.0f); logger.WriteLineFormatted(LogLevel::Info, "  readback = %.2f", p->GetProduced(2)); });
+			step((std::string(who) + " SetProduced(2, restore)").c_str(), [&] { p->SetProduced(2, v); });
 
+			float b = 0.0f;
+			step((std::string(who) + " GetBudget").c_str(), [&] { b = p->GetBudget(); logger.WriteLineFormatted(LogLevel::Info, "  = %.0f", b); });
+			step((std::string(who) + " SetBudget(+1)").c_str(), [&] { p->SetBudget(b + 1.0f); logger.WriteLineFormatted(LogLevel::Info, "  readback = %.0f", p->GetBudget()); });
+			step((std::string(who) + " SetBudget(restore)").c_str(), [&] { p->SetBudget(b); });
+		};
+
+		probe("own", pOwnRegionalCity);
+
+		// Neighbor via the region slot, exactly as Pull does.
+		int32_t ox = 0, oz = 0;
+		pOwnRegionalCity->GetPosition(ox, oz);
+		cISC4RegionalCity* pOther = nullptr;
+		SC4Vector<cISC4Region::cLocation> locations;
+		pRegion->GetCityLocations(locations);
+		for (size_t i = 0; i < locations.size() && !pOther; i++)
+		{
+			const int32_t x = static_cast<int32_t>(locations[i].x);
+			const int32_t z = static_cast<int32_t>(locations[i].z);
+			if (x == ox && z == oz) continue;
+			cISC4RegionalCity* p = regionsync::FindRegionalCity(pRegion, x, z);
+			if (p && p->GetEstablished()) pOther = p;
+		}
 		if (!pOther)
 		{
-			logger.WriteLine(LogLevel::Info, "SetterTest: no established adjacent city, neighbor steps skipped.");
+			logger.WriteLine(LogLevel::Info, "SetterTest: no other established tile, neighbor steps skipped.");
 			return;
 		}
-		logger.WriteLineFormatted(LogLevel::Info, "SetterTest: neighbor '%s'", GetRegionalCityName(pOther).c_str());
-		step("neighbor GetProduced(2)", [&] { logger.WriteLineFormatted(LogLevel::Info, "  = %.2f", pOther->GetProduced(2)); });
-		step("neighbor SetEstablished(same)", [&] { pOther->SetEstablished(pOther->GetEstablished()); });
-		step("neighbor SetProduced(2, same)", [&] { pOther->SetProduced(2, pOther->GetProduced(2)); });
-		step("neighbor SetBudget(same)", [&] { pOther->SetBudget(pOther->GetBudget()); });
+
+		logger.WriteLineFormatted(LogLevel::Info, "SetterTest: neighbor %p own %p", static_cast<void*>(pOther), static_cast<void*>(pOwnRegionalCity));
+		logger.Flush();
+		step("neighbor GetCityName", [&] { logger.WriteLineFormatted(LogLevel::Info, "  = '%s'", GetRegionalCityName(pOther).c_str()); });
+		probe("neighbor", pOther);
 		logger.WriteLine(LogLevel::Info, "SetterTest: all steps survived.");
 		logger.Flush();
 	}
