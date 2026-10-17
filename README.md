@@ -45,7 +45,7 @@ powershell -ExecutionPolicy Bypass -File scripts\Setup-MultiInstance.ps1 -GameEx
 powershell -ExecutionPolicy Bypass -File scripts\Setup-MultiInstance.ps1 -GameExe "C:\...\Apps\SimCity 4.exe" -Launch -ExtraArgs "-w -CustomResolution:enabled -r1600x900x32"
 ```
 
-Setup makes a private user dir per instance under `Documents\SimCity 4 Instances\InstanceN` with its own Albums and preferences, and junctions back to your real `Regions` and `Plugins` folders. Launch starts each instance with `-UserDir` pointing at its own dir. Open a different tile in each instance.
+Setup makes a private user dir per instance under `Documents\SimCity 4 Instances\InstanceN` with its own Albums and preferences, and junctions back to your real `Regions` and `Plugins` folders. Launch starts each instance with `-UserDir` pointing at its own dir. Open a different tile in each instance. The game normally refuses a second copy: the plugin closes the game's single-instance mutex at startup (`ReleaseInstanceMutexOnStart=1`), and on Steam, Setup also drops a `steam_appid.txt` next to the exe so the launch does not go back through Steam.
 
 ## Cheat console commands
 

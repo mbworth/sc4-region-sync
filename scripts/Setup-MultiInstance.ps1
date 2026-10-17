@@ -106,6 +106,21 @@ if ($Setup) {
         }
     }
 
+    # Steam build: the exe relaunches itself through Steam, and Steam refuses
+    # a second copy of a running app. steam_appid.txt next to the exe stops
+    # the relaunch (Steam must still be running). 24780 = SimCity 4 Deluxe.
+    if ($GameExe -match 'steamapps') {
+        $appId = Join-Path (Split-Path $GameExe -Parent) 'steam_appid.txt'
+        if (-not (Test-Path $appId)) {
+            try {
+                Set-Content -Path $appId -Value '24780' -NoNewline
+                Write-Host "Wrote $appId"
+            } catch {
+                Write-Warning "Could not write $appId (run as admin once, or create it by hand with the content 24780)."
+            }
+        }
+    }
+
     Write-Host "Setup complete. Instance dirs under: $instanceRoot"
 }
 

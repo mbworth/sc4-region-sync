@@ -51,7 +51,12 @@ Needed before autosave can be turned on with two instances. Expected: deal recor
 
 **Experiment.** Run `scripts/Setup-MultiInstance.ps1 -Setup`, then `-Launch`. If the second instance refuses to start or immediately exits, look for a named mutex (Process Explorer, Handles view, search "SimCity") and patch it out in the plugin (`Patcher.h` in sc4-dll-utilities exists for exactly this kind of thing). Check that both instances see the same region and that each writes its log to its own place.
 
-**Observed (partial, 2026-10-17, Steam build).** A second launch never starts: it focuses the first window and exits before plugins load (no Instance2 log). Process Explorer shows the running game holding a Mutant named `SimCity 4 Mutex`. `RegionSyncUnlock` closes it (a second Unlock no longer lists it), but the second launch still only focuses instance 1. So the mutex is not the only guard, or the block is upstream in Steam: the running process's command line carries the Steam launch options appended, which means the exe re-launched itself through Steam, and Steam refuses a second copy of a running app. Next: `steam_appid.txt` next to the exe to stop the Steam relaunch, then retest with the mutex closed; if still blocked, the remaining check is a window lookup.
+**Observed (2026-10-17, Steam build): yes, with two fixes.** A second launch never started: it focused the first window and exited before plugins loaded (no Instance2 log). Two guards, both confirmed by removing them one at a time:
+
+1. The game holds a Mutant named `SimCity 4 Mutex`. `RegionSyncUnlock` closes it from inside the running instance (a second Unlock no longer lists it). Closing it alone was not enough.
+2. The Steam build hands itself to Steam at startup (the running process's command line has the Steam launch options appended), and Steam refuses a second copy of a running app. A `steam_appid.txt` containing `24780` next to the exe stops the relaunch. With both in place the second instance came up.
+
+`ReleaseInstanceMutexOnStart=1` is now the shipped INI default and `Setup-MultiInstance.ps1 -Setup` writes the appid file. No ill effect from closing the mutex seen so far; watch for it.
 
 ```
 Unlock (cheat): mutex handle 0x03BC '\Sessions\1\BaseNamedObjects\SimCity 4 Mutex'
