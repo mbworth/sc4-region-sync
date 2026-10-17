@@ -33,15 +33,21 @@ namespace
 		regionsync::rc641::Slot set;
 		float regionsync::CommodityStats::* field;
 		const char* name;
+		// Exported/imported are derived from deals, which each instance
+		// creates locally and the game writes into both parties' records.
+		// A pull from an instance that does not know the deal would zero
+		// them (seen 2026-10-17: SetImported(3, 0) was 23630). Captured,
+		// never applied, until deals are synced (Phase 2).
+		bool apply;
 	};
 
 	constexpr CommoditySlots kCommodityAccess[] =
 	{
-		{ regionsync::rc641::kGetExported, regionsync::rc641::kSetExported, &regionsync::CommodityStats::exported, "SetExported" },
-		{ regionsync::rc641::kGetImported, regionsync::rc641::kSetImported, &regionsync::CommodityStats::imported, "SetImported" },
-		{ regionsync::rc641::kGetProduced, regionsync::rc641::kSetProduced, &regionsync::CommodityStats::produced, "SetProduced" },
-		{ regionsync::rc641::kGetDemanded, regionsync::rc641::kSetDemanded, &regionsync::CommodityStats::demanded, "SetDemanded" },
-		{ regionsync::rc641::kGetCostPerUnit, regionsync::rc641::kSetCostPerUnit, &regionsync::CommodityStats::costPerUnit, "SetCostPerUnit" },
+		{ regionsync::rc641::kGetExported, regionsync::rc641::kSetExported, &regionsync::CommodityStats::exported, "SetExported", false },
+		{ regionsync::rc641::kGetImported, regionsync::rc641::kSetImported, &regionsync::CommodityStats::imported, "SetImported", false },
+		{ regionsync::rc641::kGetProduced, regionsync::rc641::kSetProduced, &regionsync::CommodityStats::produced, "SetProduced", true },
+		{ regionsync::rc641::kGetDemanded, regionsync::rc641::kSetDemanded, &regionsync::CommodityStats::demanded, "SetDemanded", true },
+		{ regionsync::rc641::kGetCostPerUnit, regionsync::rc641::kSetCostPerUnit, &regionsync::CommodityStats::costPerUnit, "SetCostPerUnit", true },
 	};
 }
 
@@ -197,6 +203,10 @@ namespace regionsync
 
 			for (const CommoditySlots& a : kCommodityAccess)
 			{
+				if (!a.apply)
+				{
+					continue;
+				}
 				const float current = Finite(rc641::GetCommodity(pRegionalCity, a.get, commodity));
 				const float target = c.*(a.field);
 				if (!Differs(current, target))

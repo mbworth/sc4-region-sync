@@ -5,7 +5,7 @@
 - [x] Build `SC4RegionSync.dll` (x86, C++20). Done 2026-10-17 on Linux via clang-cl 20 + xwin; see CLAUDE.md.
 - [x] Copy to Plugins with `SC4RegionSync.ini`. Load a city. Confirm `SC4RegionSync.log` appears next to the DLL and shows "City loaded". Done 2026-10-17 (`ingame_tests/`).
 - [x] `RegionSyncStatus` shows a dialog. `RegionSyncDump` writes the region table, connections and deals to the log. Done 2026-10-17.
-- [~] Answer Q6 (commodity indices) from the dump. Slots 1..3 are the live ones; which is which needs a deal (Q6).
+- [x] Answer Q6 (commodity indices). 1 = power, 2 = water, 3 = garbage (2026-10-17).
 
 Exit criterion: the plugin loads, the cheats work, and the log tells us what the game thinks the region looks like.
 
@@ -26,7 +26,7 @@ Exit criterion: growth in instance B visibly changes regional demand in instance
 
 ## Phase 2: hardening
 
-- [ ] Population and RCI-group setters on the regional record (Ghidra; see Q2).
+- [x] Population and RCI-group setters on the regional record. Direct field writes at +0x24/0x28/0x2c and the type map at +0x3c (Ghidra, 2026-10-17).
 - [ ] Save lock (Q4). Turn on autosave.
 - [ ] Deal propagation: when B proposes or cancels a deal, A should see it without a reload. Deals live on the regional record (`SetLocalDeals`) so this is the same mechanism, just a richer snapshot.
 - [ ] Replace the monthly file poll with a change notification (`ReadDirectoryChangesW` on the store) if the cadence feels laggy.

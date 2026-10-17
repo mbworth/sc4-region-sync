@@ -71,7 +71,15 @@ Unlock (cheat): closed 1 handle(s) named 'SimCity 4 Mutex'.
 
 **Experiment.** `RegionSyncDump` in a city with one active power deal and no other deals; whichever commodity slot has non-zero exported/imported is power. Repeat for water and garbage.
 
-**Observed (partial, 2026-10-17).** Only slots 1, 2 and 3 are populated; 0 and 4..7 are always zero. No deals existed, so the mapping is a hypothesis from magnitudes: 1 = power, 2 = water, 3 = garbage. Needs one deal of each type to confirm.
+**Observed (2026-10-17): 1 = power, 2 = water, 3 = garbage.** Two garbage deals from BumperVille (sell 23630 to TuggersVille, 15330 to DumpsVille) put `exported=38960` in BumperVille's slot 3 and the matching `imported` in each neighbor's slot 3. Slot 1 carries the power surplus (`balance=+2000` with a plant), so 2 is water by elimination. Slots 0 and 4..7 are never populated; the stats live in a per-id map, so any id reads as 0.
+
+```
+  tile (4,6) 'BumperVille' ... commodity[3] exp=38960.00 imp=0.00 prod=62107.50 dem=22912.00
+  tile (6,6) 'TuggersVille' ... commodity[3] exp=0.00 imp=23630.00 prod=2000.00 dem=10516.00
+  deal type=0x4773FFE5 amount=23630 used=16541 cost=197 flags=0x2 other=(6,6) 'TuggersVille'
+```
+
+Consequence: exported/imported are deal-derived. A minute later instance 1's pull of TuggersVille's snapshot (written by instance 2, which knows nothing about the deal) did `SetImported(3, 0.00) was 23630.00`. The bridge no longer applies exported/imported; they come back with deal sync in Phase 2.
 
 ```
   tile (4,6) size=1 'BumperVille' est=1 ... pop=11914 com=922 ind=3873

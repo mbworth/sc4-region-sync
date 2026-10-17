@@ -133,3 +133,398 @@ Pull: applied (6,6) changedFields=2
 Pull: calling MarkDealsDirty
 Pull: MarkDealsDirty returned
 Pull (month tick): files=2 applied=1 changedFields=2
+Publish (month tick): (4,6) 'BumperVille' pop=12503 com=916 ind=3877 simDate=2056-05-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=1284). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(986250)
+Apply: SetProduced(1, 7493.00) was 7495.00
+Apply: SetProduced(2, 3594.00) was 3596.00
+Apply: SetDemanded(3, 6060.00) was 6440.00
+Apply: done, changed=4
+Pull: applied (6,6) changedFields=4
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=4
+Publish (month tick): (4,6) 'BumperVille' pop=12558 com=916 ind=3877 simDate=2056-06-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=1285). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(991335)
+Apply: SetIncome(1229)
+Apply: SetProduced(2, 3593.00) was 3594.00
+Apply: SetDemanded(3, 6124.00) was 6060.00
+Apply: done, changed=4
+Pull: applied (6,6) changedFields=4
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=4
+Publish (month tick): (4,6) 'BumperVille' pop=12575 com=916 ind=3877 simDate=2056-07-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=1285). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: done, changed=0
+Pull: applied (6,6) changedFields=0
+Pull (month tick): files=2 applied=1 changedFields=0
+Publish (month tick): (4,6) 'BumperVille' pop=12578 com=915 ind=3877 simDate=2056-08-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=1286). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(968364)
+Apply: SetDemanded(3, 6120.00) was 6124.00
+Apply: done, changed=2
+Pull: applied (6,6) changedFields=2
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=2
+Publish (month tick): (4,6) 'BumperVille' pop=12581 com=916 ind=3877 simDate=2056-09-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=5264). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(986487)
+Apply: SetIncome(2545)
+Apply: SetProduced(1, 7492.00) was 7493.00
+Apply: SetDemanded(1, 914.00) was 528.00
+Apply: SetProduced(2, 3591.00) was 3593.00
+Apply: SetDemanded(2, 2888.00) was 2297.00
+Apply: SetDemanded(3, 10084.00) was 6120.00
+Apply: done, changed=7
+Pull: applied (6,6) changedFields=7
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=7
+Publish (month tick): (4,6) 'BumperVille' pop=12577 com=916 ind=3877 simDate=2056-10-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=5517). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(990296)
+Apply: SetIncome(2598)
+Apply: SetDemanded(2, 2979.00) was 2888.00
+Apply: SetDemanded(3, 10468.00) was 10084.00
+Apply: done, changed=4
+Pull: applied (6,6) changedFields=4
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=4
+Publish (month tick): (4,6) 'BumperVille' pop=12576 com=916 ind=3877 simDate=2056-11-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=5674). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(998453)
+Apply: SetIncome(2665)
+Apply: SetProduced(1, 7491.00) was 7492.00
+Apply: SetDemanded(2, 2995.00) was 2979.00
+Apply: SetDemanded(3, 9564.00) was 10468.00
+Apply: done, changed=5
+Pull: applied (6,6) changedFields=5
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=5
+Publish (month tick): (4,6) 'BumperVille' pop=12578 com=916 ind=3877 simDate=2056-12-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=7228). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(1027240)
+Apply: SetIncome(2990)
+Apply: SetProduced(1, 7490.00) was 7491.00
+Apply: SetDemanded(1, 906.00) was 914.00
+Apply: SetProduced(2, 3589.00) was 3591.00
+Apply: SetDemanded(2, 3223.00) was 2995.00
+Apply: SetDemanded(3, 10496.00) was 9564.00
+Apply: done, changed=7
+Pull: applied (6,6) changedFields=7
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=7
+Publish (month tick): (4,6) 'BumperVille' pop=12581 com=916 ind=3877 simDate=2057-01-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=7647). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(1034260)
+Apply: SetIncome(2999)
+Apply: SetDemanded(1, 898.00) was 906.00
+Apply: SetDemanded(2, 3248.00) was 3223.00
+Apply: SetDemanded(3, 10404.00) was 10496.00
+Apply: done, changed=5
+Pull: applied (6,6) changedFields=5
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=5
+Publish (month tick): (4,6) 'BumperVille' pop=12617 com=916 ind=3877 simDate=2057-02-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=7647). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: done, changed=0
+Pull: applied (6,6) changedFields=0
+Pull (month tick): files=2 applied=1 changedFields=0
+Publish (month tick): (4,6) 'BumperVille' pop=12663 com=916 ind=3877 simDate=2057-03-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=7699). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(1036660)
+Apply: SetIncome(3032)
+Apply: SetDemanded(2, 3257.00) was 3248.00
+Apply: SetDemanded(3, 10800.00) was 10404.00
+Apply: done, changed=4
+Pull: applied (6,6) changedFields=4
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=4
+Publish (month tick): (4,6) 'BumperVille' pop=12605 com=916 ind=3878 simDate=2057-04-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=7770). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetIncome(3033)
+Apply: SetProduced(2, 3588.00) was 3589.00
+Apply: SetDemanded(2, 3263.00) was 3257.00
+Apply: done, changed=3
+Pull: applied (6,6) changedFields=3
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=3
+Publish (month tick): (4,6) 'BumperVille' pop=12567 com=916 ind=3878 simDate=2057-05-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=7825). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(1041470)
+Apply: SetIncome(3036)
+Apply: SetDemanded(1, 896.00) was 898.00
+Apply: SetDemanded(2, 3264.00) was 3263.00
+Apply: SetDemanded(3, 10252.00) was 10800.00
+Apply: done, changed=5
+Pull: applied (6,6) changedFields=5
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=5
+Publish (month tick): (4,6) 'BumperVille' pop=12608 com=916 ind=3877 simDate=2057-06-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance1\Plugins\RegionSync\New York\4_6.snapshot
+Pull: record for (6,6) 'TuggersVille' found (record pop=1285, snapshot pop=8099). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 markDealsDirty=1
+Apply: SetBudget(1046290)
+Apply: SetIncome(3052)
+Apply: SetDemanded(1, 892.00) was 896.00
+Apply: SetDemanded(2, 3270.00) was 3264.00
+Apply: SetImported(3, 0.00) was 23630.00
+Apply: SetDemanded(3, 10516.00) was 10252.00
+Apply: done, changed=6
+Pull: applied (6,6) changedFields=6
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=6
+==== RegionSyncDump begin ====
+Region 'New York': 49 tiles
+  tile (0,0) size=1 'New City' est=0 serial=1375409369 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (2,0) size=1 'New City' est=0 serial=1375409585 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (4,0) size=1 'New City' est=0 serial=1375409875 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (6,0) size=1 'New City' est=0 serial=1375410291 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (8,0) size=1 'New City' est=0 serial=1375410807 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (10,0) size=1 'New City' est=0 serial=1375411394 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (12,0) size=1 'New City' est=0 serial=1375412092 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (14,0) size=1 'New City' est=0 serial=1375412683 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (0,2) size=1 'New City' est=0 serial=1375409484 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (2,2) size=1 'New City' est=0 serial=1375409783 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (4,2) size=1 'New City' est=0 serial=1375410196 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (6,2) size=1 'New City' est=0 serial=1375410705 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (8,2) size=1 'New City' est=0 serial=1375411286 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (10,2) size=1 'New City' est=0 serial=1375411980 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (12,2) size=1 'New City' est=0 serial=1375412575 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (14,2) size=1 'New City' est=0 serial=1375413260 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (0,4) size=1 'New City' est=0 serial=1375409690 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (2,4) size=1 'New City' est=0 serial=1375410075 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (4,4) size=1 'DumpsVille' est=1 serial=1375410609 pop=1025 com=1535 ind=735 wf=0.505 rating=32 budget=987432 income=1130
+    commodity[1] exp=0.00 imp=0.00 prod=7485.00 dem=691.00 cost=0.0423
+    commodity[2] exp=0.00 imp=0.00 prod=3589.00 dem=2782.00 cost=0.0318
+    commodity[3] exp=0.00 imp=15330.00 prod=2000.00 dem=6932.00 cost=0.0000
+    rci 0x1010 pop=1215
+    rci 0x3110 pop=688
+    rci 0x3120 pop=54
+    rci 0x3130 pop=140
+    rci 0x3320 pop=710
+    rci 0x4200 pop=576
+    rci 0x4300 pop=173
+  tile (6,4) size=1 'New City' est=0 serial=1375411202 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (8,4) size=1 'New City' est=0 serial=1375411887 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (10,4) size=1 'New City' est=0 serial=1375412479 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (12,4) size=2 'New City' est=0 serial=602459244 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=500000 income=0
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (0,6) size=1 'New City' est=0 serial=1375409977 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (2,6) size=1 'New City' est=0 serial=1375410513 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (4,6) size=1 'BumperVille' est=1 serial=1375411099 pop=12608 com=916 ind=3877 wf=0.635 rating=52 budget=1112367 income=7630
+    commodity[1] exp=0.00 imp=0.00 prod=7430.00 dem=5493.00 cost=0.0419
+    commodity[2] exp=0.00 imp=0.00 prod=3552.00 dem=13430.00 cost=0.0512
+    commodity[3] exp=38960.00 imp=0.00 prod=62107.50 dem=22912.00 cost=0.0080
+    rci 0x1010 pop=9566
+    rci 0x1020 pop=3040
+    rci 0x1030 pop=406
+    rci 0x3110 pop=627
+    rci 0x3120 pop=274
+    rci 0x3330 pop=15
+    rci 0x4200 pop=3799
+    rci 0x4300 pop=92
+  tile (6,6) size=1 'TuggersVille' est=1 serial=1375411776 pop=1285 com=948 ind=811 wf=0.505 rating=31 budget=1046290 income=3052
+    commodity[1] exp=0.00 imp=0.00 prod=7490.00 dem=892.00 cost=0.0415
+    commodity[2] exp=0.00 imp=0.00 prod=3588.00 dem=3270.00 cost=0.0381
+    commodity[3] exp=0.00 imp=23630.00 prod=2000.00 dem=10516.00 cost=0.0000
+    rci 0x1010 pop=1348
+    rci 0x1020 pop=11
+    rci 0x3110 pop=517
+    rci 0x3120 pop=310
+    rci 0x3320 pop=124
+    rci 0x4300 pop=813
+  tile (8,6) size=2 'New City' est=0 serial=1375413079 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (0,8) size=1 'New City' est=0 serial=1375410407 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (2,8) size=1 'New City' est=0 serial=1375411005 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (4,8) size=1 'New City' est=0 serial=1375411681 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (6,8) size=1 'New City' est=0 serial=1375412382 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (12,8) size=2 'New City' est=0 serial=1375414217 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (0,10) size=1 'New City' est=0 serial=1375410898 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (2,10) size=1 'New City' est=0 serial=1375411589 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (4,10) size=1 'New City' est=0 serial=1375412283 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (6,10) size=1 'New City' est=0 serial=1375412986 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (8,10) size=1 'New City' est=0 serial=1375413441 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (10,10) size=1 'New City' est=0 serial=1375413928 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (0,12) size=1 'New City' est=0 serial=1375411496 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (2,12) size=2 'New City' est=0 serial=1375412771 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (6,12) size=1 'New City' est=0 serial=1375413350 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (8,12) size=1 'New City' est=0 serial=1375413827 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (10,12) size=1 'New City' est=0 serial=1375414125 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (12,12) size=2 'New City' est=0 serial=1375414481 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (0,14) size=1 'New City' est=0 serial=1375412188 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (6,14) size=1 'New City' est=0 serial=1375413727 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (8,14) size=1 'New City' est=0 serial=1375414023 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+  tile (10,14) size=1 'New City' est=0 serial=1375414391 pop=0 com=0 ind=0 wf=0.500 rating=0 budget=100000 income=0
+    commodity[1] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[2] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+    commodity[3] exp=0.00 imp=0.00 prod=0.00 dem=0.00 cost=0.0000
+Connections from this tile: 8
+  Ferry at cell (85,-1) -> region cell (5,5) 'DumpsVille' active=1
+  Ferry at cell (95,128) -> region cell (5,8) 'New City' active=1
+  Road at cell (128,30) -> region cell (6,6) 'TuggersVille' active=1
+  Road at cell (128,38) -> region cell (6,6) 'TuggersVille' active=1
+  Road at cell (112,-1) -> region cell (5,5) 'DumpsVille' active=1
+  Road at cell (119,-1) -> region cell (5,5) 'DumpsVille' active=1
+  Road at cell (-1,30) -> region cell (3,6) 'New City' active=1
+  Road at cell (-1,37) -> region cell (3,6) 'New City' active=1
+Deal income/month=324 expense/month=0
+Local deals: 2
+  deal type=1198784485 amount=23630 used=16541 cost=197 flags=0x2 other=(6,6) 'TuggersVille'
+  deal type=1198784485 amount=15330 used=10731 cost=127 flags=0x2 other=(5,5) 'DumpsVille'
+==== RegionSyncDump end ====
