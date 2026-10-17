@@ -50,6 +50,8 @@ In game: the first press produced a burst of popup events and reward offers and 
 
 Bug found and fixed: the release half of `RegionSyncFakeNeighbor` relied on the next pull to restore the record, but there is no snapshot for DumpsVille, so the +500,000 stayed and the second press stacked on top. The release now restores the saved values and feeds the negative delta.
 
+**Two-instance run (2026-10-17): feedback loop.** With both instances pulling each month, TuggersVille's R$ value in BumperVille's record went 18,476 -> 25,672 -> 34,068 -> 42,002 -> 58,692 -> 75,349 -> 91,501 while its population sat at 17k; BumperVille's value in instance 2 did the same (8,739 -> 81,594). Cause: the game writes each group's record value from the demand object's supply, and that supply includes the regional population the simulator folded in at load plus every delta we add. Each instance was publishing its neighbor's population back to it. Confirmed by the numbers: BumperVille's `0x1010` supply read 25,733 in instance 1 and instance 2's record of BumperVille showed R$ 25,733. Fix: `SubtractRegionalShare` removes the regional sum the simulator currently holds (`lastSum` per group) before publishing, so the snapshot carries the local share only. Vanilla has the same contamination once per city load, which is why a played tile's record can exceed its population; with live sync it compounds.
+
 Still open: the extrapolated map at `+0x48` is what the simulator reads at load; the pull writes both nodes, but we have not checked what the game's own extrapolation does to our value on the following month tick (the `Apply: rci ... (extrapolated N)` lines show it drifting on its own).
 
 ## Q3. Does `cISC4Region::ReloadCity` work mid-game, and what does it do to pointers?

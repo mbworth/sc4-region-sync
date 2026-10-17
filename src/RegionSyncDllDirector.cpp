@@ -583,6 +583,35 @@ private:
 
 	// Publish: refresh this tile's regional record from the live city, then
 	// write it to the shared store so other instances can pull it.
+	// The game writes each RCI group's regional record value from the demand
+	// object's supply, which already contains the regional population the
+	// simulator folded in (region use 1). Publishing that raw value and
+	// feeding it back into the other instance's simulator compounds every
+	// month (observed 2026-10-17: R$ 18k -> 91k on a 17k city). Publish the
+	// local share only.
+	void SubtractRegionalShare(regionsync::NeighborSnapshot& snapshot)
+	{
+		std::string note;
+		for (size_t i = 0; i < snapshot.rciGroupCount; i++)
+		{
+			regionsync::RCIGroupPopulation& g = snapshot.rciGroups[i];
+			for (const RegionalDemandEntry& e : regionalDemand)
+			{
+				if (e.groupId != g.groupId || e.regionUse != 1 || e.lastSum == 0.0f) continue;
+				const int32_t local = g.population - static_cast<int32_t>(e.lastSum);
+				char buf[64];
+				snprintf(buf, sizeof(buf), " 0x%04X %d-%.0f=%d", g.groupId, g.population, e.lastSum, local);
+				note += buf;
+				g.population = local;
+				break;
+			}
+		}
+		if (!note.empty())
+		{
+			Logger::GetInstance().WriteLineFormatted(LogLevel::Debug, "Publish: local share%s", note.c_str());
+		}
+	}
+
 	void Publish(const char* reason)
 	{
 		Logger& logger = Logger::GetInstance();
@@ -604,6 +633,7 @@ private:
 
 		regionsync::NeighborSnapshot snapshot;
 		regionsync::CaptureRegionalCity(pOwnRegionalCity, pSimulator, snapshot);
+		SubtractRegionalShare(snapshot);
 
 		const std::filesystem::path path =
 			storeDirectory / regionsync::SnapshotFileName(snapshot.regionX, snapshot.regionZ);
