@@ -80,7 +80,14 @@ Unlock (cheat): closed 1 handle(s) named 'SimCity 4 Mutex'.
     commodity[3] exp=0.00 imp=0.00 prod=7368.67 dem=22984.00 cost=0.0121
 ```
 
-**Crash (2026-10-17).** Writing commodity slots 4..7 back into another tile's record crashed the game during the city-load pull (log ended at "Apply: commodity setters", after `SetBudget` succeeded). The bridge now writes slots 0..3 only and logs every setter call. Whether the setters' vtable slots are right is still unproven until a pull with real changes survives.
+**Crash (2026-10-17).** Every `cISC4RegionalCity` setter we tried crashes the game sooner or later, on another tile's record (`SetBudget`, `SetProduced(2, ...)` during the city-load pull) and on the own record too. `RegionSyncSetterTest` on BumperVille's own record: `SetProduced(2, 3559)` returns but `GetProduced(2)` then reads `0.00`; `SetBudget(1015857)` returns but `GetBudget` reads `0`; the game crashed a few calls later. The getters at every slot return correct values, so the vtable order is right. Working hypothesis: the setters' real signatures differ from the header (argument size or convention), so each call misaligns the stack and stores garbage. Being checked in Ghidra on the 641 exe. Until resolved, `ApplyPulledSnapshots=0`.
+
+```
+SetterTest: own SetProduced(2, +1) ...
+  readback = 0.00
+SetterTest: own SetBudget(+1) ...
+  readback = 0
+```
 
 Also seen: `GetWorkforcePercentage` returns NaN for every tile, established or not. The bridge now stores 0 for non-finite floats. `GetCityLocations` returned 49 tiles for a 16x16 region with mixed tile sizes; large tiles appear once at their origin.
 

@@ -12,3 +12,4 @@ build/
 *.obj
 ingame_tests/*.exe
 ingame_tests/*.dll
+ingame_tests/ghidra/
