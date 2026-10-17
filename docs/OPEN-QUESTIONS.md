@@ -51,7 +51,14 @@ Needed before autosave can be turned on with two instances. Expected: deal recor
 
 **Experiment.** Run `scripts/Setup-MultiInstance.ps1 -Setup`, then `-Launch`. If the second instance refuses to start or immediately exits, look for a named mutex (Process Explorer, Handles view, search "SimCity") and patch it out in the plugin (`Patcher.h` in sc4-dll-utilities exists for exactly this kind of thing). Check that both instances see the same region and that each writes its log to its own place.
 
-**Observed.** (unknown)
+**Observed (partial, 2026-10-17, Steam build).** A second launch never starts: it focuses the first window and exits before plugins load (no Instance2 log). Process Explorer shows the running game holding a Mutant named `SimCity 4 Mutex`. `RegionSyncUnlock` closes it (a second Unlock no longer lists it), but the second launch still only focuses instance 1. So the mutex is not the only guard, or the block is upstream in Steam: the running process's command line carries the Steam launch options appended, which means the exe re-launched itself through Steam, and Steam refuses a second copy of a running app. Next: `steam_appid.txt` next to the exe to stop the Steam relaunch, then retest with the mutex closed; if still blocked, the remaining check is a window lookup.
+
+```
+Unlock (cheat): mutex handle 0x03BC '\Sessions\1\BaseNamedObjects\SimCity 4 Mutex'
+Unlock (cheat): closed 1 handle(s) named 'SimCity 4 Mutex'.
+```
+
+`-UserDir` works: the log and the store path resolve under `SimCity 4 Instances\Instance1\` (store through the Plugins junction, so still shared).
 
 ## Q6. Which commodity index means what?
 
