@@ -30,6 +30,12 @@ namespace regionsync
 		0x4100, 0x4200, 0x4300, 0x4400   // I-R, I-D, I-M, I-HT
 	};
 
+	// Commodity slots that are written back into a record. The dump only
+	// ever shows data in slots 1..3; writing slots 4..7 crashed the game on
+	// city load (2026-10-17), consistent with a fixed array of 4 in the
+	// record. Reads of the higher slots return 0 and are harmless.
+	constexpr size_t kApplyCommoditySlots = 4;
+
 	// Read the regional record for a tile into a snapshot.
 	// pSimulator may be null; it is only used to stamp the sim date.
 	void CaptureRegionalCity(cISC4RegionalCity* pRegionalCity, cISC4Simulator* pSimulator, NeighborSnapshot& out);

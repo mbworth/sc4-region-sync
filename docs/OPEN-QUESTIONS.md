@@ -80,6 +80,8 @@ Unlock (cheat): closed 1 handle(s) named 'SimCity 4 Mutex'.
     commodity[3] exp=0.00 imp=0.00 prod=7368.67 dem=22984.00 cost=0.0121
 ```
 
+**Crash (2026-10-17).** Writing commodity slots 4..7 back into another tile's record crashed the game during the city-load pull (log ended at "Apply: commodity setters", after `SetBudget` succeeded). The bridge now writes slots 0..3 only and logs every setter call. Whether the setters' vtable slots are right is still unproven until a pull with real changes survives.
+
 Also seen: `GetWorkforcePercentage` returns NaN for every tile, established or not. The bridge now stores 0 for non-finite floats. `GetCityLocations` returned 49 tiles for a 16x16 region with mixed tile sizes; large tiles appear once at their origin.
 
 ## Q7. Does the month message fire while paused, and does the game's own save trigger `PostCityShutdown`?

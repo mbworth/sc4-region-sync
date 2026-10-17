@@ -136,39 +136,30 @@ namespace regionsync
 			changed++;
 		}
 
-		logger.WriteLine(LogLevel::Info, "Apply: commodity setters");
-		logger.Flush();
-
-		for (size_t i = 0; i < kCommoditySlots; i++)
+		for (size_t i = 0; i < kApplyCommoditySlots; i++)
 		{
 			const int32_t commodity = static_cast<int32_t>(i);
 			const CommodityStats& c = s.commodities[i];
 
-			if (Differs(pRegionalCity->GetExported(commodity), c.exported))
+			// Each setter logged and flushed before the call: these had
+			// never been exercised before 2026-10-17.
+			auto set = [&](const char* name, float current, float target, void (cISC4RegionalCity::*setter)(int32_t, float))
 			{
-				pRegionalCity->SetExported(commodity, c.exported);
+				if (!Differs(current, target))
+				{
+					return;
+				}
+				logger.WriteLineFormatted(LogLevel::Info, "Apply: %s(%d, %.2f) was %.2f", name, commodity, target, current);
+				logger.Flush();
+				(pRegionalCity->*setter)(commodity, target);
 				changed++;
-			}
-			if (Differs(pRegionalCity->GetImported(commodity), c.imported))
-			{
-				pRegionalCity->SetImported(commodity, c.imported);
-				changed++;
-			}
-			if (Differs(pRegionalCity->GetProduced(commodity), c.produced))
-			{
-				pRegionalCity->SetProduced(commodity, c.produced);
-				changed++;
-			}
-			if (Differs(pRegionalCity->GetDemanded(commodity), c.demanded))
-			{
-				pRegionalCity->SetDemanded(commodity, c.demanded);
-				changed++;
-			}
-			if (Differs(pRegionalCity->GetCostPerUnit(commodity), c.costPerUnit))
-			{
-				pRegionalCity->SetCostPerUnit(commodity, c.costPerUnit);
-				changed++;
-			}
+			};
+
+			set("SetExported", pRegionalCity->GetExported(commodity), c.exported, &cISC4RegionalCity::SetExported);
+			set("SetImported", pRegionalCity->GetImported(commodity), c.imported, &cISC4RegionalCity::SetImported);
+			set("SetProduced", pRegionalCity->GetProduced(commodity), c.produced, &cISC4RegionalCity::SetProduced);
+			set("SetDemanded", pRegionalCity->GetDemanded(commodity), c.demanded, &cISC4RegionalCity::SetDemanded);
+			set("SetCostPerUnit", pRegionalCity->GetCostPerUnit(commodity), c.costPerUnit, &cISC4RegionalCity::SetCostPerUnit);
 		}
 
 		logger.WriteLineFormatted(LogLevel::Info, "Apply: done, changed=%d", changed);
