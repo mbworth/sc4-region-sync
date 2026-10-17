@@ -138,7 +138,6 @@ docs/
   OPEN-QUESTIONS.md           Experiments with an "Observed" slot each. The project's truth table.
 
 Makefile                      Linux cross-compile (clang-cl + lld-link + llvm-rc against xwin).
-.github/workflows/build.yml   Windows-runner MSVC build, uploads the DLL as an artifact.
 CLAUDE.md                     Agent onboarding and rules.
 ```
 
@@ -148,8 +147,7 @@ Three ways to get `SC4RegionSync.dll`; they should produce functionally identica
 
 | Pipeline | Where | Toolchain | When to use |
 |---|---|---|---|
-| `make` | Linux | clang-cl 18 + lld-link + llvm-rc against xwin splat | Day-to-day on the Linux dev box. This is how the NAM team ships NAM.dll. |
-| GitHub Actions | push to GitHub | real MSVC v143 on `windows-latest` | Release builds and tie-breaking if a clang-cl build misbehaves. |
+| `make` | Linux | clang-cl 20 + lld-link + llvm-rc against xwin splat | Day-to-day on the Linux dev box. This is how the NAM team ships NAM.dll. |
 | Visual Studio 2022 | Windows | MSVC v143 | Debugging with breakpoints attached to the game. |
 
 Non-negotiables for all three: target is i386 (Win32), C++20, `/EHsc`, dynamic CRT (`/MD`), and the exported symbol is `RZGetCOMDllDirector`. The game is 32-bit; a 64-bit DLL will simply not load, with no error message.

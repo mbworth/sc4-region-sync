@@ -29,7 +29,6 @@ On Windows with Visual Studio 2022:
 msbuild src\SC4RegionSync.sln /p:Configuration=Release /p:Platform=x86 /p:SC4PluginsDir="C:\Path\To\SimCity 4 Deluxe Edition\Plugins"
 ```
 
-Pushing to GitHub also builds it: `.github/workflows/build.yml` runs MSVC on a Windows runner and uploads the DLL as an artifact.
 
 `SC4PluginsDir` is optional. When set, the DLL and `SC4RegionSync.ini` are copied into the game's Plugins folder after every build. You can also set the `SC4_PLUGINS_DIR` environment variable instead. Note that this is the Plugins folder inside the game install, not the one under Documents.
 
