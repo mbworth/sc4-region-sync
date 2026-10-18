@@ -33,6 +33,7 @@ Exit criterion: growth in instance B visibly changes regional demand in instance
 - [ ] Connections and deals between running instances: see `docs/PLAN-PHASE2.md`. Slice 1 (mirror single-cell connections and deals, create only) done 2026-10-18: Q9 steps 1 to 4 observed, on by default, save and reload produce no duplicates.
 - [x] Amount follow (slice 2a): done 2026-10-18, observed both ways.
 - [x] Removal of connections and deals (slice 2c) and edge network stubs (slice 2b): observed with the cheat 2026-10-18 (Q10, Q11), on by default, no-cheat run observed the same day.
+- [x] Three instances at once: Q13 observed 2026-10-18 (pulls, mirror, save lock queueing, dead writer, restart). Ferry log line observed (Q12 step 6).
 - [x] Dual-lane networks (avenue, highway, ground highway) mirrored as pairs with a 2 by 3 stub: observed 2026-10-18 for all three types (`docs/PLAN-DUAL-FERRY.md`, Q12).
 - [x] Ferry: not mirrored by design (each city's terrain scan makes its own; deals never use it); logged from the cheat.
 - [ ] Replace the monthly file poll with a change notification (`ReadDirectoryChangesW` on the store) if the cadence feels laggy.
