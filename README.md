@@ -59,12 +59,16 @@ Open the cheat box with Ctrl+X.
 | `RegionSyncPull` | Read every other tile's snapshot and apply it. |
 | `RegionSyncReload` | Experimental: ask the region to reload adjacent tiles' records from their save files. |
 | `RegionSyncSave` | Fast-save the current city. |
-| `RegionSyncMirror` | Create other instances' published connections and deals in this city now, ignoring `SyncConnections`/`SyncDeals` (otherwise this happens on the sim day after each pull), and lay the 3-cell edge network piece under each mirrored single-network connection (demolishing what is on those cells, as the game does at load), ignoring `LayEdgeNetwork`. Also removes connections and deals a live neighbor no longer lists (no demolition), ignoring `SyncRemovals`. |
+| `RegionSyncMirror` | Create other instances' published connections and deals in this city now, ignoring `SyncConnections`/`SyncDeals` (otherwise this happens on the sim day after each pull), and lay the 3-cell edge network piece under each mirrored connection (a 2 by 3 block for avenue and highway lane pairs; demolishing what is on those cells, as the game does at load), ignoring `LayEdgeNetwork`. Ferry connections are logged, not mirrored. Also removes connections and deals a live neighbor no longer lists (no demolition), ignoring `SyncRemovals`. |
 | `RegionSyncOffer` | Diagnostic: logs each neighbor/deal-type check behind a deal offer, then what `ProposeDeals` (not added to the sim) returns. |
+| `RegionSyncHoldLock` | Diagnostic toggle: take the region save lock, release it on the next use or at city shutdown. The other instance's saves wait (up to `SaveLockTimeoutMs`) meanwhile; after one times out, the next save tries once without waiting. |
 
 ## Settings
 
 See `src\SC4RegionSync.ini`. Everything has a default; with no INI the plugin runs with monthly publish and pull, autosave off, and Info logging.
+
+- `SaveLock` (default 1): every save holds a region-wide named mutex, so two instances never write each other's `.sc4` files at the same time. Both instances need it on; the log shows `saveLock=`, `hook=` and `peer=`.
+- `SaveLockTimeoutMs` (default 5000): longest a save waits for the other instance before it saves unlocked (logged). 0 = never wait.
 
 ## Layout
 

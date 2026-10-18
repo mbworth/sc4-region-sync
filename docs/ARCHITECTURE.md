@@ -83,9 +83,9 @@ Nothing the plugin controls. The demand simulator consults regional totals when 
 game start
   RZGetCOMDllDirector()      static RegionSyncDllDirector constructed; Logger initialized
   OnStart(cIGZCOM*)          version check (641 or disable); load INI; AddHook(this)
-  PostAppInit()              grab cheat manager; subscribe to 6 message IDs
+  PostAppInit()              grab cheat manager; subscribe to 6 message IDs; SaveLock=1: patch App vtable slot 15 (SaveCity) with the lock wrapper
 region opened
-  PostRegionInit             cache cISC4Region*, region dir name, resolve store path
+  PostRegionInit             cache cISC4Region*, region dir name, resolve store path; open the save mutex
 city opened
   PostCityInit               cache cISC4City*; register 6 cheat codes; subscribe to cheat messages
   PostCityInitComplete       cache regional city, neighbors sim, simulator; publish + pull on load
@@ -93,9 +93,11 @@ playing
   SimNewMonth (0x66956816)   increment counters; publish / pull / autosave on cadence
   CheatIssued (0x230E27AC)   dispatch RegionSync* commands
 city closed
-  PostCityShutdown           publish once more; clear city pointers; unregister cheats
+  PostCityShutdown           publish once more; release a RegionSyncHoldLock hold; clear city pointers; unregister cheats
 region closed
-  PreRegionShutdown          clear region pointer
+  PreRegionShutdown          clear region pointer; close the save mutex
+game exit
+  PreAppShutdown             restore the SaveCity slot; clear the hold, close the save mutex (Exit sends no PostCityShutdown)
 ```
 
 Pointers cached at `PostCityInitComplete` are only valid until `PostCityShutdown`. Every operation null-checks them because cheats and month messages can arrive in odd orders during transitions.
@@ -111,17 +113,26 @@ src/
                               NeighborSnapshot to a cISC4RegionalCity; resolve a tile slot.
                               Knows the RCI group IDs. No messages, no cheats, no I/O.
                               Also captures the own simulator's connections and deals.
-  NeighborMirror.{h,cpp}      Creates other instances' connections and deals here (Phase 2
-                              slice 1), injects the connection into the publisher's record
-                              copy, with per-session identity sets. No messages.
+  NeighborMirror.{h,cpp}      Creates other instances' connections and deals here, injects the
+                              connection into the publisher's record copy, pairs dual lanes, lays
+                              stubs (EdgeNetwork) and removes what a live publisher unlisted, with
+                              per-session identity sets. No messages.
+  EdgeNetwork.{h,cpp}         Lays or clears the edge stub under a mirrored connection, single or
+                              lane pair, through the network tool (the game's load sequence).
+  Game641.h                   Static exe reads (Drive on Right byte), 1.1.641 only.
   NeighborsSim641.h           FindDeals/FindDealsAll with the deal element type the binary uses.
   RegionalCity641.h           Raw vtable access where cISC4RegionalCity.h is wrong; the
                               record's +0x90 connection list and connection raw fields.
   NeighborSnapshot.{h,cpp}    The plain struct that crosses between instances, and its
-                              key=value reader/writer with atomic rename. No game headers,
+                              key=value reader/writer with atomic rename, the connection type
+                              maps, stub geometry and dual-lane pairing. No game headers,
                               no Windows headers. Compiles and tests anywhere.
   WriterIdentity.{h,cpp}      This process's host/pid/start, and whether a snapshot's writer still
                               runs (OpenProcess, creation time, exit code). Windows only, no game headers.
+  SaveLock.{h,cpp}            Region-wide named save mutex with depth counter and timeout. Windows only,
+                              no game headers.
+  SaveHook641.{h,cpp}         Patches App vtable slot 15 (SaveCity(path, fast), 1.1.641 only) with a
+                              wrapper that holds the save lock across the game's save routine.
   SyncSettings.{h,cpp}        INI parsing with safe defaults; resolves the store directory.
   SC4RegionSync.ini           Shipped defaults; lives next to the DLL in Plugins.
   version.h / version.rc      Plugin version and the Win32 VERSIONINFO resource (rc is UTF-16 LE).
@@ -166,6 +177,7 @@ Non-negotiables for all three: target is i386 (Win32), C++20, `/EHsc`, dynamic C
 ## 8. Constraints that shape every decision
 
 - **One thread.** All game callbacks arrive on the main thread. The plugin does no threading. File I/O in the message handlers is cheap enough at monthly cadence; if it ever is not, move the store scan to a worker and hand results back through a queue drained on the next month message.
+- **Save waits block the main thread.** A save can stall the game for up to `SaveLockTimeoutMs` while the other instance holds the save lock.
 - **No exceptions across the boundary.** GZCOM is C++ but the game was built with a different compiler era. Catch everything inside `DoMessage`; never let an exception propagate into game code.
 - **Memory layout is law.** `SC4List`, `SC4Vector`, `SC4String` exist because the game passes STLport-4.6-era containers by reference. Use them, not `std::` equivalents, wherever a game method signature names them.
 - **Ref counting is the game's.** `cISC4Region::GetCity` hands back the region's own slot; do not `AddRef`/`Release`. Objects we create ourselves (none so far) would follow normal `cRZAutoRefCount` rules.

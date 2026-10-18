@@ -86,6 +86,12 @@ Needed before autosave can be turned on with two instances. Expected: deal recor
 **Observed (partial, 2026-10-18).** Two instances, saves done one after the other, no collision and no corruption. Both reloaded cities carried the neighbor's saved copy of the shared deal (amounts swapped, see Q9 step 4), which confirms the write into the neighbor's `.sc4` and the load-time clone. Timestamps and DBPF diff not checked. Concurrent saves still untested; sequential saving is the rule until the save lock exists.
 **Timestamps (2026-10-18):** saving TuggersVille then BumperVille before a relaunch wrote `City - TuggersVille.sc4` plus its neighbors at 11:44:15 and then `City - BumperVille.sc4`, `City - TuggersVille.sc4`, `City - DumpsVille.sc4`, `City - New City (12).sc4`, `City - New City (24).sc4` all at 11:44:29, then `region.ini` at 11:44:32: one save rewrites every adjacent neighbor's file, as the disassembly said.
 
+**Full answer from Ghidra (2026-10-18, `docs/research/save-641.md`).** Every save goes through App vtable byte offset 0x3c (`0x455e20`): temp file, close the own read handle, rename `own.sc4 -> own.sc4_`, rename temp into place, reopen read-only, then write each adjacent neighbor's record into its `.sc4` (`OPEN_ALWAYS`, no `FILE_SHARE_DELETE`). While the neighbor has its city open that write fails silently on a sharing violation; it lands only when the neighbor is in the region view or closed. The data-loss race is a neighbor write landing between the two renames (`OPEN_ALWAYS` creates an empty own file); the other collisions fail a save cleanly. Suppression is not wanted: reloaded cities rely on the neighbor's saved deal copy (Q9 step 4). Fix: `docs/PLAN-SAVE-LOCK.md`, a kernel mutex over the whole routine through a wrapper on that slot, plus `RegionSyncReload`. Not covered by the lock: a stale copy written while the neighbor is in the region view (not a race; step 8 measures it), city and region-view loads colliding with a peer's renames (the peer's save fails cleanly), region-view MoveCity writes, other hosts or logon sessions.
+
+**Experiment (lock, 2026-10-18).** Steps 0 to 9 in `docs/PLAN-SAVE-LOCK.md`. Observed slot below.
+
+**Observed (save lock):** not yet run.
+
 ## Q5. Does version 641 allow two instances at once, and does `-UserDir` work as documented?
 
 **Experiment.** Run `scripts/Setup-MultiInstance.ps1 -Setup`, then `-Launch`. If the second instance refuses to start or immediately exits, look for a named mutex (Process Explorer, Handles view, search "SimCity") and patch it out in the plugin (`Patcher.h` in sc4-dll-utilities exists for exactly this kind of thing). Check that both instances see the same region and that each writes its log to its own place.
@@ -238,3 +244,13 @@ Step 2: BumperVille cancelled the water deal (`0xEA418D8F data1=2`, dirty), its 
 Step 5 and re-creation: BumperVille re-made the water deal; `RegionSyncMirror` in TuggersVille created it again (keys had been dropped with the cancel). BumperVille changed it to 2,000: TuggersVille followed live (`SetAmount returned, amount=2000 cost=67`). TuggersVille exited to the region without saving and reloaded (its save held 3,000): `publisher session changed, history dropped (none stored)`, then `MirrorDeals: existing deal, publisher loaded earlier, following amount=2000.` and its next publish listed 2,000. Load-time follow confirmed.
 Defaults flipped after these runs: `LayEdgeNetwork=1`, `SyncRemovals=1`.
 **Step 8, no cheats (2026-10-18, build `3a06e09`, wiped store):** BumperVille's new road at z=110 was laid in TuggersVille on the sim day after its month tick with the marker kept (`occupant ... type=0xA823821E is the connection marker, kept`, `result cells=1,1,1 -> laid`, funds unchanged, arrow stays). TuggersVille bulldozed the stub; BumperVille's next tick: `DeleteConnection`, `edge clear ... re-solve=1`, record entry erased, `removed=1`, arrow gone. BumperVille cancelled the water deal; TuggersVille's next tick: `Cancel()` -> `flags after=0x4`, `cancelledDeals=1`, deal gone from the window. Q10 and Q11 done for single networks.
+
+## Q12. Do dual-lane connections (avenue, highway, ground highway) mirror as pairs, and is ferry safe to leave alone?
+
+Plan `docs/PLAN-DUAL-FERRY.md`, research `docs/research/dual-ferry-641.md`. Each lane is its own connection object; the game lays the stub from the higher-coordinate lane with the dual tool and the lower lane rides along. Ferry (type 9) comes from each city's own terrain scan, is never used by deals, and a mirrored one could never be removed, so it is not mirrored (logged only).
+
+Experiment: steps 1 to 8 in the plan (avenue both directions plus a north or south edge pair, garbage deal over it, highway and ground highway, house on the lower row, whole and half removal with the outside rows logged, ferry log line, save and reload, timed path with the lanes in either order).
+
+Accepted divergences: both rows demolished (vanilla: the higher row only); pairing per type and edge instead of vanilla's single parity counter; unpaired lanes get no stub (vanilla: same); ferry not mirrored.
+
+**Observed:** not yet run.

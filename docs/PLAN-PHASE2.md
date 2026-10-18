@@ -19,7 +19,7 @@ Player builds a single-cell network (road, rail, power line, pipe, dirt road, mo
 Connections:
 - `CreateConnection(type, x, z, dir)` on the city's neighbors simulator creates the connection object, places the marker occupant on the inner edge cell, appends a pending entry on the other side's record, posts `0x8A0D15DA`. Delete posts `0xEA0D163E`. Both are posted, so their handlers run on the main thread outside the creating call. `RequestCreateConnection` is only the confirmation dialog. `CreateConnection`'s return value is garbage; confirm with `FindConnection`.
 - At load, B's record handler reads the pending entries that A left on B's record and the routine at `0x4aa6d0` lays the edge tile and calls `CreateConnection`. B's own save does not carry A's new connection.
-- `dir` alternates across the two cells of dual networks; for single networks 0 is assumed and must be checked in the cheat log.
+- `dir` only rotates the marker; for dual lanes it is computed from pair position, edge and the Drive on Right byte (`docs/PLAN-DUAL-FERRY.md`); singles pass 0.
 - The demand simulator re-sums regional population on `0x8A0D15DA` and `0xEA0D163E` (Q2).
 
 Deals:
@@ -121,7 +121,7 @@ Before any of them: back up the region folder on the Windows box, `AutoSaveEvery
 - Removal of deals and connections: the review found ways it cancels or re-creates the player's own work (missing snapshot read as empty, resurrection races). Needs tombstones plus a writer liveness check (Q9 step 3: the Exit button leaves a snapshot behind); separate plan.
 - Writer liveness: done 2026-10-18 (schema 3). Snapshots carry host, pid and process start; a pull deletes one whose writer on this machine is gone. observed 2026-10-18 in-game. Removal above still needs tombstones.
 - Raw replay of `0x4aa6d0` for the edge tile: cosmetic only (Q9: a pipe laid under the mirrored arrow carries water).
-- Dual-cell networks and ferry: `dir` must be derived from the pair.
+- Dual-cell networks and ferry: superseded by `docs/PLAN-DUAL-FERRY.md` (implemented 2026-10-18).
 - Third-city deals (A with C) on B's copy of A's record: nothing public writes that list.
 
 ## Risks
