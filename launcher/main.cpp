@@ -1,15 +1,16 @@
 /*
  * sc4-region-sync launcher
  *
- * main.cpp - the window: instance list or grid of DWM thumbnails, Launch and
- * Refresh, resource line. Discovery every 1 s, resource sampling every 5 s
- * (docs/PLAN-LAUNCHER.md).
+ * main.cpp - the window: instance list or grid of DWM thumbnails, Launch,
+ * Refresh and End Task, resource line. Discovery every 1 s, resource
+ * sampling every 5 s (docs/PLAN-LAUNCHER.md).
  */
 
 #include "Launcher.h"
 #include <CommCtrl.h>
 #include <dwmapi.h>
 #include <windowsx.h>
+#include <TlHelp32.h>
 #include <algorithm>
 #include <set>
 
@@ -24,14 +25,17 @@ namespace
 	constexpr int kCmdList = 103;
 	constexpr int kCmdGrid = 104;
 	constexpr int kCmdSettings = 105;
+	constexpr int kCmdEndTask = 106;
 	constexpr size_t kMaxCells = 16;
 	constexpr ULONGLONG kPendingTimeoutMs = 60000;
+	constexpr ULONGLONG kOrphanAgeMs = 90000;
 
 	struct Row
 	{
 		DWORD pid = 0;
 		HWND window = nullptr;
 		bool conflict = false;
+		bool orphan = false;  // game process with no status file and no pending launch
 		std::wstring label, state, tile, pidText;
 	};
 
@@ -159,6 +163,51 @@ namespace
 			EnumContext ctx{ &pids, &app.windows };
 			EnumWindows(EnumProc, reinterpret_cast<LPARAM>(&ctx));
 		}
+	}
+
+	// Pids of running game processes, matched by GameExe's file name.
+	std::set<DWORD> GameProcesses()
+	{
+		const std::wstring& exe = app.settings.gameExe;
+		const size_t slash = exe.find_last_of(L"\\/");
+		std::wstring name = slash == std::wstring::npos ? exe : exe.substr(slash + 1);
+		if (name.empty())
+		{
+			name = L"SimCity 4.exe";
+		}
+		std::set<DWORD> pids;
+		const HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+		if (snap == INVALID_HANDLE_VALUE)
+		{
+			return pids;
+		}
+		PROCESSENTRY32W entry{};
+		entry.dwSize = sizeof(entry);
+		for (BOOL ok = Process32FirstW(snap, &entry); ok; ok = Process32NextW(snap, &entry))
+		{
+			if (_wcsicmp(entry.szExeFile, name.c_str()) == 0)
+			{
+				pids.insert(entry.th32ProcessID);
+			}
+		}
+		CloseHandle(snap);
+		return pids;
+	}
+
+	// Unreadable creation time counts as old.
+	bool OlderThan(DWORD pid, ULONGLONG ms)
+	{
+		const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+		if (!process)
+		{
+			return true;
+		}
+		FILETIME created{}, exited{}, kernel{}, user{}, now{};
+		const BOOL ok = GetProcessTimes(process, &created, &exited, &kernel, &user);
+		CloseHandle(process);
+		GetSystemTimeAsFileTime(&now);
+		const auto u64 = [](const FILETIME& ft) { return (static_cast<ULONGLONG>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime; };
+		return !ok || u64(now) < u64(created) || (u64(now) - u64(created)) / 10000 >= ms;
 	}
 
 	std::vector<InstanceStatus> ReadStatuses()
@@ -388,6 +437,11 @@ namespace
 					detail = prefix + L"minimised, click to restore";
 				}
 			}
+			if (r.orphan)
+			{
+				c.kind = Strip::Grey;
+				detail = r.tile;
+			}
 			c.caption = r.label + L"  " + detail;
 			if (i == n - 1 && app.rows.size() > kMaxCells)
 			{
@@ -457,6 +511,23 @@ namespace
 		return nullptr;
 	}
 
+	// The selected row when it is an orphan; never in Grid (no selection there).
+	const Row* SelectedOrphan()
+	{
+		if (app.grid)
+		{
+			return nullptr;
+		}
+		const int i = ListView_GetNextItem(app.list, -1, LVNI_SELECTED);
+		return i >= 0 && i < static_cast<int>(app.rows.size()) && app.rows[static_cast<size_t>(i)].orphan
+			? &app.rows[static_cast<size_t>(i)] : nullptr;
+	}
+
+	void UpdateEndTaskButton()
+	{
+		SendMessageW(app.toolbar, TB_ENABLEBUTTON, kCmdEndTask, MAKELONG(SelectedOrphan() != nullptr, 0));
+	}
+
 	void SetView(bool grid)
 	{
 		SendMessageW(app.toolbar, TB_CHECKBUTTON, kCmdList, MAKELONG(!grid, 0));
@@ -479,6 +550,7 @@ namespace
 			app.cells.clear();
 			ShowWindow(app.list, SW_SHOW);
 		}
+		UpdateEndTaskButton();
 	}
 
 	void UpdateLaunchButton()
@@ -526,6 +598,15 @@ namespace
 		{
 			pids.insert(p.pid);
 		}
+		std::set<DWORD> orphans;  // no status row, no pending launch
+		for (const DWORD pid : GameProcesses())
+		{
+			if (!pids.count(pid))
+			{
+				orphans.insert(pid);
+			}
+		}
+		pids.insert(orphans.begin(), orphans.end());
 		UpdateWindows(pids);
 
 		std::vector<Row> rows;
@@ -558,15 +639,49 @@ namespace
 			r.window = w == app.windows.end() ? nullptr : w->second;
 			rows.push_back(std::move(r));
 		}
+		for (const DWORD pid : orphans)
+		{
+			Row r;
+			r.pid = pid;
+			r.orphan = OlderThan(pid, kOrphanAgeMs);  // younger may still write its status file
+			r.pidText = std::to_wstring(pid);
+			r.label = L"pid " + r.pidText;
+			r.state = r.orphan ? L"orphan" : L"starting";
+			r.tile = r.orphan ? L"no plugin status (hung exit, or running without the plugin)" : L"no status yet";
+			const auto w = app.windows.find(pid);
+			r.window = w == app.windows.end() ? nullptr : w->second;
+			rows.push_back(std::move(r));
+		}
 		std::sort(rows.begin(), rows.end(), [](const Row& a, const Row& b)
 		{
 			return a.label.size() != b.label.size() ? a.label.size() < b.label.size() : a.label < b.label;
 		});
+		// Keep the selection on the same pid across the re-sort.
+		const int oldSel = ListView_GetNextItem(app.list, -1, LVNI_SELECTED);
+		const DWORD selPid = oldSel >= 0 && oldSel < static_cast<int>(app.rows.size()) ? app.rows[static_cast<size_t>(oldSel)].pid : 0;
 		app.rows = std::move(rows);
+		int newSel = -1;
+		for (size_t i = 0; selPid && i < app.rows.size(); ++i)
+		{
+			if (app.rows[i].pid == selPid)
+			{
+				newSel = static_cast<int>(i);
+				break;
+			}
+		}
 
 		ListView_SetItemCountEx(app.list, static_cast<int>(app.rows.size()), LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL);
+		if (newSel != oldSel)
+		{
+			ListView_SetItemState(app.list, -1, 0, LVIS_SELECTED | LVIS_FOCUSED);
+			if (newSel >= 0)
+			{
+				ListView_SetItemState(app.list, newSel, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+			}
+		}
 		InvalidateRect(app.list, nullptr, FALSE);
 		UpdateLaunchButton();
+		UpdateEndTaskButton();
 		if (app.grid)
 		{
 			ReconcileThumbs();
@@ -617,6 +732,67 @@ namespace
 		ti.uId = reinterpret_cast<UINT_PTR>(app.status);
 		ti.lpszText = app.resources.tooltip.data();
 		SendMessageW(app.tooltip, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&ti));
+	}
+
+	// Orphans only: a row with a status file has a live plugin, and the in-game
+	// Exit is its only safe way out.
+	void EndTask()
+	{
+		const Row* row = SelectedOrphan();
+		if (!row)
+		{
+			return;
+		}
+		const DWORD pid = row->pid;
+		struct HandleGuard
+		{
+			HANDLE h;
+			~HandleGuard() { if (h) CloseHandle(h); }
+		};
+		// Held across the prompt so the pid cannot be reused under us.
+		const HandleGuard process{ OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, pid) };
+		if (!process.h)
+		{
+			ShowMessage(app.main, L"OpenProcess on pid " + std::to_wstring(pid) + L" failed, error "
+				+ std::to_wstring(GetLastError()) + L".", MB_ICONERROR);
+			return;
+		}
+		std::wstring started = L"unknown";
+		FILETIME created{}, exited{}, kernel{}, user{}, local{};
+		SYSTEMTIME st{};
+		if (GetProcessTimes(process.h, &created, &exited, &kernel, &user)
+			&& FileTimeToLocalFileTime(&created, &local) && FileTimeToSystemTime(&local, &st))
+		{
+			wchar_t text[16];
+			swprintf_s(text, L"%02u:%02u:%02u", st.wHour, st.wMinute, st.wSecond);
+			started = text;
+		}
+		const std::wstring prompt = L"End task on pid " + std::to_wstring(pid) + L" (started " + started
+			+ L")? It has no plugin status, so any unsaved city is lost.";
+		if (MessageBoxW(app.main, prompt.c_str(), L"SC4 Region Sync Launcher", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) == IDYES)
+		{
+			// The box pumps the timer; re-check against a fresh read.
+			const std::vector<InstanceStatus> statuses = ReadStatuses();
+			const bool claimed = std::any_of(statuses.begin(), statuses.end(), [pid](const InstanceStatus& s) { return s.pid == pid; })
+				|| std::any_of(app.pending.begin(), app.pending.end(), [pid](const auto& p) { return p.second.pid == pid; });
+			if (claimed)
+			{
+				ShowMessage(app.main, L"pid " + std::to_wstring(pid) + L" now has a status file or pending launch; not ended.");
+			}
+			else if (WaitForSingleObject(process.h, 0) != WAIT_OBJECT_0)
+			{
+				if (TerminateProcess(process.h, 1))
+				{
+					WaitForSingleObject(process.h, 2000);  // so the rediscover below drops the row
+				}
+				else
+				{
+					ShowMessage(app.main, L"TerminateProcess on pid " + std::to_wstring(pid) + L" failed, error "
+						+ std::to_wstring(GetLastError()) + L".", MB_ICONERROR);
+				}
+			}
+		}
+		Discover();
 	}
 
 	void RaiseWindow(HWND hwnd)
@@ -700,10 +876,10 @@ namespace
 			0, 0, 0, 0, hwnd, nullptr, inst, nullptr);
 		SendMessageW(app.toolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
 		SendMessageW(app.toolbar, TB_SETBITMAPSIZE, 0, MAKELONG(0, 0));
-		TBBUTTON buttons[7]{};
-		const wchar_t* labels[] = { L"Launch", L"Refresh", nullptr, L"List", L"Grid", nullptr, L"Settings" };
-		const int ids[] = { kCmdLaunch, kCmdRefresh, 0, kCmdList, kCmdGrid, 0, kCmdSettings };
-		for (int i = 0; i < 7; ++i)
+		TBBUTTON buttons[9]{};
+		const wchar_t* labels[] = { L"Launch", L"Refresh", nullptr, L"List", L"Grid", nullptr, L"Settings", nullptr, L"End Task" };
+		const int ids[] = { kCmdLaunch, kCmdRefresh, 0, kCmdList, kCmdGrid, 0, kCmdSettings, 0, kCmdEndTask };
+		for (int i = 0; i < 9; ++i)
 		{
 			if (!labels[i])
 			{
@@ -717,7 +893,8 @@ namespace
 			buttons[i].iString = reinterpret_cast<INT_PTR>(labels[i]);
 		}
 		buttons[3].fsState |= TBSTATE_CHECKED;  // always starts in List
-		SendMessageW(app.toolbar, TB_ADDBUTTONSW, 7, reinterpret_cast<LPARAM>(buttons));
+		buttons[8].fsState = 0;  // End Task: enabled for a selected orphan
+		SendMessageW(app.toolbar, TB_ADDBUTTONSW, 9, reinterpret_cast<LPARAM>(buttons));
 
 		app.list = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, nullptr,
 			WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_OWNERDATA | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
@@ -793,6 +970,10 @@ namespace
 				wcsncpy_s(item.pszText, static_cast<size_t>(item.cchTextMax), text.c_str(), _TRUNCATE);
 			}
 		}
+		else if (hdr.code == LVN_ITEMCHANGED)
+		{
+			UpdateEndTaskButton();
+		}
 		else if (hdr.code == NM_CLICK || hdr.code == NM_DBLCLK || hdr.code == LVN_ITEMACTIVATE)
 		{
 			Raise(reinterpret_cast<const NMITEMACTIVATE*>(&hdr)->iItem);
@@ -847,6 +1028,10 @@ namespace
 					app.settings = LoadSettings();
 					Discover();
 					Sample();
+				}
+				else if (LOWORD(wParam) == kCmdEndTask)
+				{
+					EndTask();
 				}
 				else if (LOWORD(wParam) == kCmdList || LOWORD(wParam) == kCmdGrid)
 				{
