@@ -169,4 +169,9 @@ Phase 2 slice 1 (`docs/PLAN-PHASE2.md`). `SyncConnections` and `SyncDeals` stay 
 
 Also confirm from the log: `SimNewDay` is `0x66956814` (first one is logged once), `GetCitySize` against the computed `cells`, `dir=0` for single networks, and whether the `0x8A0D15DA` demand rebaseline lands after the game's own re-sum.
 
-**Observed.**
+**Observed (2026-10-17, first run, cheats only).**
+- `SimNewDay` is `0x66956814`; schema 2 publishes; a road and then a power line built to the edge in TuggersVille each posted `0x8A0D15DA` and were published on the next sim day (`connections=3`, then `4`).
+- `RegionSyncMirror` in BumperVille: existing roads reported `HasConnection=1`, the new road and the power line were created with `CreateConnection(type, 128, z, 0)` and confirmed by `FindConnection`. In game: an arrow appears at the edge over whatever tile is there (a street, then a house); no network tile is laid. `0x8A0D15DA` fired in BumperVille too and the demand baseline was re-taken.
+- The power deal proposed in TuggersVille (buy side on our end, `0x4773FFE0`, 1,000 units) published fine, but `ProposeDeal` in BumperVille returned false. Ghidra: `FindConnectionSuitableForDeal` (`0x006d1fc0`) takes `GetConnectionsOfTypeToCity(4, A)`, then for a buy requires `FindConnectionOnOtherSide(c)` non-null and active. That looks into A's record as held in B's memory, whose connection list is only filled by a reload from A's save. So the mirrored connection object alone is not enough for deals; the neighbor's record copy also needs the connection. Research in progress.
+- Side finding: per-group "local share" values go negative and drift further each month (TuggersVille R$ in BumperVille's record -7391 -> -9658 for a 1,300-resident city). The supply-minus-regional scheme is wrong somewhere; research in progress.
+
