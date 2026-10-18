@@ -18,6 +18,7 @@ class cISC4RegionalCity;
 class cISC4Region;
 class cISC4City;
 class cISC4Simulator;
+class cISC4NeighborsSimulator;
 
 namespace regionsync
 {
@@ -51,6 +52,15 @@ namespace regionsync
 		bool population = true;   // totals and per-RCI-group, direct field writes
 	};
 	int ApplySnapshotToRegionalCity(const NeighborSnapshot& snapshot, cISC4RegionalCity* pRegionalCity, const ApplyOptions& options);
+
+	// Fill snapshot.connections from the own simulator's GetAllConnections.
+	// Leaves connectionsKnown false when pNeighborsSim is null.
+	void CaptureConnections(cISC4NeighborsSimulator* pNeighborsSim, NeighborSnapshot& out);
+
+	// Fill snapshot.deals from the own simulator's live list (FindDealsAll).
+	// pSimulator supplies the date objects for expiresIn; without it
+	// expiresIn is 0. displayFields also reads amountUsed and cost (Dump only).
+	void CaptureDeals(cISC4NeighborsSimulator* pNeighborsSim, cISC4Simulator* pSimulator, NeighborSnapshot& out, bool displayFields = false);
 
 	// Convenience: find the regional record for a tile position, or null.
 	cISC4RegionalCity* FindRegionalCity(cISC4Region* pRegion, int32_t regionX, int32_t regionZ);

@@ -16,7 +16,7 @@ Status (2026-10-17): builds on Linux, runs in two instances, Phase 1 and 1b done
 4. `docs/PHASES.md`: ordered plan with exit criteria and current position.
 5. `src/RegionSyncDllDirector.cpp`: the entry point. Everything else is a helper.
 
-Then skim `vendor/gzcom-dll/gzcom-dll/include/` for `cISC4RegionalCity.h`, `cISC4NeighborsSimulator.h`, `cISC4Region.h`, `cISC4App.h`, `cISC4Simulator.h`. Those five headers are the whole surface Phase 1 uses.
+Then skim `vendor/gzcom-dll/gzcom-dll/include/` for `cISC4RegionalCity.h`, `cISC4NeighborsSimulator.h`, `cISC4Region.h`, `cISC4App.h`, `cISC4Simulator.h`. Those five headers are the whole surface Phase 1 uses. Phase 2 adds `cISC4NeighborDeal.h` and `cISC4NeighborConnection.h`.
 
 ## First session checklist (Linux box)
 

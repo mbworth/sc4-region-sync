@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 
 using namespace regionsync;
 
@@ -25,6 +26,10 @@ int main(int argc, char** argv)
 	}
 	a.rciGroupCount = 3;
 	a.rciGroups[0] = { 0x1010, 100 }; a.rciGroups[1] = { 0x3110, 200 }; a.rciGroups[2] = { 0x4400, -1 };
+	a.connectionsKnown = true;
+	a.connections = { { 2, 0, 17, 2, 7 }, { 4, 127, -1, 3, 6 } };
+	a.dealsKnown = true;
+	a.deals = { { 0x4773FFE4, 2, 7, 1500, 0x2, 365 }, { 0x4773FFE1, 4, 7, 0, 0x101, 0 } };
 
 	// Scratch dir under the build tree, not the shared system temp dir.
 	const std::filesystem::path dir = argc > 1 ? std::filesystem::path(argv[1]) : std::filesystem::path("build/snapshot-test");
@@ -63,6 +68,73 @@ int main(int argc, char** argv)
 		CHECK(b.rciGroups[i].groupId == a.rciGroups[i].groupId);
 		CHECK(b.rciGroups[i].population == a.rciGroups[i].population);
 	}
+
+	CHECK(b.schemaVersion == 2);
+	CHECK(b.connectionsKnown && b.connections.size() == a.connections.size());
+	for (size_t i = 0; i < a.connections.size() && i < b.connections.size(); i++)
+	{
+		const ConnectionRecord& x = a.connections[i];
+		const ConnectionRecord& y = b.connections[i];
+		CHECK(x.type == y.type && x.innerX == y.innerX && x.innerZ == y.innerZ && x.otherTileX == y.otherTileX && x.otherTileZ == y.otherTileZ);
+	}
+	CHECK(b.dealsKnown && b.deals.size() == a.deals.size());
+	for (size_t i = 0; i < a.deals.size() && i < b.deals.size(); i++)
+	{
+		const DealRecord& x = a.deals[i];
+		const DealRecord& y = b.deals[i];
+		CHECK(x.type == y.type && x.otherTileX == y.otherTileX && x.otherTileZ == y.otherTileZ);
+		CHECK(x.amount == y.amount && x.flags == y.flags && x.expiresIn == y.expiresIn);
+	}
+
+	// Known and empty round-trips as known; unknown stays unknown.
+	NeighborSnapshot empty;
+	empty.connectionsKnown = true;
+	CHECK(WriteSnapshotFile(path, empty, error));
+	NeighborSnapshot e2;
+	e2.dealsKnown = true; e2.deals.resize(3);  // stale contents must be cleared
+	CHECK(ReadSnapshotFile(path, e2, error));
+	CHECK(e2.connectionsKnown && e2.connections.empty());
+	CHECK(!e2.dealsKnown && e2.deals.empty());
+
+	// Frame conversion. A at region (2,0), B at (0,0), both medium (128 cells).
+	int32_t bx = 0, bz = 0;
+	CHECK(CityCells(0) == 64 && CityCells(1) == 128 && CityCells(2) == 256);
+	CHECK(ToSubscriberFrame(2, 0, 0, 17, 0, 0, 128, bx, bz) && bx == 128 && bz == 17);       // x = cells
+	CHECK(ToSubscriberFrame(0, 0, 127, 5, 2, 0, 128, bx, bz) && bx == -1 && bz == 5);        // x = -1
+	CHECK(ToSubscriberFrame(0, 2, 40, 0, 0, 0, 128, bx, bz) && bx == 40 && bz == 128);       // z = cells
+	CHECK(ToSubscriberFrame(0, 0, 0, 127, 0, 2, 128, bx, bz) && bx == 0 && bz == -1);        // z = -1
+	CHECK(ToSubscriberFrame(2, 0, 0, 127, 0, 0, 128, bx, bz) && bx == 128 && bz == 127);     // last cell on the edge
+	CHECK(!ToSubscriberFrame(2, 2, 0, 0, 0, 0, 128, bx, bz) && bx == 128 && bz == 128);      // corner
+	CHECK(!ToSubscriberFrame(0, 0, 0, 0, 2, 2, 128, bx, bz) && bx == -128 && bz == -128);    // far corner
+	CHECK(!ToSubscriberFrame(1, 0, 10, 10, 0, 0, 128, bx, bz) && bx == 74);                  // interior
+	CHECK(!ToSubscriberFrame(4, 0, 0, 10, 0, 0, 128, bx, bz));                                // not adjacent
+	CHECK(!ToSubscriberFrame(2, 0, 0, 128, 0, 0, 128, bx, bz));                               // other axis out of range
+	CHECK(ToSubscriberFrame(1, 0, 0, 63, 0, 0, 64, bx, bz) && bx == 64 && bz == 63);          // small B
+	CHECK(!ToSubscriberFrame(0x7FFFFFFF, 0, 0, 10, 0, 0, 128, bx, bz) && bx == 0 && bz == 0); // region out of range
+	CHECK(!ToSubscriberFrame(2, 0, 257, 10, 0, 0, 128, bx, bz));                              // inner out of range
+	CHECK(!ToSubscriberFrame(2, 0, 0, 10, -1, 0, 128, bx, bz));                               // own region negative
+
+	// Overflowing numbers fail the parse; bad or oversized counts are reported.
+	{
+		std::ofstream f(path, std::ios::trunc);
+		f << "regionX=4294967296\npopulation=99999999999\ncitySerial=-1\nconnectionCount=x\ndealCount=999999\n";
+	}
+	NeighborSnapshot o;
+	CHECK(ReadSnapshotFile(path, o, error));
+	CHECK(o.regionX == 0 && o.population == 0 && o.citySerial == 0);
+	CHECK(o.connectionsKnown && o.connections.empty());
+	CHECK(o.dealsKnown && o.deals.size() == kMaxListEntries);
+	CHECK(error.find("connectionCount") != std::string::npos && error.find("dealCount") != std::string::npos);
+
+	// Validation helpers.
+	CHECK(IsMirrorableConnectionType(1) && IsMirrorableConnectionType(11) && IsMirrorableConnectionType(10));
+	CHECK(!IsMirrorableConnectionType(0) && !IsMirrorableConnectionType(3) && !IsMirrorableConnectionType(8) && !IsMirrorableConnectionType(9) && !IsMirrorableConnectionType(12));
+	CHECK(IsDealType(0x4773FFE0) && IsDealType(0x4773FFE5) && !IsDealType(0x4773FFE6) && !IsDealType(0x4773FFDF));
+	CHECK(OtherSideDealType(0x4773FFE4) == 0x4773FFE5 && OtherSideDealType(0x4773FFE1) == 0x4773FFE0);
+	CHECK(DealCommodity(0x4773FFE0) == 0 && DealCommodity(0x4773FFE3) == 1 && DealCommodity(0x4773FFE5) == 2);
+	CHECK(IsValidDealAmount(0) && IsValidDealAmount(10000000) && !IsValidDealAmount(-1) && !IsValidDealAmount(10000001));
+	CHECK(IsValidExpiresIn(0) && IsValidExpiresIn(36500) && !IsValidExpiresIn(-1) && !IsValidExpiresIn(36501));
+	CHECK(MaskDealFlags(0xFFFFFFFF) == 0x37F && MaskDealFlags(0x81) == 0x1);
 
 	// Missing file reports an error.
 	NeighborSnapshot c;

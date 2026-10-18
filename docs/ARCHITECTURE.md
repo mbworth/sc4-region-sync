@@ -108,6 +108,11 @@ src/
   RegionalCityBridge.{h,cpp}  Capture a cISC4RegionalCity into a NeighborSnapshot; apply a
                               NeighborSnapshot to a cISC4RegionalCity; resolve a tile slot.
                               Knows the RCI group IDs. No messages, no cheats, no I/O.
+                              Also captures the own simulator's connections and deals.
+  NeighborMirror.{h,cpp}      Creates other instances' connections and deals here (Phase 2
+                              slice 1), with per-session identity sets. No messages.
+  NeighborsSim641.h           FindDeals/FindDealsAll with the deal element type the binary uses.
+  RegionalCity641.h           Raw vtable access where cISC4RegionalCity.h is wrong.
   NeighborSnapshot.{h,cpp}    The plain struct that crosses between instances, and its
                               key=value reader/writer with atomic rename. No game headers,
                               no Windows headers. Compiles and tests anywhere.

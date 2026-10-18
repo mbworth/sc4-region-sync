@@ -14,6 +14,10 @@
  *     by hand: RegionSyncDump, RegionSyncPublish, RegionSyncPull,
  *     RegionSyncReload, RegionSyncStatus.
  *
+ * Phase 2 slice 1 (docs/PLAN-PHASE2.md): snapshots carry connections and
+ * deals; RegionSyncMirror (or SyncConnections/SyncDeals, on the SimNewDay
+ * after a pull) creates the other instances' ones here.
+ *
  * Built on the same skeleton as Null45's published DLL plugins so that the
  * conventions (logging, INI, version detection) match what the SC4 DLL
  * community already knows.
@@ -22,6 +26,7 @@
 #include "version.h"
 #include "NeighborSnapshot.h"
 #include "RegionalCityBridge.h"
+#include "NeighborMirror.h"
 #include "SyncSettings.h"
 #include "InstanceMutex.h"
 #include "RegionalCity641.h"
@@ -37,8 +42,6 @@
 #include "cISC4Demand.h"
 #include "cISC4DemandSimulator.h"
 #include "SC4Percentage.h"
-#include "cISC4NeighborConnection.h"
-#include "cISC4NeighborDeal.h"
 #include "cISC4NeighborsSimulator.h"
 #include "cISC4Region.h"
 #include "cISC4RegionalCity.h"
@@ -47,7 +50,6 @@
 #include "cRZBaseString.h"
 #include "cRZMessage2COMDirector.h"
 #include "GZServPtrs.h"
-#include "SC4List.h"
 #include "SC4String.h"
 #include "SC4Vector.h"
 
@@ -74,6 +76,13 @@ static constexpr uint32_t kSC4MessagePostCityShutdown = 0x26D31EC3;
 static constexpr uint32_t kSC4MessagePostRegionInit = 0xCBB5BB45;
 static constexpr uint32_t kSC4MessagePreRegionShutdown = 0x8BB5BB46;
 static constexpr uint32_t kSC4MessageSimNewMonth = 0x66956816;
+static constexpr uint32_t kSC4MessageSimNewDay = 0x66956814;
+
+// Neighbors simulator messages (docs/research/*-641.md). Connection ones
+// carry data1=type, data2=x, data3=z; deal status carries data1=reason.
+static constexpr uint32_t kMessageConnectionCreated = 0x8A0D15DA;
+static constexpr uint32_t kMessageConnectionDeleted = 0xEA0D163E;
+static constexpr uint32_t kMessageDealStatus = 0xEA418D8F;
 
 // Director ID. Random 32-bit value, must not collide with other plugins.
 static constexpr uint32_t kRegionSyncDllDirector = 0x7A3C9E51;
@@ -90,6 +99,8 @@ static constexpr uint32_t kCheatSetterTestID = 0x7A3C9E59;
 static constexpr uint32_t kCheatProbeID = 0x7A3C9E5A;
 static constexpr uint32_t kCheatDemandID = 0x7A3C9E5B;
 static constexpr uint32_t kCheatFakeNeighborID = 0x7A3C9E5C;
+// Outside the full 0x7A3C9E5x block. Drawn from /dev/urandom; checked against this repo only (Null45's published ids were not reachable offline).
+static constexpr uint32_t kCheatMirrorID = 0x1FDCE6B8;
 
 static constexpr std::string_view kCheatDump = "RegionSyncDump";
 static constexpr std::string_view kCheatPublish = "RegionSyncPublish";
@@ -102,6 +113,7 @@ static constexpr std::string_view kCheatSetterTest = "RegionSyncSetterTest";
 static constexpr std::string_view kCheatProbe = "RegionSyncProbe";
 static constexpr std::string_view kCheatDemand = "RegionSyncDemand";
 static constexpr std::string_view kCheatFakeNeighbor = "RegionSyncFakeNeighbor";
+static constexpr std::string_view kCheatMirror = "RegionSyncMirror";
 
 namespace
 {
@@ -248,6 +260,10 @@ public:
 			kSC4MessagePostRegionInit,
 			kSC4MessagePreRegionShutdown,
 			kSC4MessageSimNewMonth,
+			kSC4MessageSimNewDay,
+			kMessageConnectionCreated,
+			kMessageConnectionDeleted,
+			kMessageDealStatus,
 		};
 
 		for (uint32_t id : messages)
@@ -261,12 +277,14 @@ public:
 
 		logger.WriteLineFormatted(
 			LogLevel::Info,
-			"Initialized. instanceId=%u enabled=%d publishEveryMonths=%d pullEveryMonths=%d autoSaveEveryMonths=%d",
+			"Initialized. instanceId=%u enabled=%d publishEveryMonths=%d pullEveryMonths=%d autoSaveEveryMonths=%d syncConnections=%d syncDeals=%d",
 			instanceId,
 			settings.enabled ? 1 : 0,
 			settings.publishEveryMonths,
 			settings.pullEveryMonths,
-			settings.autoSaveEveryMonths);
+			settings.autoSaveEveryMonths,
+			settings.syncConnections ? 1 : 0,
+			settings.syncDeals ? 1 : 0);
 
 		logger.Flush();
 
@@ -285,7 +303,18 @@ public:
 		switch (pStandardMsg->GetType())
 		{
 		case kMessageCheatIssued:
-			ProcessCheat(pStandardMsg);
+			try
+			{
+				ProcessCheat(pStandardMsg);
+			}
+			catch (const std::exception& e)
+			{
+				Logger::GetInstance().WriteLineFormatted(LogLevel::Error, "Cheat 0x%08X threw: %s", static_cast<uint32_t>(pStandardMsg->GetData1()), e.what());
+			}
+			catch (...)
+			{
+				Logger::GetInstance().WriteLine(LogLevel::Error, "Cheat threw a non-standard exception.");
+			}
 			break;
 		case kSC4MessagePostRegionInit:
 			PostRegionInit();
@@ -304,6 +333,36 @@ public:
 			break;
 		case kSC4MessageSimNewMonth:
 			OnNewMonth();
+			break;
+		case kSC4MessageSimNewDay:
+			try
+			{
+				OnNewDay();
+			}
+			catch (const std::exception& e)
+			{
+				Logger::GetInstance().WriteLineFormatted(LogLevel::Error, "SimNewDay threw: %s", e.what());
+			}
+			catch (...)
+			{
+				Logger::GetInstance().WriteLine(LogLevel::Error, "SimNewDay threw a non-standard exception.");
+			}
+			break;
+		case kMessageConnectionCreated:
+		case kMessageConnectionDeleted:
+		case kMessageDealStatus:
+			try
+			{
+				OnNeighborEvent(pStandardMsg);
+			}
+			catch (const std::exception& e)
+			{
+				Logger::GetInstance().WriteLineFormatted(LogLevel::Error, "Message 0x%08X threw: %s", pStandardMsg->GetType(), e.what());
+			}
+			catch (...)
+			{
+				Logger::GetInstance().WriteLine(LogLevel::Error, "Neighbor message threw a non-standard exception.");
+			}
 			break;
 		}
 
@@ -342,9 +401,19 @@ private:
 		regionDirectoryName.clear();
 	}
 
+	// Per-city-session state; cleared on city init and shutdown.
+	void ResetSessionState()
+	{
+		mirror.Reset();
+		mirrorPending.clear();
+		publishDirty = false;
+		demandRebaselinePending = false;
+	}
+
 	void PostCityInit(cIGZMessage2Standard* pStandardMsg)
 	{
 		pCity = static_cast<cISC4City*>(pStandardMsg->GetVoid1());
+		ResetSessionState();
 
 		if (pCheatCodeManager)
 		{
@@ -359,6 +428,7 @@ private:
 			pCheatCodeManager->RegisterCheatCode(kCheatProbeID, cRZBaseString(kCheatProbe));
 			pCheatCodeManager->RegisterCheatCode(kCheatDemandID, cRZBaseString(kCheatDemand));
 			pCheatCodeManager->RegisterCheatCode(kCheatFakeNeighborID, cRZBaseString(kCheatFakeNeighbor));
+			pCheatCodeManager->RegisterCheatCode(kCheatMirrorID, cRZBaseString(kCheatMirror));
 			pCheatCodeManager->AddNotification2(this, 0);
 		}
 	}
@@ -544,6 +614,7 @@ private:
 		pNeighborsSim = nullptr;
 		pSimulator = nullptr;
 		regionalDemand.clear();
+		ResetSessionState();
 
 		if (pCheatCodeManager)
 		{
@@ -558,6 +629,7 @@ private:
 			pCheatCodeManager->UnregisterCheatCode(kCheatProbeID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatDemandID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatFakeNeighborID);
+			pCheatCodeManager->UnregisterCheatCode(kCheatMirrorID);
 			pCheatCodeManager->RemoveNotification2(this, 0);
 		}
 	}
@@ -589,6 +661,68 @@ private:
 		{
 			Save("month tick");
 			monthsSinceSave = 0;
+		}
+	}
+
+	// Connection and deal messages only mark state; the work happens on the
+	// next SimNewDay, outside whatever game call posted or sent them.
+	void OnNeighborEvent(cIGZMessage2Standard* pMsg)
+	{
+		const uint32_t type = pMsg->GetType();
+		const intptr_t d1 = pMsg->GetData1();
+		bool dirty = true;
+		if (type == kMessageDealStatus)
+		{
+			// Reasons 1..7 change a deal's existence or state; 0 (amount changed) and 8 (retry) do not in slice 1.
+			dirty = d1 >= 1 && d1 <= 7;
+		}
+		else
+		{
+			demandRebaselinePending = true;
+		}
+		publishDirty = publishDirty || dirty;
+		const bool amountOnly = type == kMessageDealStatus && d1 == 0;
+		Logger::GetInstance().WriteLineFormatted(amountOnly ? LogLevel::Debug : LogLevel::Info, "Event 0x%08X data1=%d data2=%d data3=%d dirty=%d",
+			type, static_cast<int32_t>(d1), static_cast<int32_t>(pMsg->GetData2()), static_cast<int32_t>(pMsg->GetData3()), dirty ? 1 : 0);
+	}
+
+	void OnNewDay()
+	{
+		Logger& logger = Logger::GetInstance();
+		if (!sawNewDay)
+		{
+			sawNewDay = true;
+			logger.WriteLineFormatted(LogLevel::Info, "SimNewDay 0x%08X received (first this session).", kSC4MessageSimNewDay);
+		}
+
+		if (demandRebaselinePending)
+		{
+			// The game re-sums regional population on connection create/delete.
+			demandRebaselinePending = false;
+			for (RegionalDemandEntry& e : regionalDemand)
+			{
+				const float now = SumOtherTiles(e.groupId);
+				logger.WriteLineFormatted(LogLevel::Info, "RegionalDemand rebaseline: 0x%04X idx 0x%05X lastSum %.0f -> %.0f; demand=%.1f supply=%.1f",
+					e.groupId, e.demandIndex, e.lastSum, now, e.pDemand->QueryDemandValue(), e.pDemand->QuerySupplyValue());
+				e.lastSum = now;
+			}
+		}
+
+		if (publishDirty && !inPull && settings.enabled && pCity)
+		{
+			Publish("event");
+		}
+
+		// After the publish check, so events the mirror raises publish tomorrow.
+		if (!mirrorPending.empty() && !inPull)
+		{
+			InPullScope scope(inPull);
+			std::vector<regionsync::NeighborSnapshot> pending;
+			pending.swap(mirrorPending);
+			for (const regionsync::NeighborSnapshot& snapshot : pending)
+			{
+				MirrorSnapshot(snapshot, settings.syncConnections, settings.syncDeals);
+			}
 		}
 	}
 
@@ -636,6 +770,7 @@ private:
 			logger.WriteLine(LogLevel::Error, "Publish: no city loaded.");
 			return;
 		}
+		publishDirty = false;
 
 		if (settings.refreshCacheBeforePublish)
 		{
@@ -647,7 +782,22 @@ private:
 		}
 
 		regionsync::NeighborSnapshot snapshot;
-		regionsync::CaptureRegionalCity(pOwnRegionalCity, pSimulator, snapshot);
+		try
+		{
+			regionsync::CaptureRegionalCity(pOwnRegionalCity, pSimulator, snapshot);
+			regionsync::CaptureConnections(pNeighborsSim, snapshot);
+			regionsync::CaptureDeals(pNeighborsSim, pSimulator, snapshot);
+		}
+		catch (const std::exception& e)
+		{
+			logger.WriteLineFormatted(LogLevel::Error, "Publish (%s): capture threw: %s", reason, e.what());
+			return;
+		}
+		catch (...)
+		{
+			logger.WriteLineFormatted(LogLevel::Error, "Publish (%s): capture threw a non-standard exception.", reason);
+			return;
+		}
 		SubtractRegionalShare(snapshot);
 
 		const std::filesystem::path path =
@@ -659,11 +809,12 @@ private:
 			publishCount++;
 			logger.WriteLineFormatted(
 				LogLevel::Info,
-				"Publish (%s): (%d,%d) '%s' pop=%d com=%d ind=%d simDate=%u-%02u-%02u -> %s",
+				"Publish (%s): (%d,%d) '%s' pop=%d com=%d ind=%d connections=%zu deals=%zu simDate=%u-%02u-%02u -> %s",
 				reason,
 				snapshot.regionX, snapshot.regionZ,
 				snapshot.cityName.c_str(),
 				snapshot.population, snapshot.commercialJobs, snapshot.industrialJobs,
+				snapshot.connections.size(), snapshot.deals.size(),
 				snapshot.simYear, snapshot.simMonth, snapshot.simDay,
 				path.string().c_str());
 		}
@@ -673,17 +824,12 @@ private:
 		}
 	}
 
-	// Pull: read every snapshot in the store except our own and apply it to
-	// the matching regional record in this instance.
-	void Pull(const char* reason)
+	// Every snapshot in the store except our own tile and a held fake neighbor.
+	std::vector<regionsync::NeighborSnapshot> ReadOtherSnapshots(const char* who, int& filesSeen)
 	{
 		Logger& logger = Logger::GetInstance();
-
-		if (!pRegion || !pOwnRegionalCity)
-		{
-			logger.WriteLine(LogLevel::Error, "Pull: no region loaded.");
-			return;
-		}
+		std::vector<regionsync::NeighborSnapshot> result;
+		filesSeen = 0;
 
 		int32_t ownX = -1, ownZ = -1;
 		pOwnRegionalCity->GetPosition(ownX, ownZ);
@@ -691,13 +837,9 @@ private:
 		std::error_code ec;
 		if (!std::filesystem::exists(storeDirectory, ec))
 		{
-			logger.WriteLineFormatted(LogLevel::Info, "Pull (%s): store directory does not exist yet.", reason);
-			return;
+			logger.WriteLineFormatted(LogLevel::Info, "%s: store directory does not exist yet.", who);
+			return result;
 		}
-
-		int filesSeen = 0;
-		int applied = 0;
-		int totalChanged = 0;
 
 		for (const auto& entry : std::filesystem::directory_iterator(storeDirectory, ec))
 		{
@@ -712,8 +854,12 @@ private:
 			std::string error;
 			if (!regionsync::ReadSnapshotFile(entry.path(), snapshot, error))
 			{
-				logger.WriteLineFormatted(LogLevel::Error, "Pull: %s", error.c_str());
+				logger.WriteLineFormatted(LogLevel::Error, "%s: %s", who, error.c_str());
 				continue;
+			}
+			if (!error.empty())
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "%s: %s: %s", who, entry.path().filename().string().c_str(), error.c_str());
 			}
 
 			if (snapshot.regionX == ownX && snapshot.regionZ == ownZ)
@@ -722,10 +868,71 @@ private:
 			}
 			if (fakeNeighborHeld && snapshot.regionX == fakeNeighborX && snapshot.regionZ == fakeNeighborZ)
 			{
-				logger.WriteLineFormatted(LogLevel::Info, "Pull: (%d,%d) held by RegionSyncFakeNeighbor, skipped.", snapshot.regionX, snapshot.regionZ);
+				logger.WriteLineFormatted(LogLevel::Info, "%s: (%d,%d) held by RegionSyncFakeNeighbor, skipped.", who, snapshot.regionX, snapshot.regionZ);
 				continue;
 			}
+			result.push_back(std::move(snapshot));
+		}
+		return result;
+	}
 
+	// Sets inPull for a scope. Guards nested sends: a SimNewDay delivered
+	// inside one of our game calls must not publish or re-enter the mirror.
+	struct InPullScope
+	{
+		bool& flag;
+		explicit InPullScope(bool& f) : flag(f) { flag = true; }
+		~InPullScope() { flag = false; }
+	};
+
+	void MirrorSnapshot(const regionsync::NeighborSnapshot& snapshot, bool connections, bool deals)
+	{
+		Logger& logger = Logger::GetInstance();
+		const regionsync::MirrorContext ctx{ pRegion, pOwnRegionalCity, pNeighborsSim, pSimulator };
+		int createdConnections = 0, createdDeals = 0;
+		try
+		{
+			if (connections)
+			{
+				createdConnections = mirror.MirrorConnections(ctx, snapshot);
+			}
+			if (deals)
+			{
+				createdDeals = mirror.MirrorDeals(ctx, snapshot);
+			}
+		}
+		catch (const std::exception& e)
+		{
+			logger.WriteLineFormatted(LogLevel::Error, "Mirror (%d,%d) threw: %s", snapshot.regionX, snapshot.regionZ, e.what());
+		}
+		catch (...)
+		{
+			logger.WriteLineFormatted(LogLevel::Error, "Mirror (%d,%d) threw a non-standard exception.", snapshot.regionX, snapshot.regionZ);
+		}
+		logger.WriteLineFormatted(LogLevel::Info, "Mirror (%d,%d): created connections=%d deals=%d", snapshot.regionX, snapshot.regionZ, createdConnections, createdDeals);
+	}
+
+	// Pull: read every snapshot in the store except our own and apply it to
+	// the matching regional record in this instance.
+	void Pull(const char* reason)
+	{
+		Logger& logger = Logger::GetInstance();
+
+		if (!pRegion || !pOwnRegionalCity)
+		{
+			logger.WriteLine(LogLevel::Error, "Pull: no region loaded.");
+			return;
+		}
+
+		InPullScope scope(inPull);
+
+		int filesSeen = 0;
+		int applied = 0;
+		int totalChanged = 0;
+		std::vector<regionsync::NeighborSnapshot> pulled;
+
+		for (regionsync::NeighborSnapshot& snapshot : ReadOtherSnapshots("Pull", filesSeen))
+		{
 			cISC4RegionalCity* pTarget = regionsync::FindRegionalCity(pRegion, snapshot.regionX, snapshot.regionZ);
 			if (!pTarget)
 			{
@@ -758,6 +965,7 @@ private:
 
 			if (!settings.applyPulledSnapshots)
 			{
+				pulled.push_back(std::move(snapshot));
 				continue;
 			}
 
@@ -777,6 +985,7 @@ private:
 				"Pull: applied (%d,%d) changedFields=%d",
 				snapshot.regionX, snapshot.regionZ, changed);
 			logger.Flush();
+			pulled.push_back(std::move(snapshot));
 		}
 
 		if (totalChanged > 0)
@@ -794,11 +1003,40 @@ private:
 			logger.WriteLine(LogLevel::Info, "Pull: MarkDealsDirty returned");
 		}
 
+		// Mirrored on the next SimNewDay, outside this game call.
+		if (settings.syncConnections || settings.syncDeals)
+		{
+			mirrorPending = std::move(pulled);
+		}
+
 		pullCount++;
 		logger.WriteLineFormatted(
 			LogLevel::Info,
-			"Pull (%s): files=%d applied=%d changedFields=%d",
-			reason, filesSeen, applied, totalChanged);
+			"Pull (%s): files=%d applied=%d changedFields=%d mirrorPending=%zu",
+			reason, filesSeen, applied, totalChanged, mirrorPending.size());
+	}
+
+	// Mirror cheat: the subscriber steps for every snapshot in the store,
+	// regardless of SyncConnections/SyncDeals. Records are not applied.
+	void MirrorAll()
+	{
+		Logger& logger = Logger::GetInstance();
+		if (!pRegion || !pOwnRegionalCity || !pNeighborsSim)
+		{
+			logger.WriteLine(LogLevel::Error, "Mirror: no city loaded.");
+			return;
+		}
+
+		InPullScope scope(inPull);
+		int filesSeen = 0;
+		const std::vector<regionsync::NeighborSnapshot> snapshots = ReadOtherSnapshots("Mirror", filesSeen);
+		logger.WriteLineFormatted(LogLevel::Info, "==== RegionSyncMirror begin: files=%d others=%zu ====", filesSeen, snapshots.size());
+		logger.Flush();
+		for (const regionsync::NeighborSnapshot& snapshot : snapshots)
+		{
+			MirrorSnapshot(snapshot, true, true);
+		}
+		logger.WriteLine(LogLevel::Info, "==== RegionSyncMirror end ====");
 	}
 
 	// Reload: ask the region to re-read neighbor records from disk. This is
@@ -942,31 +1180,26 @@ private:
 			}
 		}
 
-		// This tile's connections and deals
+		// This tile's connections and deals, as a publish would capture them.
 		if (pNeighborsSim)
 		{
-			SC4List<cISC4NeighborConnection*> connections;
-			pNeighborsSim->GetAllConnections(connections);
-			logger.WriteLineFormatted(LogLevel::Info, "Connections from this tile: %zu", static_cast<size_t>(connections.size()));
+			regionsync::NeighborSnapshot own;
+			regionsync::CaptureConnections(pNeighborsSim, own);
+			regionsync::CaptureDeals(pNeighborsSim, pSimulator, own, true);
 
-			for (cISC4NeighborConnection* pConn : connections)
+			logger.WriteLineFormatted(LogLevel::Info, "Connections from this tile: %zu", own.connections.size());
+			for (const regionsync::ConnectionRecord& c : own.connections)
 			{
-				if (!pConn)
-				{
-					continue;
-				}
-				int32_t cx = 0, cz = 0, ox = 0, oz = 0;
-				pConn->GetConnectionCell(cx, cz);
-				pConn->GetRegionCellOnOtherSideOfConnection(ox, oz);
-				cISC4RegionalCity* pOther = pConn->GetCityOnOtherSideOfConnection();
+				logger.WriteLineFormatted(LogLevel::Info, "  %s (%u) inner=(%d,%d) otherTile=(%d,%d)",
+					ConnectionTypeName(static_cast<cISC4NeighborsSimulator::ConnectionType>(c.type)), c.type,
+					c.innerX, c.innerZ, c.otherTileX, c.otherTileZ);
+			}
 
-				logger.WriteLineFormatted(
-					LogLevel::Info,
-					"  %s at cell (%d,%d) -> region cell (%d,%d) '%s' active=%d",
-					ConnectionTypeName(pConn->GetType()),
-					cx, cz, ox, oz,
-					GetRegionalCityName(pOther).c_str(),
-					pConn->GetIsActive() ? 1 : 0);
+			logger.WriteLineFormatted(LogLevel::Info, "Deals (FindDealsAll): %zu", own.deals.size());
+			for (const regionsync::DealRecord& d : own.deals)
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "  deal type=0x%08X otherTile=(%d,%d) amount=%d amountUsed=%d cost=%lld flags=0x%X expiresIn=%d",
+					d.type, d.otherTileX, d.otherTileZ, d.amount, d.amountUsed, static_cast<long long>(d.cost), d.flags, d.expiresIn);
 			}
 
 			logger.WriteLineFormatted(
@@ -974,29 +1207,6 @@ private:
 				"Deal income/month=%lld expense/month=%lld",
 				pNeighborsSim->GetTotalMonthlyNeighborDealIncome(),
 				pNeighborsSim->GetTotalMonthlyNeighborDealExpense());
-		}
-
-		if (pOwnRegionalCity)
-		{
-			SC4List<cISC4NeighborDeal*> deals;
-			pOwnRegionalCity->GetLocalDeals(deals);
-			logger.WriteLineFormatted(LogLevel::Info, "Local deals: %zu", static_cast<size_t>(deals.size()));
-
-			for (cISC4NeighborDeal* pDeal : deals)
-			{
-				if (!pDeal)
-				{
-					continue;
-				}
-				int32_t ox = 0, oz = 0;
-				pDeal->GetRegionCellOnOtherSideOfConnection(ox, oz);
-				logger.WriteLineFormatted(
-					LogLevel::Info,
-					"  deal type=%d amount=%d used=%d cost=%lld flags=0x%X other=(%d,%d) '%s'",
-					pDeal->GetType(), pDeal->GetAmount(), pDeal->GetAmountUsed(),
-					pDeal->GetCost(), pDeal->GetFlags(), ox, oz,
-					GetRegionalCityName(pDeal->GetCityOnOtherSideOfConnection()).c_str());
-			}
 		}
 
 		logger.WriteLine(LogLevel::Info, "==== RegionSyncDump end ====");
@@ -1284,6 +1494,7 @@ private:
 		case kCheatProbeID: Probe(); break;
 		case kCheatDemandID: DemandDump(); break;
 		case kCheatFakeNeighborID: FakeNeighbor(); break;
+		case kCheatMirrorID: MirrorAll(); break;
 		}
 	}
 
@@ -1316,6 +1527,13 @@ private:
 	int32_t fakeNeighborZ = -1;
 	struct FakeSaved { int32_t pop, com, ind, r1, r1x; };
 	FakeSaved fakeSaved{};
+
+	regionsync::NeighborMirror mirror;
+	std::vector<regionsync::NeighborSnapshot> mirrorPending;
+	bool publishDirty = false;
+	bool demandRebaselinePending = false;
+	bool inPull = false;
+	bool sawNewDay = false;
 };
 
 cRZCOMDllDirector* RZGetCOMDllDirector()

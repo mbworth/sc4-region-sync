@@ -157,3 +157,16 @@ Affects cadence and the "publish on shutdown" path. Low risk either way, but wor
 ```
 Region loaded: 'New York'. Store directory: C:\Users\player\Documents\SimCity 4\Plugins\RegionSync\New York
 ```
+
+## Q9. Do connections and deals created live in a running city behave like the ones the game builds at load?
+
+Phase 2 slice 1 (`docs/PLAN-PHASE2.md`). `SyncConnections` and `SyncDeals` stay 0 in the shipped INI until this has an observation. Before any step: back up the region folder on the Windows box, `AutoSaveEveryMonths=0`, and nobody saves in either instance until step 4 says it is safe.
+
+1. Both instances up, A = TuggersVille, B = BumperVille. In A build a road to the shared edge. A's log: connection created, dirty bit, publish on SimNewDay. In B type `RegionSyncMirror`. B's log: converted cell, size in cells, HasConnection, CreateConnection, FindConnection, demand supply before/after. Look at B's edge: arrow, stub, both, neither. Then in A propose a power deal across that connection; in B `RegionSyncMirror` again; B's log: ProposeDeal result, dates, AddDeal, SetAmount, deal flags. Check B's budget line and, a month later, `amountUsed` > 0 (that is the test of whether power flows without an edge tile; the deal's existence alone proves nothing).
+2. Reverse direction.
+3. A quits without saving while B runs: B must change nothing (no removal in slice 1, but confirm the dirty-bit and publish paths do not misbehave on a missing snapshot).
+4. Flip `SyncConnections=1`, `SyncDeals=1`, repeat 1 with no cheats. Then save both, reload both normally, compare deal and connection lists before and after for duplicates. This result decides whether Q4 needs a save lock before slice 2.
+
+Also confirm from the log: `SimNewDay` is `0x66956814` (first one is logged once), `GetCitySize` against the computed `cells`, `dir=0` for single networks, and whether the `0x8A0D15DA` demand rebaseline lands after the game's own re-sum.
+
+**Observed.**

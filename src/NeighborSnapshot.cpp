@@ -14,7 +14,10 @@
 #include <map>
 #include <charconv>
 #include <cstdio>
+#include <cmath>
 #include <cstring>
+#include <limits>
+#include <utility>
 
 namespace
 {
@@ -25,7 +28,7 @@ namespace
 		{
 			char* end = nullptr;
 			double value = std::strtod(text.c_str(), &end);
-			if (end == text.c_str())
+			if (end == text.c_str() || !(std::fabs(value) <= std::numeric_limits<T>::max()))
 			{
 				return false;
 			}
@@ -38,7 +41,7 @@ namespace
 			const char* last = first + text.size();
 			long long value = 0;
 			auto result = std::from_chars(first, last, value);
-			if (result.ec != std::errc())
+			if (result.ec != std::errc() || !std::in_range<T>(value))
 			{
 				return false;
 			}
@@ -76,14 +79,29 @@ namespace
 		return true;
 	}
 
+	// False when the key is absent or its value does not parse into T.
 	template <typename T>
-	void Read(const std::map<std::string, std::string>& kv, const std::string& key, T& out)
+	bool Read(const std::map<std::string, std::string>& kv, const std::string& key, T& out)
 	{
 		auto it = kv.find(key);
-		if (it != kv.end())
+		return it != kv.end() && ParseNumber(it->second, out);
+	}
+
+	// Reads a list count; appends to warning when it is bad or over the cap.
+	size_t ReadCount(const std::map<std::string, std::string>& kv, const std::string& key, std::string& warning)
+	{
+		size_t n = 0;
+		if (!Read(kv, key, n))
 		{
-			ParseNumber(it->second, out);
+			warning += key + " did not parse, list empty; ";
+			return 0;
 		}
+		if (n > regionsync::kMaxListEntries)
+		{
+			warning += key + "=" + std::to_string(n) + " truncated to " + std::to_string(regionsync::kMaxListEntries) + "; ";
+			return regionsync::kMaxListEntries;
+		}
+		return n;
 	}
 }
 
@@ -136,6 +154,37 @@ namespace regionsync
 			out << "rci." << i << ".population=" << s.rciGroups[i].population << '\n';
 		}
 
+		if (s.connectionsKnown)
+		{
+			out << "connectionCount=" << s.connections.size() << '\n';
+			for (size_t i = 0; i < s.connections.size(); i++)
+			{
+				const ConnectionRecord& c = s.connections[i];
+				const std::string p = "connection." + std::to_string(i) + ".";
+				out << p << "type=" << c.type << '\n';
+				out << p << "innerX=" << c.innerX << '\n';
+				out << p << "innerZ=" << c.innerZ << '\n';
+				out << p << "otherTileX=" << c.otherTileX << '\n';
+				out << p << "otherTileZ=" << c.otherTileZ << '\n';
+			}
+		}
+
+		if (s.dealsKnown)
+		{
+			out << "dealCount=" << s.deals.size() << '\n';
+			for (size_t i = 0; i < s.deals.size(); i++)
+			{
+				const DealRecord& d = s.deals[i];
+				const std::string p = "deal." + std::to_string(i) + ".";
+				out << p << "type=" << d.type << '\n';
+				out << p << "otherTileX=" << d.otherTileX << '\n';
+				out << p << "otherTileZ=" << d.otherTileZ << '\n';
+				out << p << "amount=" << d.amount << '\n';
+				out << p << "flags=" << d.flags << '\n';
+				out << p << "expiresIn=" << d.expiresIn << '\n';
+			}
+		}
+
 		std::error_code ec;
 		std::filesystem::create_directories(path.parent_path(), ec);
 
@@ -162,6 +211,7 @@ namespace regionsync
 
 	bool ReadSnapshotFile(const std::filesystem::path& path, NeighborSnapshot& s, std::string& error)
 	{
+		error.clear();
 		std::map<std::string, std::string> kv;
 		if (!LoadKeyValues(path, kv, error))
 		{
@@ -214,6 +264,41 @@ namespace regionsync
 			const std::string prefix = "rci." + std::to_string(i) + ".";
 			Read(kv, prefix + "groupId", s.rciGroups[i].groupId);
 			Read(kv, prefix + "population", s.rciGroups[i].population);
+		}
+
+		s.connectionsKnown = kv.count("connectionCount") != 0;
+		s.connections.clear();
+		if (s.connectionsKnown)
+		{
+			s.connections.resize(ReadCount(kv, "connectionCount", error));
+			for (size_t i = 0; i < s.connections.size(); i++)
+			{
+				ConnectionRecord& c = s.connections[i];
+				const std::string p = "connection." + std::to_string(i) + ".";
+				Read(kv, p + "type", c.type);
+				Read(kv, p + "innerX", c.innerX);
+				Read(kv, p + "innerZ", c.innerZ);
+				Read(kv, p + "otherTileX", c.otherTileX);
+				Read(kv, p + "otherTileZ", c.otherTileZ);
+			}
+		}
+
+		s.dealsKnown = kv.count("dealCount") != 0;
+		s.deals.clear();
+		if (s.dealsKnown)
+		{
+			s.deals.resize(ReadCount(kv, "dealCount", error));
+			for (size_t i = 0; i < s.deals.size(); i++)
+			{
+				DealRecord& d = s.deals[i];
+				const std::string p = "deal." + std::to_string(i) + ".";
+				Read(kv, p + "type", d.type);
+				Read(kv, p + "otherTileX", d.otherTileX);
+				Read(kv, p + "otherTileZ", d.otherTileZ);
+				Read(kv, p + "amount", d.amount);
+				Read(kv, p + "flags", d.flags);
+				Read(kv, p + "expiresIn", d.expiresIn);
+			}
 		}
 
 		return true;

@@ -6,6 +6,11 @@
 
 #include "RegionalCityBridge.h"
 #include "RegionalCity641.h"
+#include "NeighborsSim641.h"
+#include "cIGZDate.h"
+#include "cISC4NeighborConnection.h"
+#include "cISC4NeighborDeal.h"
+#include "cISC4NeighborsSimulator.h"
 #include "cISC4Region.h"
 #include "cISC4RegionalCity.h"
 #include "cISC4Simulator.h"
@@ -228,6 +233,102 @@ namespace regionsync
 		logger.WriteLineFormatted(LogLevel::Info, "Apply: done, changed=%d", changed);
 		logger.Flush();
 		return changed;
+	}
+
+	void CaptureConnections(cISC4NeighborsSimulator* pNeighborsSim, NeighborSnapshot& out)
+	{
+		out.connections.clear();
+		out.connectionsKnown = false;
+		if (!pNeighborsSim)
+		{
+			return;
+		}
+
+		Logger& logger = Logger::GetInstance();
+		SC4List<cISC4NeighborConnection*> list;
+		pNeighborsSim->GetAllConnections(list);
+
+		for (cISC4NeighborConnection* pConn : list)
+		{
+			if (!pConn)
+			{
+				continue;
+			}
+			ConnectionRecord c;
+			c.type = static_cast<uint32_t>(pConn->GetType());
+			const bool innerOk = pConn->GetConnectionInnerCell(c.innerX, c.innerZ);
+			cISC4RegionalCity* pOther = pConn->GetCityOnOtherSideOfConnection();
+			if (!innerOk || !pOther)
+			{
+				logger.WriteLineFormatted(LogLevel::Debug, "Capture: connection type=%u skipped (innerCell ok=%d, other=%p)",
+					c.type, innerOk ? 1 : 0, static_cast<void*>(pOther));
+				continue;
+			}
+			pOther->GetPosition(c.otherTileX, c.otherTileZ);
+			logger.WriteLineFormatted(LogLevel::Debug, "Capture: connection type=%u inner=(%d,%d) otherTile=(%d,%d)",
+				c.type, c.innerX, c.innerZ, c.otherTileX, c.otherTileZ);
+			out.connections.push_back(c);
+		}
+		out.connectionsKnown = true;
+	}
+
+	void CaptureDeals(cISC4NeighborsSimulator* pNeighborsSim, cISC4Simulator* pSimulator, NeighborSnapshot& out, bool displayFields)
+	{
+		out.deals.clear();
+		out.dealsKnown = false;
+		if (!pNeighborsSim)
+		{
+			return;
+		}
+
+		Logger& logger = Logger::GetInstance();
+
+		// The deal date getters copy into a caller-owned date; clone the sim
+		// date to get two such objects.
+		cIGZDate* pSimDate = pSimulator ? pSimulator->GetSimDate() : nullptr;
+		cRZAutoRefCount<cIGZDate> expiration, current;
+		const bool haveDates = pSimDate && pSimDate->Clone(expiration.AsPPObj()) && pSimDate->Clone(current.AsPPObj()) && expiration && current;
+		if (!haveDates)
+		{
+			logger.WriteLine(LogLevel::Info, "Capture: no sim date to clone, deal expiresIn stored as 0");
+		}
+
+		SC4List<cISC4NeighborDeal*> list;
+		ns641::FindDealsAll(pNeighborsSim, list);
+
+		for (cISC4NeighborDeal* pDeal : list)
+		{
+			if (!pDeal)
+			{
+				continue;
+			}
+			DealRecord d;
+			d.type = static_cast<uint32_t>(pDeal->GetType());
+			cISC4RegionalCity* pOther = pDeal->GetCityOnOtherSideOfConnection();
+			if (!pOther)
+			{
+				logger.WriteLineFormatted(LogLevel::Debug, "Capture: deal type=0x%08X skipped (no city on other side)", d.type);
+				continue;
+			}
+			pOther->GetPosition(d.otherTileX, d.otherTileZ);
+			d.amount = pDeal->GetAmount();
+			if (displayFields)
+			{
+				d.amountUsed = pDeal->GetAmountUsed();
+				d.cost = pDeal->GetCost();
+			}
+			d.flags = static_cast<uint32_t>(pDeal->GetFlags()) & ~kDealFlagSilent;
+			if (haveDates)
+			{
+				pDeal->GetExpirationDate(*expiration);
+				pDeal->GetCurrentDate(*current);
+				d.expiresIn = static_cast<int32_t>(expiration->DayNumber()) - static_cast<int32_t>(current->DayNumber());
+			}
+			logger.WriteLineFormatted(LogLevel::Debug, "Capture: deal type=0x%08X otherTile=(%d,%d) amount=%d flags=0x%X expiresIn=%d",
+				d.type, d.otherTileX, d.otherTileZ, d.amount, d.flags, d.expiresIn);
+			out.deals.push_back(d);
+		}
+		out.dealsKnown = true;
 	}
 
 	cISC4RegionalCity* FindRegionalCity(cISC4Region* pRegion, int32_t regionX, int32_t regionZ)

@@ -100,6 +100,8 @@ namespace regionsync
 				}
 				markDealsDirty = ParseBool(sync->get_value("MarkDealsDirty", ""), markDealsDirty);
 				applyRegionalDemand = ParseBool(sync->get_value("ApplyRegionalDemand", ""), applyRegionalDemand);
+				syncConnections = ParseBool(sync->get_value("SyncConnections", ""), syncConnections);
+				syncDeals = ParseBool(sync->get_value("SyncDeals", ""), syncDeals);
 			}
 
 			auto logging = reader.get_section_optional("Logging");

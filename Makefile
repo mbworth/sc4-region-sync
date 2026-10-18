@@ -33,6 +33,7 @@ WIL   = vendor/wil
 SRCS = \
 	src/NeighborSnapshot.cpp \
 	src/RegionalCityBridge.cpp \
+	src/NeighborMirror.cpp \
 	src/SyncSettings.cpp \
 	src/InstanceMutex.cpp \
 	src/RegionSyncDllDirector.cpp \

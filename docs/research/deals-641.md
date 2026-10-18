@@ -98,11 +98,7 @@ Ghidra sources: a copy of `ingame_tests/ghidra`, plus scratch scripts in `deals/
 
 The layout is correct for these calls. The head pointer goes to a 12-byte root; nodes are `{next, prev, value}`; the allocator is the GZ allocator service (`0x3AE4BEA3`/`0x3AE4BEAB`), the same one `SC4List.h` uses. Evidence: `AddDeal`, `FindDeals` and the clear at `0x00421660`. `GetAdjacentCities` clears the list and AddRefs each element.
 
-The earlier crash is more likely one of these:
-- (a) calling header slot 9 `GetPopulation()` on the elements: the binary has `RET 4` (it takes a type), so the stack is unbalanced;
-- (b) using a record after `ReloadCity` replaced it.
-
-`src/RegionSyncDllDirector.cpp:839` still calls `pAdj->GetPopulation()` through the header.
+MSVC overload grouping puts `GetPopulation(type)` at slot 9 and `GetPopulation()` at slot 10 and the binary matches, so the earlier `GetAdjacentCities` element call was correct and the crash cause is still unknown.
 
 ## Risks and unknowns
 
@@ -112,5 +108,16 @@ The earlier crash is more likely one of these:
 - The `ProposeDeal` path needs B to have the matching connection (power pole/pipe; garbage needs a road-type link). Vanilla has the same rule.
 - New A-to-C deals do not appear on B's copy of A's record: there is no public setter for +0x18C. B's demand and capacity reasoning about A sees only deals A has with B.
 - If B saves, B.sc4 contains the mirrored deal, and A's next cold load clones it again. Dedupe via `FindDeals` on load as well.
-- The `cIGZDate` overload order is unverified, so stick to the uniquely named methods.
+- `cIGZDate` slots used by the mirror are verified (table below).
 - `GetDealCost` is evaluated in each process with that process's view of the neighbor's record, so A's cost and B's cost can differ slightly.
+
+## Ownership rules (verified in Ghidra 2026-10-17)
+
+| Call | Reference | Caller does |
+|---|---|---|
+| `ProposeDeal` | out deal is the only reference | `Release` after `AddDeal` |
+| `AddDeal` | `AddRef`s for its list | nothing extra |
+| `FindDeals`, `FindDealsAll`, `GetAllConnections`, `GetLocalDeals` | `AddRef` every element | nothing; `SC4List`'s destructor balances it |
+| `cISC4Simulator::GetSimDate` | borrowed | no `Release` |
+| `cIGZDate::Clone` | new reference | `Release` |
+| `cIGZDate::operator+=`, `DayNumber` | slots 39 and 26, as compiled from the header | nothing |

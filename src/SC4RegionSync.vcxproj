@@ -11,6 +11,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="NeighborMirror.h" />
+    <ClInclude Include="NeighborsSim641.h" />
     <ClInclude Include="NeighborSnapshot.h" />
     <ClInclude Include="RegionalCityBridge.h" />
     <ClInclude Include="SyncSettings.h" />
@@ -29,6 +31,7 @@
     <ClCompile Include="..\vendor\sc4-dll-utilities\sc4-dll-utilities\src\StringConversion.cpp" />
     <ClCompile Include="..\vendor\sc4-dll-utilities\sc4-dll-utilities\src\StringViewUtil.cpp" />
     <ClCompile Include="..\vendor\sc4-dll-utilities\sc4-dll-utilities\src\Utf8TextOFStream.cpp" />
+    <ClCompile Include="NeighborMirror.cpp" />
     <ClCompile Include="NeighborSnapshot.cpp" />
     <ClCompile Include="RegionalCityBridge.cpp" />
     <ClCompile Include="RegionSyncDllDirector.cpp" />
