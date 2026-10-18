@@ -39,6 +39,8 @@ namespace regionsync::savelock
 
 	// Local wall clock, HH:mm:ss.fff.
 	std::string Stamp();
+	// CP_ACP to UTF-16 for mutex names; empty on failure.
+	std::wstring WidenAcp(const std::string& s);
 
 	class Guard
 	{

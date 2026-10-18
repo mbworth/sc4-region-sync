@@ -28,7 +28,7 @@ conflict=0
 writtenUnixTime=1792345678
 ```
 
-(`LoadKeyValues` does not strip inline comments, so values carry none.) `state` is one of `starting`, `region`, `city`. `userDir` is the `-UserDir` argument normalised: no trailing backslash; empty when the game runs without one. No window handle: the launcher finds the window by pid.
+(`LoadKeyValues` does not strip inline comments, so values carry none.) The file is UTF-8; region and city name are converted from the game's strings when written. `state` is one of `starting`, `region`, `city`. `userDir` is the `-UserDir` argument normalised: no trailing backslash; empty when the game runs without one. No window handle: the launcher finds the window by pid.
 
 | Event | state | Notes |
 |---|---|---|
@@ -47,7 +47,7 @@ Code: new game-free `InstanceStatus.{h,cpp}` (struct, `Write`, `Read`, file name
 
 Per-tile named mutex `Local\SC4RegionSync.Tile.<region dir>.<x>_<z>`, same pattern and session scope as `SaveLock`. Created in `PostCityInitComplete` before the status write; `ERROR_ALREADY_EXISTS` means another live instance has this city open: **conflict**. Closed in `PostCityShutdown` and `PreAppShutdown`; the kernel frees it on crash or Exit, so there is no stale state and the check is atomic (the snapshot is not: `PublishOnLoad=0`, simultaneous loads and leftover snapshots all misfire).
 
-In conflict the plugin logs once at Error (`Conflict: tile (x,z) 'Name' is open in pid N since <cityLoadedAt from the snapshot, if any>`), writes `conflict=1`, and the flag is tested **inside** `Publish`, `Pull`, `MirrorSnapshot`, the plugin autosave and the `PostCityShutdown` snapshot remove or publish, so no caller (month, day, dirty publish, mirrorPending, cheats) gets around it. Each refused call logs at Debug. Player saves go through the lock as always; the plugin's own autosave is skipped because a save of the duplicate city would overwrite the first opener's `.sc4`. The guard clears on `PostCityShutdown`. When the holder goes away while we are still in conflict we stay dark (our copy is stale) and log that once. No dialog in the plugin; the launcher shows the warning.
+A conflicting instance closes its own mutex handle at once (a dark duplicate must not keep the tile alive after the holder leaves) and keeps only the name for the "holder went away" probe (`OpenMutexW`). In conflict the plugin logs once at Error (`Conflict: tile (x,z) 'Name' is open in pid N since <cityLoadedAt from the snapshot, if any>`), writes `conflict=1`, and the flag is tested **inside** `Publish`, `Pull`, `MirrorSnapshot`, the plugin autosave and the `PostCityShutdown` snapshot remove or publish, so no caller (month, day, dirty publish, mirrorPending, cheats) gets around it. Each refused call logs at Debug. Player saves go through the lock as always; the plugin's own autosave is skipped because a save of the duplicate city would overwrite the first opener's `.sc4`. The guard clears on `PostCityShutdown`. When the holder goes away while we are still in conflict we stay dark (our copy is stale) and log that once. No dialog in the plugin; the launcher shows the warning.
 
 Nothing can cancel a city load from a plugin, and the player can open any tile from any region view; refusing to write is what prevents two writers for one tile.
 
@@ -59,30 +59,30 @@ Plain Win32, x86, built by the existing clang-cl plus xwin pipeline as `make lau
 
 One window: a report-style ListView (columns: instance, state, tile, pid), a toolbar with **Launch** and **Refresh**, a status bar with the resource line. No Close button in this slice: `WM_CLOSE` on the game is untested (does it prompt to save, drop progress, fire `PreAppShutdown`, land inside a held save lock) and the in-game Exit works. Q14 step 5 tests it before slice 2 adds it.
 
-Settings `launcher.ini` next to the exe, created with defaults on first run: `GameExe`, `UserDirRoot` (`Documents\SimCity 4 Instances`), `StatusDirectory` (`Documents\SimCity 4\Plugins\RegionSync\_instances`; set it by hand when the plugin INI sets `StoreDirectory`), `ExtraArgs` (`-w -CustomResolution:enabled -r1600x900x32 -intro:off`), `PerInstanceRamMb` (3500), `ReserveCores` (1), `ReserveRamMb` (4096), `MaxInstances` (16).
+Settings `launcher.ini` next to the exe, created with defaults on first run: `GameExe`, `UserDirRoot` (`Documents\SimCity 4 Instances`), `StatusDirectory` (`Documents\SimCity 4\Plugins\RegionSync\_instances`; set it by hand when the plugin INI sets `StoreDirectory`), `ExtraArgs` (`-w -CustomResolution:enabled -r1600x900x32 -intro:off`), `PerInstanceRamMb` (3500), `ReserveCores` (1), `ReserveRamMb` (4096), `MaxInstances` (16), `WindowClass` (empty = any, filled in once Q14 records the game's class). Refresh re-reads the file.
 
 ### Discovery (every second)
 
-Read `_instances\*.status` with share-delete opens; a failed read keeps the row from the previous tick. Writer liveness by pid and creation time with `PROCESS_QUERY_LIMITED_INFORMATION` only; `Unknown` (access denied) counts as alive; only `Dead` files are deleted. Main window per pid: visible, unowned, the game's window class (read once with Spy++ and recorded in Q14), cached and rechecked with `IsWindow` each tick; "starting (no window)" until found. Rows are labelled from the status file (`Instance1`, from the userDir's last component, or the pid when it is empty), so task-started and hand-started instances appear too. A conflict row shows `CONFLICT` and the holding pid in the tile column.
+Read `_instances\*.status` with share-delete opens; a failed read keeps the row from the previous tick. Writer liveness by pid and creation time with `PROCESS_QUERY_LIMITED_INFORMATION` only; `Unknown` (access denied) counts as alive; only `Dead` files are deleted. Main window per pid: visible, unowned, the game's window class (read once with Spy++ and recorded in Q14), cached and rechecked with `IsWindow` each tick; "starting (no window)" until found. Rows are labelled from the status file (`Instance1`, from the userDir's last component, or the pid when it is empty), so task-started and hand-started instances appear too. A conflict row shows `CONFLICT` and, when another live non-conflicting status names the same region and tile, that holder's pid in the tile column.
 
 ### Launch
 
 Preconditions, each with a message when it fails: `GameExe` exists; `steam_appid.txt` exists next to a `steamapps` exe (the launcher never writes under Program Files: a 32-bit write there gets virtualised and the game never sees it, Q5 created the file by hand); `steam.exe` running for a Steam exe; `ExtraArgs` contains `-w` (a fullscreen DirectDraw instance switches display modes when raised); no launch in flight; the resource line is not red; `MaxInstances` not reached; a free `InstanceN`.
 
-A free `InstanceN` is an existing dir under `UserDirRoot` (created once by `scripts/Setup-MultiInstance.ps1 -Setup -Instances 16`, which stays the only place that builds the layout) whose normalised path (case-insensitive, no trailing backslash) matches no live status file and no pending launch. Pending launches are an in-memory map user dir -> pid, kept until that pid's status file appears, the pid exits, or 60 s pass (then a message). While one is pending, Launch is disabled: the game closes its single-instance mutex only in `PostAppInit`, so a second exe started before that finds the mutex and quits silently (Q5).
+A free `InstanceN` is an existing dir under `UserDirRoot` (created once by `scripts/Setup-MultiInstance.ps1 -Setup -Instances 16`, which stays the only place that builds the layout) whose normalised path (case-insensitive, no trailing backslash) matches no live status file and no pending launch. Pending launches are an in-memory map user dir -> pid, kept until that pid's status file appears or the pid exits; after 60 s a message is shown and Launch is re-enabled, but the dir stays reserved until the pid exits. A pid that exits with no status file is reported once (Q5's silent quit). Paths are compared after full-path and long-name normalisation, case-insensitive, no trailing backslash. While one is pending, Launch is disabled: the game closes its single-instance mutex only in `PostAppInit`, so a second exe started before that finds the mutex and quits silently (Q5).
 
 Command line built by hand, no quoting helper (Q5): `"<exe>" -UserDir:"<dir>\" <ExtraArgs>`, `CreateProcessW` with the exe's folder as working directory.
 
 ### Raise
 
-Click or double-click on a row: `ShowWindow(SW_RESTORE)` when `IsIconic`, then `SetForegroundWindow` (the launcher is the foreground process at that moment, so no `AllowSetForegroundWindow`). Nothing is hidden or reparented; the other instances keep running and simulating unfocused (Q13 logs). The grid (slice 2) adds DWM thumbnails of the same windows, view only, click to raise.
+Click, double-click or Enter on a row: `ShowWindowAsync(SW_RESTORE)` when `IsIconic`, then `SetForegroundWindow` (the launcher is the foreground process at that moment, so no `AllowSetForegroundWindow`). Nothing is hidden or reparented; the other instances keep running and simulating unfocused (Q13 logs). The grid (slice 2) adds DWM thumbnails of the same windows, view only, click to raise.
 
 ### Resource line
 
 Sampled every 5 s (the 1 s tick only reads files and windows):
 
 - **Need per instance** = max(`PerInstanceRamMb`, largest `WorkingSetSize` seen among running instances this session). An instance at the region view is far smaller than one with a big city, hence the floor.
-- **RAM room** = `(ullAvailPhys - ReserveRamMb) / need`; **commit room** = `(ullAvailPageFile - ReserveRamMb) / largest PrivateUsage`. Memory room is the smaller.
+- **RAM room** = `(ullAvailPhys - ReserveRamMb) / need`; **commit room** = `(ullAvailPageFile - ReserveRamMb) / max(PerInstanceRamMb, largest PrivateUsage)`. Memory room is the smaller.
 - **CPU room** = physical cores (`GetLogicalProcessorInformationEx`) minus `ReserveCores` minus one per running instance, whatever its current load (paused instances unpause together). The 5 s `GetSystemTimes` idle figure is shown, and under one core's worth turns the line amber.
 - **Room** = min(memory room, CPU room, `MaxInstances` - running). Text: `N running, ~M more at full speed (estimate)`; tooltip names the binding resource and the three raw numbers.
 - Colours: red = memory room 0 (launch refused, numbers in a message box); amber = CPU room 0 or idle under one core (launch allowed, the next one slows everyone); green otherwise. No prompt on amber.

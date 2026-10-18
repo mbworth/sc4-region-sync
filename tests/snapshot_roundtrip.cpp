@@ -1,6 +1,7 @@
-// Round-trip test for NeighborSnapshot. Game-free, Windows-free.
-//   make test   (or: g++ -std=c++20 -I src tests/snapshot_roundtrip.cpp src/NeighborSnapshot.cpp -o snap && ./snap <scratch dir>)
+// Round-trip test for NeighborSnapshot and InstanceStatus. Game-free, Windows-free.
+//   make test   (or: g++ -std=c++20 -I src tests/snapshot_roundtrip.cpp src/NeighborSnapshot.cpp src/InstanceStatus.cpp -o snap && ./snap <scratch dir>)
 #include "NeighborSnapshot.h"
+#include "InstanceStatus.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -290,6 +291,68 @@ int main(int argc, char** argv)
 	NeighborSnapshot c;
 	CHECK(!ReadSnapshotFile(dir / "missing.snapshot", c, error));
 	CHECK(!error.empty());
+
+	// Instance status: every field, then the region state drops the city keys.
+	{
+		InstanceStatus st;
+		st.writer = { "GAMEBOX", 29420, 134368212816162474ULL };
+		st.userDir = "C:\\Users\\player\\Documents\\SimCity 4 Instances\\Instance1";
+		st.state = "city";
+		st.region = "New York";
+		st.regionX = 4; st.regionZ = 6;
+		st.cityName = "Bumper=Ville";
+		st.conflict = true;
+		st.writtenUnixTime = 1792345678;
+		CHECK(InstanceStatusFileName(29420, 134368212816162474ULL) == "29420-134368212816162474.status");
+		const std::filesystem::path sp = dir / InstanceStatusFileName(st.writer.pid, st.writer.start);
+		CHECK(WriteInstanceStatus(sp, st, error));
+		CHECK(!std::filesystem::exists(sp.string() + ".tmp"));
+		InstanceStatus rt;
+		CHECK(ReadInstanceStatus(sp, rt, error));
+		CHECK(error.empty());
+		CHECK(rt.schemaVersion == 1);
+		CHECK(rt.writer.host == st.writer.host && rt.writer.pid == st.writer.pid && rt.writer.start == st.writer.start);
+		CHECK(rt.userDir == st.userDir && rt.state == "city" && rt.region == "New York");
+		CHECK(rt.regionX == 4 && rt.regionZ == 6 && rt.cityName == "Bumper=Ville" && rt.conflict);
+		CHECK(rt.writtenUnixTime == st.writtenUnixTime);
+
+		st.state = "region";
+		st.userDir = "";
+		CHECK(WriteInstanceStatus(sp, st, error));
+		CHECK(ReadInstanceStatus(sp, rt, error));
+		CHECK(rt.state == "region" && rt.region == "New York" && rt.userDir.empty());
+		CHECK(rt.regionX == -1 && rt.regionZ == -1 && rt.cityName.empty() && !rt.conflict);
+
+		st.writer = { "", 1, 1 };   // unknown writer: no identity keys; newlines flattened
+		st.state = "city";
+		st.cityName = "a\nb";
+		CHECK(WriteInstanceStatus(sp, st, error));
+		CHECK(ReadInstanceStatus(sp, rt, error) && !rt.writer.Known() && rt.cityName == "a b");
+
+		// Reaper rule.
+		InstanceStatus live;
+		live.writer = { "PC1", 29420, 134368212816162474ULL };
+		const std::string own = "29420-134368212816162474.status";
+		CHECK(IsReapable(own, live, "PC1"));
+		CHECK(IsReapable(own + ".tmp", live, "PC1"));
+		CHECK(!IsReapable(own, live, "PC2"));                                  // foreign host
+		CHECK(!IsReapable(own, live, ""));
+		CHECK(!IsReapable("29420-134368212816162475.status", live, "PC1"));   // start mismatch
+		CHECK(!IsReapable("29421-134368212816162474.status", live, "PC1"));   // pid mismatch
+		CHECK(!IsReapable("junk.status", live, "PC1") && !IsReapable("29420-x.status", live, "PC1"));
+		InstanceStatus truncated;
+		truncated.writer = { "PC1", 29, 0 };                                  // half-written pid, no start
+		CHECK(!IsReapable(own + ".tmp", truncated, "PC1"));
+		{
+			std::ofstream(dir / "half.status") << "host=PC1\npid=294";
+			InstanceStatus half;
+			CHECK(ReadInstanceStatus(dir / "half.status", half, error));
+			CHECK(!IsReapable(own, half, "PC1"));
+		}
+
+		CHECK(!ReadInstanceStatus(dir / "missing.status", rt, error));
+		CHECK(!error.empty());
+	}
 
 	std::filesystem::remove_all(dir);
 	std::printf(failures ? "FAILED (%d)\n" : "OK\n", failures);

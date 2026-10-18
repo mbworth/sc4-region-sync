@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="EdgeNetwork.h" />
+    <ClInclude Include="InstanceStatus.h" />
     <ClInclude Include="NeighborMirror.h" />
     <ClInclude Include="NeighborsSim641.h" />
     <ClInclude Include="NeighborSnapshot.h" />
@@ -19,6 +20,7 @@
     <ClInclude Include="SaveHook641.h" />
     <ClInclude Include="SaveLock.h" />
     <ClInclude Include="SyncSettings.h" />
+    <ClInclude Include="TileLock.h" />
     <ClInclude Include="WriterIdentity.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="version.h" />
@@ -39,6 +41,7 @@
     <ClCompile Include="..\vendor\sc4-dll-utilities\sc4-dll-utilities\src\StringViewUtil.cpp" />
     <ClCompile Include="..\vendor\sc4-dll-utilities\sc4-dll-utilities\src\Utf8TextOFStream.cpp" />
     <ClCompile Include="EdgeNetwork.cpp" />
+    <ClCompile Include="InstanceStatus.cpp" />
     <ClCompile Include="NeighborMirror.cpp" />
     <ClCompile Include="NeighborSnapshot.cpp" />
     <ClCompile Include="RegionalCityBridge.cpp" />
@@ -46,6 +49,7 @@
     <ClCompile Include="SaveHook641.cpp" />
     <ClCompile Include="SaveLock.cpp" />
     <ClCompile Include="SyncSettings.cpp" />
+    <ClCompile Include="TileLock.cpp" />
     <ClCompile Include="WriterIdentity.cpp" />
   </ItemGroup>
   <ItemGroup>

@@ -18,18 +18,6 @@ namespace
 	bool timedOut = false;    // wait 0 ms until an Acquire succeeds
 	ULONGLONG acquiredAt = 0;
 
-	std::wstring Widen(const std::string& s)
-	{
-		const int n = MultiByteToWideChar(CP_ACP, 0, s.c_str(), static_cast<int>(s.size()), nullptr, 0);
-		if (n <= 0)
-		{
-			return {};
-		}
-		std::wstring out(static_cast<size_t>(n), L'\0');
-		MultiByteToWideChar(CP_ACP, 0, s.c_str(), static_cast<int>(s.size()), out.data(), n);
-		return out;
-	}
-
 	const char* Label(const char* who) { return who ? who : "?"; }
 
 	// Never throws, so lock state stays consistent if logging fails.
@@ -53,6 +41,18 @@ namespace
 
 namespace regionsync::savelock
 {
+	std::wstring WidenAcp(const std::string& s)
+	{
+		const int n = MultiByteToWideChar(CP_ACP, 0, s.c_str(), static_cast<int>(s.size()), nullptr, 0);
+		if (n <= 0)
+		{
+			return {};
+		}
+		std::wstring out(static_cast<size_t>(n), L'\0');
+		MultiByteToWideChar(CP_ACP, 0, s.c_str(), static_cast<int>(s.size()), out.data(), n);
+		return out;
+	}
+
 	std::string Stamp()
 	{
 		FILETIME utc{}, local{};
@@ -82,7 +82,7 @@ namespace regionsync::savelock
 			return false;
 		}
 
-		const std::wstring wide = Widen(name);
+		const std::wstring wide = WidenAcp(name);
 		mutex = wide.empty() ? nullptr : CreateMutexW(nullptr, FALSE, wide.c_str());
 		const DWORD error = GetLastError();
 		if (!mutex)

@@ -4,6 +4,7 @@
 #
 #   make            -> build/SC4RegionSync.dll (Release)
 #   make debug      -> build/SC4RegionSync.debug.dll
+#   make launcher   -> build/SC4RegionSyncLauncher.exe
 #   make clean
 #
 # Override XWIN if you put the splat somewhere else:
@@ -32,6 +33,7 @@ WIL   = vendor/wil
 
 SRCS = \
 	src/NeighborSnapshot.cpp \
+	src/InstanceStatus.cpp \
 	src/RegionalCityBridge.cpp \
 	src/NeighborMirror.cpp \
 	src/EdgeNetwork.cpp \
@@ -39,6 +41,7 @@ SRCS = \
 	src/InstanceMutex.cpp \
 	src/WriterIdentity.cpp \
 	src/SaveLock.cpp \
+	src/TileLock.cpp \
 	src/SaveHook641.cpp \
 	src/RegionSyncDllDirector.cpp \
 	$(GZCOM)/src/cRZBaseString.cpp \
@@ -83,7 +86,7 @@ LIBS = version.lib ole32.lib user32.lib
 
 RES = $(BUILD)/version.res
 
-.PHONY: all release debug clean check-toolchain test deploy logs
+.PHONY: all release debug launcher clean check-toolchain test deploy logs
 
 all: release
 
@@ -113,13 +116,34 @@ debug: check-toolchain $(RES)
 		/link $(MSVC_LIBPATHS) $(LIBS) $(RES) /DLL /DEBUG /OUT:$(BUILD)/SC4RegionSync.debug.dll
 	@echo "Built $(BUILD)/SC4RegionSync.debug.dll"
 
+# Launcher: a plain Win32 exe, static CRT, its own flags (no /LD, no plugin defines).
+LAUNCHER_SRCS = launcher/main.cpp launcher/Status.cpp launcher/Settings.cpp \
+	launcher/Resources.cpp launcher/Launch.cpp src/WriterIdentity.cpp
+LAUNCHER_FLAGS = -target i386-pc-windows-msvc -fuse-ld=lld-link -ferror-limit=20 \
+	/std:c++20 /EHsc /W3 /Gy /Gd /MT /O2 /Oi \
+	/D WIN32 /D _UNICODE /D UNICODE /D NDEBUG /D NOMINMAX \
+	/D _WIN32_WINNT=0x0A00 /D WINVER=0x0A00 \
+	/I launcher /I src $(MSVC_INCLUDES)
+LAUNCHER_LIBS = kernel32.lib user32.lib gdi32.lib comctl32.lib shell32.lib psapi.lib dwmapi.lib
+LAUNCHER_RES = $(BUILD)/launcher.res
+LAUNCHER_EXE = $(BUILD)/SC4RegionSyncLauncher.exe
+
+# launcher.rc is UTF-8, so no iconv step.
+$(LAUNCHER_RES): launcher/launcher.rc launcher/launcher.manifest src/version.h | $(BUILD)
+	$(LLVM_RC) /I launcher /I src /FO $@ launcher/launcher.rc
+
+launcher: check-toolchain $(LAUNCHER_RES)
+	$(CLANG_CL) $(LAUNCHER_FLAGS) /o $(LAUNCHER_EXE) $(LAUNCHER_SRCS) \
+		/link $(MSVC_LIBPATHS) $(LAUNCHER_LIBS) $(LAUNCHER_RES) /SUBSYSTEM:WINDOWS /OUT:$(LAUNCHER_EXE)
+	@echo "Built $(LAUNCHER_EXE)"
+
 clean:
 	rm -rf $(BUILD) src/*.obj *.obj
 
-# Host-side unit test for the game-free snapshot format.
+# Host-side unit test for the game-free snapshot and status formats.
 test:
 	mkdir -p $(BUILD)
-	g++ -std=c++20 -Wall -I src tests/snapshot_roundtrip.cpp src/NeighborSnapshot.cpp -o $(BUILD)/snapshot_roundtrip
+	g++ -std=c++20 -Wall -I src tests/snapshot_roundtrip.cpp src/NeighborSnapshot.cpp src/InstanceStatus.cpp -o $(BUILD)/snapshot_roundtrip
 	$(BUILD)/snapshot_roundtrip $(BUILD)/snapshot-test
 
 # ---------------------------------------------------------------------------
@@ -129,11 +153,15 @@ test:
 SC4_HOST    ?= user@gamebox
 SC4_PLUGINS ?= C:/Users/player/Documents/SimCity 4/Plugins
 SC4_INSTANCES ?= C:/Users/player/Documents/SimCity 4 Instances
+SC4_LAUNCHER ?= C:/Users/player/SC4RegionSyncLauncher
 
-deploy: release
-	@ssh -o BatchMode=yes $(SC4_HOST) 'if (Get-Process "SimCity 4" -ErrorAction SilentlyContinue) { Write-Error "SimCity 4 is running; close it first"; exit 1 }'
+deploy: release launcher
+	@ssh -o BatchMode=yes $(SC4_HOST) 'if (Get-Process "SimCity 4" -ErrorAction SilentlyContinue) { Write-Error "SimCity 4 is running; close it first"; exit 1 }; if (Get-Process "SC4RegionSyncLauncher" -ErrorAction SilentlyContinue) { Write-Error "SC4RegionSyncLauncher is running; close it first"; exit 1 }'
 	scp -o BatchMode=yes -q $(BUILD)/SC4RegionSync.dll $(BUILD)/SC4RegionSync.ini "$(SC4_HOST):$(SC4_PLUGINS)/"
 	@echo "Deployed to $(SC4_HOST):$(SC4_PLUGINS)"
+	@ssh -o BatchMode=yes $(SC4_HOST) 'New-Item -ItemType Directory -Force -Path "$(SC4_LAUNCHER)" | Out-Null'
+	scp -o BatchMode=yes -q $(LAUNCHER_EXE) "$(SC4_HOST):$(SC4_LAUNCHER)/"
+	@echo "Deployed launcher to $(SC4_HOST):$(SC4_LAUNCHER)"
 
 logs:
 	@mkdir -p ingame_tests

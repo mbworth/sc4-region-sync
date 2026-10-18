@@ -38,14 +38,18 @@ Or open `src\SC4RegionSync.sln` in Visual Studio, pick Release | x86, and build.
 
 Copy `SC4RegionSync.dll` and `SC4RegionSync.ini` into `<game install>\Plugins` (or `Documents\SimCity 4\Plugins`; both load). The plugin writes `SC4RegionSync.log` next to the DLL. With the multi-instance script both locations are shared between instances, and each instance's log goes into its own user dir.
 
-## Running two instances
+## Running several instances
 
 ```
 powershell -ExecutionPolicy Bypass -File scripts\Setup-MultiInstance.ps1 -GameExe "C:\...\Apps\SimCity 4.exe" -Setup
 powershell -ExecutionPolicy Bypass -File scripts\Setup-MultiInstance.ps1 -GameExe "C:\...\Apps\SimCity 4.exe" -Launch -ExtraArgs "-w -CustomResolution:enabled -r1600x900x32"
 ```
 
-Setup makes a private user dir per instance under `Documents\SimCity 4 Instances\InstanceN` with its own Albums and preferences, and junctions back to your real `Regions` and `Plugins` folders. Launch starts each instance with `-UserDir` pointing at its own dir. Open a different tile in each instance. The game normally refuses a second copy: the plugin closes the game's single-instance mutex at startup (`ReleaseInstanceMutexOnStart=1`), and on Steam, Setup also drops a `steam_appid.txt` next to the exe so the launch does not go back through Steam.
+Setup makes a private user dir per instance under `Documents\SimCity 4 Instances\InstanceN` with its own Albums and preferences, and junctions back to your real `Regions` and `Plugins` folders. Launch starts each instance with `-UserDir` pointing at its own dir. Open a different tile in each instance; if two instances open the same tile the second logs `Conflict:` and stops publishing and pulling until that city is closed (the first opener keeps the tile, the game's own save still works). The game normally refuses a second copy: the plugin closes the game's single-instance mutex at startup (`ReleaseInstanceMutexOnStart=1`), and on Steam, Setup also drops a `steam_appid.txt` next to the exe so the launch does not go back through Steam.
+
+### Launcher
+
+`build/SC4RegionSyncLauncher.exe` (`make launcher`, deployed to `C:\Users\<you>\SC4RegionSyncLauncher\`) lists every running instance with its state and open tile, raises an instance's window on click, and starts the next free `InstanceN` with **Launch**. Run `Setup-MultiInstance.ps1 -Setup -Instances 16` once to create the user dirs it picks from. The status bar estimates how many more instances fit (free RAM and commit against the largest running instance, physical cores minus one per instance); red refuses a launch, amber only warns. Settings live in `launcher.ini` next to the exe. Each instance writes `Plugins\RegionSync\_instances\<pid>-<start>.status` for the launcher; instances started any other way show up too.
 
 ## Cheat console commands
 

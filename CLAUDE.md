@@ -6,7 +6,7 @@ Agent onboarding for sc4-region-sync. Read this top to bottom before doing anyth
 
 A SimCity 4 DLL plugin (x86 Windows, C++20) that syncs the per-tile regional summary records between several running game instances, so the player can play multiple cities in one region at once and each city sees the others' growth without reloading. The host game is closed source and version-locked to 1.1.641.
 
-Status (2026-10-17): builds on Linux, runs in two instances, Phase 1 and 1b done (records sync both ways and move the demand simulator). Phase 2 connections and deals done 2026-10-18: live mirroring of single-network connections with edge stubs, deals with amount follow, removals, writer liveness. Save lock (Q4, mutex plus SaveCity slot wrapper) and dual-lane mirroring (Q12) observed in game 2026-10-18; ferry is logged, not mirrored. Autosave verified safe with two instances (Q4 step 8). Three instances verified (Q13) and the ferry log line observed, same day. Q1 closed. `docs/PHASES.md` has the checkboxes.
+Status (2026-10-17): builds on Linux, runs in two instances, Phase 1 and 1b done (records sync both ways and move the demand simulator). Phase 2 connections and deals done 2026-10-18: live mirroring of single-network connections with edge stubs, deals with amount follow, removals, writer liveness. Save lock (Q4, mutex plus SaveCity slot wrapper) and dual-lane mirroring (Q12) observed in game 2026-10-18; ferry is logged, not mirrored. Autosave verified safe with two instances (Q4 step 8). Three instances verified (Q13) and the ferry log line observed, same day. Q1 closed. Coordinator slice 1 (status file, tile guard, `launcher/`) implemented 2026-10-18, Q14 not yet run. `docs/PHASES.md` has the checkboxes.
 
 ## Read in this order
 
@@ -16,7 +16,7 @@ Status (2026-10-17): builds on Linux, runs in two instances, Phase 1 and 1b done
 4. `docs/PHASES.md`: ordered plan with exit criteria and current position.
 5. `src/RegionSyncDllDirector.cpp`: the entry point. Everything else is a helper.
 
-Then skim `vendor/gzcom-dll/gzcom-dll/include/` for `cISC4RegionalCity.h`, `cISC4NeighborsSimulator.h`, `cISC4Region.h`, `cISC4App.h`, `cISC4Simulator.h`. Those five headers are the whole surface Phase 1 uses. Phase 2 adds `cISC4NeighborDeal.h` and `cISC4NeighborConnection.h`.
+Then skim `vendor/gzcom-dll/gzcom-dll/include/` for `cISC4RegionalCity.h`, `cISC4NeighborsSimulator.h`, `cISC4Region.h`, `cISC4App.h`, `cISC4Simulator.h`. Those five headers are the whole surface Phase 1 uses. Phase 2 adds `cISC4NeighborDeal.h` and `cISC4NeighborConnection.h`. `launcher/` is a separate Win32 exe (`make launcher`) that only reads the `_instances` status files; it never links the game headers.
 
 ## First session checklist (Linux box)
 

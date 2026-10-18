@@ -34,6 +34,8 @@
 #include "WriterIdentity.h"
 #include "SaveLock.h"
 #include "SaveHook641.h"
+#include "InstanceStatus.h"
+#include "TileLock.h"
 
 #include "cIGZCheatCodeManager.h"
 #include "cIGZCOM.h"
@@ -68,6 +70,7 @@
 #include <Windows.h>
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <cwctype>
 #include <filesystem>
 #include <optional>
@@ -157,10 +160,8 @@ namespace
 		}
 	}
 
-	// With Setup-MultiInstance.ps1 every instance shares one Plugins folder,
-	// so a log next to the DLL would be fought over by two processes. When
-	// the game was started with -UserDir:"<dir>" the log goes there instead.
-	std::filesystem::path LogFilePath()
+	// The -UserDir:"<dir>" argument as given; empty without one.
+	std::wstring UserDirFromCommandLine()
 	{
 		std::wstring cmd = GetCommandLineW();
 		std::wstring lower = cmd;
@@ -177,13 +178,55 @@ namespace
 			const bool quoted = pos < cmd.size() && cmd[pos] == L'"';
 			if (quoted) pos++;
 			const size_t end = cmd.find((quoted || quoteBefore) ? L'"' : L' ', pos);
-			std::wstring dir = cmd.substr(pos, end == std::wstring::npos ? std::wstring::npos : end - pos);
-			if (!dir.empty())
-			{
-				return std::filesystem::path(dir) / L"SC4RegionSync.log";
-			}
+			return cmd.substr(pos, end == std::wstring::npos ? std::wstring::npos : end - pos);
 		}
-		return FileSystem::GetDllLogFilePath();
+		return {};
+	}
+
+	// With Setup-MultiInstance.ps1 every instance shares one Plugins folder,
+	// so a log next to the DLL would be fought over by two processes. When
+	// the game was started with -UserDir:"<dir>" the log goes there instead.
+	std::filesystem::path LogFilePath()
+	{
+		const std::wstring dir = UserDirFromCommandLine();
+		return dir.empty() ? FileSystem::GetDllLogFilePath() : std::filesystem::path(dir) / L"SC4RegionSync.log";
+	}
+
+	std::string ToUtf8(const std::wstring& s)
+	{
+		const int n = WideCharToMultiByte(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()), nullptr, 0, nullptr, nullptr);
+		if (n <= 0)
+		{
+			return {};
+		}
+		std::string out(static_cast<size_t>(n), '\0');
+		WideCharToMultiByte(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()), out.data(), n, nullptr, nullptr);
+		return out;
+	}
+
+	// FILETIME (UTC) as local "YYYY-MM-DD HH:MM:SS".
+	std::string FormatFileTime(uint64_t value)
+	{
+		FILETIME utc{ static_cast<DWORD>(value), static_cast<DWORD>(value >> 32) }, local{};
+		SYSTEMTIME st{};
+		if (!FileTimeToLocalFileTime(&utc, &local) || !FileTimeToSystemTime(&local, &st))
+		{
+			return "?";
+		}
+		char buffer[32];
+		snprintf(buffer, sizeof(buffer), "%04u-%02u-%02u %02u:%02u:%02u", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+		return buffer;
+	}
+
+	// Region and city names come from the game in the ANSI code page; the status file is UTF-8.
+	std::string AcpToUtf8(const std::string& s)
+	{
+		return ToUtf8(regionsync::savelock::WidenAcp(s));
+	}
+
+	bool IsStatusFile(const std::filesystem::path& p)
+	{
+		return p.extension() == ".status" || (p.extension() == ".tmp" && p.stem().extension() == ".status");
 	}
 
 	std::string GetRegionalCityName(cISC4RegionalCity* pCity)
@@ -343,6 +386,21 @@ public:
 			Unlock("startup");
 		}
 
+		// Last, so a present status file means the next exe can start.
+		try
+		{
+			InitStatus();
+		}
+		catch (const std::exception& e)
+		{
+			logger.WriteLineFormatted(LogLevel::Error, "Status: init threw: %s", e.what());
+		}
+		catch (...)
+		{
+			logger.WriteLine(LogLevel::Error, "Status: init threw a non-standard exception.");
+		}
+		logger.Flush();
+
 		return true;
 	}
 
@@ -358,6 +416,14 @@ public:
 				Logger::GetInstance().WriteLine(LogLevel::Info, "HoldLock: released at app shutdown.");
 			}
 			regionsync::savelock::Close();
+			regionsync::tilelock::Close();
+			if (!statusPath.empty())
+			{
+				std::error_code ec;
+				const bool removed = std::filesystem::remove(statusPath, ec);
+				Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "Status: %s %s", statusPath.string().c_str(), removed ? "removed" : "not removed");
+				statusPath.clear();   // no later SetStatus recreates it
+			}
 			Logger::GetInstance().Flush();
 		}
 		catch (...)
@@ -418,7 +484,18 @@ public:
 			PostCityInit(pStandardMsg);
 			break;
 		case kSC4MessagePostCityInitComplete:
-			PostCityInitComplete();
+			try
+			{
+				PostCityInitComplete();
+			}
+			catch (const std::exception& e)
+			{
+				Logger::GetInstance().WriteLineFormatted(LogLevel::Error, "PostCityInitComplete threw: %s", e.what());
+			}
+			catch (...)
+			{
+				Logger::GetInstance().WriteLine(LogLevel::Error, "PostCityInitComplete threw a non-standard exception.");
+			}
 			break;
 		case kSC4MessagePostCityShutdown:
 			try
@@ -508,6 +585,9 @@ private:
 			{
 				regionsync::savelock::Open(regionDirectoryName);
 			}
+
+			status.region = AcpToUtf8(regionDirectoryName);
+			SetStatus("region", "region init");
 		}
 	}
 
@@ -517,6 +597,7 @@ private:
 		regionsync::savelock::Close();
 		pRegion = nullptr;
 		regionDirectoryName.clear();
+		SetStatus("starting", "region shutdown");
 	}
 
 	// Per-city-session state; cleared on city init and shutdown.
@@ -596,6 +677,36 @@ private:
 			static_cast<void*>(pNeighborsSim),
 			static_cast<void*>(pSimulator));
 		logger.Flush();
+
+		// Tile guard first, then status, then the load publish (which it may refuse).
+		const std::string cityName = GetRegionalCityName(pOwnRegionalCity);
+		if (conflict && guardCity == pCity && guardX == x && guardZ == z)
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "TileLock: city load again for (%d,%d), conflict kept, Open skipped.", x, z);
+		}
+		else if (!pOwnRegionalCity || regionDirectoryName.empty())
+		{
+			regionsync::tilelock::Close();
+			conflict = false;
+			logger.WriteLine(LogLevel::Info, "TileLock: guard skipped (no regional city or region name).");
+		}
+		else
+		{
+			conflict = regionsync::tilelock::Open(regionDirectoryName, x, z);
+			conflictHolderGone = false;
+			guardCity = pCity;
+			guardX = x;
+			guardZ = z;
+			if (conflict)
+			{
+				LogConflict(x, z, cityName);
+			}
+		}
+		status.regionX = x;
+		status.regionZ = z;
+		status.cityName = AcpToUtf8(cityName);
+		status.conflict = conflict;
+		SetStatus("city", "city load");
 
 		DiscoverRegionalDemand();
 
@@ -808,7 +919,8 @@ private:
 
 	void PostCityShutdown()
 	{
-		if (settings.enabled && pCity && pOwnRegionalCity)
+		// In conflict the snapshot belongs to the first opener.
+		if (settings.enabled && pCity && pOwnRegionalCity && !ConflictRefuses("Shutdown", "snapshot"))
 		{
 			if (settings.publishOnShutdown)
 			{
@@ -834,6 +946,12 @@ private:
 			regionsync::savelock::Release("hold");
 			Logger::GetInstance().WriteLine(LogLevel::Info, "HoldLock: released at city shutdown.");
 		}
+
+		regionsync::tilelock::Close();
+		conflict = false;
+		conflictHolderGone = false;
+		guardCity = nullptr;
+		SetStatus("region", "city shutdown");
 
 		pCity = nullptr;
 		pOwnRegionalCity = nullptr;
@@ -938,6 +1056,173 @@ private:
 	}
 
 	// ---------------------------------------------------------------
+	// Instance status file and same-tile guard (docs/PLAN-LAUNCHER.md)
+	// ---------------------------------------------------------------
+
+	void InitStatus()
+	{
+		statusDirectory = settings.ResolveStoreDirectory("") / "_instances";
+		ReapDeadStatusFiles();
+
+		std::string userDir = ToUtf8(UserDirFromCommandLine());
+		while (!userDir.empty() && (userDir.back() == '\\' || userDir.back() == '/'))
+		{
+			userDir.pop_back();
+		}
+		status.writer = ownWriter;
+		status.userDir = userDir;
+		statusPath = statusDirectory / regionsync::InstanceStatusFileName(ownWriter.pid, ownWriter.start);
+		SetStatus("starting", "startup");
+	}
+
+	// Deletes *.status and *.status.tmp that pass IsReapable and whose writer is Dead.
+	void ReapDeadStatusFiles()
+	{
+		Logger& logger = Logger::GetInstance();
+		std::vector<std::filesystem::path> dead;
+		std::error_code ec;
+		for (const auto& entry : std::filesystem::directory_iterator(statusDirectory, ec))
+		{
+			if (!IsStatusFile(entry.path()))
+			{
+				continue;
+			}
+			regionsync::InstanceStatus s;
+			std::string error;
+			if (regionsync::ReadInstanceStatus(entry.path(), s, error) && regionsync::IsReapable(entry.path().filename().string(), s, ownWriter.host)
+				&& SafeIsAlive(s.writer) == regionsync::writer::Liveness::Dead)
+			{
+				dead.push_back(entry.path());
+			}
+		}
+		for (const std::filesystem::path& path : dead)
+		{
+			std::error_code removeEc;
+			const bool removed = std::filesystem::remove(path, removeEc);
+			logger.WriteLineFormatted(LogLevel::Info, "Status: dead instance file %s %s", path.string().c_str(), removed ? "removed" : "not removed");
+		}
+	}
+
+	// Leaving city clears the city fields; leaving the region clears the region too.
+	void SetStatus(const char* state, const char* event)
+	{
+		status.state = state;
+		if (status.state != "city")
+		{
+			status.regionX = -1;
+			status.regionZ = -1;
+			status.cityName.clear();
+			status.conflict = false;
+		}
+		if (status.state == "starting")
+		{
+			status.region.clear();
+		}
+		WriteStatus(event);
+	}
+
+	// Never throws. Error once per failure episode, Debug until a write succeeds.
+	void WriteStatus(const char* event)
+	{
+		if (statusPath.empty())
+		{
+			return;
+		}
+		try
+		{
+			Logger& logger = Logger::GetInstance();
+			status.writtenUnixTime = static_cast<int64_t>(std::time(nullptr));
+			std::string error;
+			if (regionsync::WriteInstanceStatus(statusPath, status, error))
+			{
+				statusWriteFailed = false;
+				logger.WriteLineFormatted(LogLevel::Info, "Status (%s): state=%s region='%s' conflict=%d -> %s",
+					event, status.state.c_str(), status.region.c_str(), status.conflict ? 1 : 0, statusPath.string().c_str());
+				return;
+			}
+			logger.WriteLineFormatted(statusWriteFailed ? LogLevel::Debug : LogLevel::Error, "Status (%s) not written, running without it: %s", event, error.c_str());
+			statusWriteFailed = true;
+		}
+		catch (...)
+		{
+			statusWriteFailed = true;
+		}
+	}
+
+	// Another live instance whose status shows this tile open; 0 when none.
+	uint32_t FindTileHolderPid(int32_t x, int32_t z) const
+	{
+		const std::string region = AcpToUtf8(regionDirectoryName);
+		std::error_code ec;
+		for (const auto& entry : std::filesystem::directory_iterator(statusDirectory, ec))
+		{
+			if (entry.path().extension() != ".status")
+			{
+				continue;
+			}
+			regionsync::InstanceStatus s;
+			std::string error;
+			if (regionsync::ReadInstanceStatus(entry.path(), s, error) && s.writer.pid != ownWriter.pid && s.state == "city" && !s.conflict
+				&& s.region == region && s.regionX == x && s.regionZ == z && SafeIsAlive(s.writer) != regionsync::writer::Liveness::Dead)
+			{
+				return s.writer.pid;
+			}
+		}
+		return 0;
+	}
+
+	// The once-per-load Error line. Holder pid from its status file, else the
+	// snapshot writer. 'since' from the snapshot when its writer is that pid.
+	void LogConflict(int32_t x, int32_t z, const std::string& cityName)
+	{
+		uint32_t pid = 0;
+		std::string since = "unknown";
+		try
+		{
+			pid = FindTileHolderPid(x, z);
+			regionsync::NeighborSnapshot snapshot;
+			std::string error;
+			if (regionsync::ReadSnapshotFile(storeDirectory / regionsync::SnapshotFileName(x, z), snapshot, error) && snapshot.writer.pid != ownWriter.pid)
+			{
+				if (pid == 0 && SafeIsAlive(snapshot.writer) != regionsync::writer::Liveness::Dead)
+				{
+					pid = snapshot.writer.pid;
+				}
+				if (pid != 0 && snapshot.writer.pid == pid && snapshot.cityLoadedAt != 0)
+				{
+					since = FormatFileTime(snapshot.cityLoadedAt);
+				}
+			}
+		}
+		catch (...)
+		{
+		}
+		const std::string pidText = pid ? std::to_string(pid) : "unknown";
+		Logger::GetInstance().WriteLineFormatted(LogLevel::Error,
+			"Conflict: tile (%d,%d) '%s' is open in pid %s since %s. No publish, pull, mirror or plugin save for this city until it closes.",
+			x, z, cityName.c_str(), pidText.c_str(), since.c_str());
+		Logger::GetInstance().Flush();
+	}
+
+	// True (and logged at Debug) while this city is a duplicate. Also notes
+	// once when the holder's mutex is gone: our copy is stale, we stay dark.
+	bool ConflictRefuses(const char* what, const char* reason)
+	{
+		if (!conflict)
+		{
+			return false;
+		}
+		Logger& logger = Logger::GetInstance();
+		logger.WriteLineFormatted(LogLevel::Debug, "%s (%s): refused, tile conflict.", what, reason);
+		if (!conflictHolderGone && !regionsync::tilelock::PeerPresent())
+		{
+			conflictHolderGone = true;
+			logger.WriteLine(LogLevel::Info, "Conflict: the tile's holder went away; staying dark, this copy is stale. Close the city to clear.");
+		}
+		return true;
+	}
+
+	// ---------------------------------------------------------------
 	// Core operations
 	// ---------------------------------------------------------------
 
@@ -955,6 +1240,10 @@ private:
 			return;
 		}
 		publishDirty = false;
+		if (ConflictRefuses("Publish", reason))
+		{
+			return;
+		}
 
 		if (settings.refreshCacheBeforePublish)
 		{
@@ -1020,21 +1309,22 @@ private:
 		}
 	}
 
-	// Exceptions read as Unknown: a liveness failure must not drop a snapshot.
-	regionsync::writer::Liveness WriterLiveness(const regionsync::NeighborSnapshot& snapshot) const
+	// Exceptions read as Unknown: a liveness failure must not drop a file.
+	static regionsync::writer::Liveness SafeIsAlive(const regionsync::WriterIdentity& id)
 	{
-		if (!settings.checkWriterLiveness)
-		{
-			return regionsync::writer::Liveness::Unknown;
-		}
 		try
 		{
-			return regionsync::writer::IsAlive(snapshot.writer);
+			return regionsync::writer::IsAlive(id);
 		}
 		catch (...)
 		{
 			return regionsync::writer::Liveness::Unknown;
 		}
+	}
+
+	regionsync::writer::Liveness WriterLiveness(const regionsync::NeighborSnapshot& snapshot) const
+	{
+		return settings.checkWriterLiveness ? SafeIsAlive(snapshot.writer) : regionsync::writer::Liveness::Unknown;
 	}
 
 	// Every snapshot in the store except our own tile, a held fake neighbor,
@@ -1138,6 +1428,10 @@ private:
 	// LayEdgeNetwork and SyncRemovals. Record injection is on for both (Q9, 2026-10-18).
 	void MirrorSnapshot(const regionsync::NeighborSnapshot& snapshot, bool cheat)
 	{
+		if (ConflictRefuses("Mirror", cheat ? "cheat" : "pending"))
+		{
+			return;
+		}
 		Logger& logger = Logger::GetInstance();
 		const bool connections = cheat || settings.syncConnections;
 		const bool deals = cheat || settings.syncDeals;
@@ -1212,6 +1506,10 @@ private:
 		if (!pRegion || !pOwnRegionalCity)
 		{
 			logger.WriteLine(LogLevel::Error, "Pull: no region loaded.");
+			return;
+		}
+		if (ConflictRefuses("Pull", reason))
+		{
 			return;
 		}
 
@@ -1415,8 +1713,13 @@ private:
 		logger.WriteLineFormatted(LogLevel::Info, "Reload: %d of %zu adjacent tiles reloaded.", reloaded, static_cast<size_t>(adjacent.size()));
 	}
 
+	// Plugin saves only; a save of a conflicting city would overwrite the first opener's.
 	void Save(const char* reason)
 	{
+		if (ConflictRefuses("Save", reason))
+		{
+			return;
+		}
 		cISC4AppPtr pSC4App;
 		if (pSC4App && pCity)
 		{
@@ -1961,6 +2264,16 @@ private:
 	bool inPull = false;
 	bool sawNewDay = false;
 	bool holdLock = false;   // RegionSyncHoldLock taken
+
+	std::filesystem::path statusDirectory;
+	std::filesystem::path statusPath;   // empty until PostAppInit writes it
+	regionsync::InstanceStatus status;
+	bool statusWriteFailed = false;
+	bool conflict = false;              // another instance has this tile open
+	bool conflictHolderGone = false;
+	cISC4City* guardCity = nullptr;     // city and tile the guard last ran for
+	int32_t guardX = -1;
+	int32_t guardZ = -1;
 };
 
 cRZCOMDllDirector* RZGetCOMDllDirector()

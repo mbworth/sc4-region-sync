@@ -16,6 +16,7 @@
 #pragma once
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <string>
 #include <string_view>
 #include <array>
@@ -307,4 +308,15 @@ namespace regionsync
 
 	// "<x>_<z>.snapshot"
 	std::string SnapshotFileName(int32_t regionX, int32_t regionZ);
+
+	using KeyValues = std::map<std::string, std::string>;
+
+	// Non-empty, non-comment key=value lines. Values keep everything after the first '='.
+	bool LoadKeyValues(const std::filesystem::path& path, KeyValues& out, std::string& error);
+	// False when the key is absent or does not parse. Instantiated for int32_t, uint32_t, int64_t, uint64_t.
+	template <typename T>
+	bool ReadKeyValue(const KeyValues& kv, const std::string& key, T& out);
+
+	// Writes "<path>.tmp" then renames it over path (retried briefly).
+	bool WriteFileAtomic(const std::filesystem::path& path, const std::string& text, std::string& error);
 }

@@ -3,9 +3,8 @@
  *
  * NeighborSnapshot.cpp - key=value serialization of NeighborSnapshot.
  *
- * Writes go to a temporary file in the same directory and are then renamed
- * over the destination, so a reader never sees a half-written snapshot even
- * when two game instances are running at once.
+ * Writes go through WriteFileAtomic (temp file plus rename), so a reader
+ * never sees a half-written file even with several instances running.
  */
 
 #include "NeighborSnapshot.h"
@@ -18,6 +17,8 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <thread>
+#include <chrono>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -53,8 +54,36 @@ namespace
 		}
 	}
 
+	// False when the key is absent or its value does not parse into T.
+	template <typename T>
+	bool Read(const regionsync::KeyValues& kv, const std::string& key, T& out)
+	{
+		auto it = kv.find(key);
+		return it != kv.end() && ParseNumber(it->second, out);
+	}
+
+	// Reads a list count; appends to warning when it is bad or over the cap.
+	size_t ReadCount(const regionsync::KeyValues& kv, const std::string& key, std::string& warning)
+	{
+		size_t n = 0;
+		if (!Read(kv, key, n))
+		{
+			warning += key + " did not parse, list empty; ";
+			return 0;
+		}
+		if (n > regionsync::kMaxListEntries)
+		{
+			warning += key + "=" + std::to_string(n) + " truncated to " + std::to_string(regionsync::kMaxListEntries) + "; ";
+			return regionsync::kMaxListEntries;
+		}
+		return n;
+	}
+}
+
+namespace regionsync
+{
 	// Only non-empty, non-comment lines of the form key=value are kept.
-	bool LoadKeyValues(const std::filesystem::path& path, std::map<std::string, std::string>& out, std::string& error)
+	bool LoadKeyValues(const std::filesystem::path& path, KeyValues& out, std::string& error)
 	{
 		std::ifstream stream(path);
 		if (!stream)
@@ -82,34 +111,50 @@ namespace
 		return true;
 	}
 
-	// False when the key is absent or its value does not parse into T.
 	template <typename T>
-	bool Read(const std::map<std::string, std::string>& kv, const std::string& key, T& out)
+	bool ReadKeyValue(const KeyValues& kv, const std::string& key, T& out)
 	{
-		auto it = kv.find(key);
-		return it != kv.end() && ParseNumber(it->second, out);
+		return Read(kv, key, out);
+	}
+	template bool ReadKeyValue<int32_t>(const KeyValues&, const std::string&, int32_t&);
+	template bool ReadKeyValue<uint32_t>(const KeyValues&, const std::string&, uint32_t&);
+	template bool ReadKeyValue<int64_t>(const KeyValues&, const std::string&, int64_t&);
+	template bool ReadKeyValue<uint64_t>(const KeyValues&, const std::string&, uint64_t&);
+
+	bool WriteFileAtomic(const std::filesystem::path& path, const std::string& text, std::string& error)
+	{
+		std::error_code ec;
+		std::filesystem::create_directories(path.parent_path(), ec);
+
+		const std::filesystem::path tempPath = path.string() + ".tmp";
+		{
+			std::ofstream stream(tempPath, std::ios::trunc);
+			if (!stream)
+			{
+				error = "Unable to write " + tempPath.string();
+				return false;
+			}
+			stream << text;
+		}
+
+		// A reader holding the destination open can fail the rename on Windows.
+		constexpr int kAttempts = 5;
+		for (int i = 0; i < kAttempts; i++)
+		{
+			if (i > 0)
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(20));
+			}
+			std::filesystem::rename(tempPath, path, ec);
+			if (!ec)
+			{
+				return true;
+			}
+		}
+		error = "Unable to rename " + tempPath.string() + " to " + path.string() + ": " + ec.message();
+		return false;
 	}
 
-	// Reads a list count; appends to warning when it is bad or over the cap.
-	size_t ReadCount(const std::map<std::string, std::string>& kv, const std::string& key, std::string& warning)
-	{
-		size_t n = 0;
-		if (!Read(kv, key, n))
-		{
-			warning += key + " did not parse, list empty; ";
-			return 0;
-		}
-		if (n > regionsync::kMaxListEntries)
-		{
-			warning += key + "=" + std::to_string(n) + " truncated to " + std::to_string(regionsync::kMaxListEntries) + "; ";
-			return regionsync::kMaxListEntries;
-		}
-		return n;
-	}
-}
-
-namespace regionsync
-{
 	std::string SnapshotFileName(int32_t regionX, int32_t regionZ)
 	{
 		return std::to_string(regionX) + "_" + std::to_string(regionZ) + ".snapshot";
@@ -205,34 +250,13 @@ namespace regionsync
 			}
 		}
 
-		std::error_code ec;
-		std::filesystem::create_directories(path.parent_path(), ec);
-
-		const std::filesystem::path tempPath = path.string() + ".tmp";
-		{
-			std::ofstream stream(tempPath, std::ios::trunc);
-			if (!stream)
-			{
-				error = "Unable to write " + tempPath.string();
-				return false;
-			}
-			stream << out.str();
-		}
-
-		std::filesystem::rename(tempPath, path, ec);
-		if (ec)
-		{
-			error = "Unable to rename " + tempPath.string() + " to " + path.string() + ": " + ec.message();
-			return false;
-		}
-
-		return true;
+		return WriteFileAtomic(path, out.str(), error);
 	}
 
 	bool ReadSnapshotFile(const std::filesystem::path& path, NeighborSnapshot& s, std::string& error)
 	{
 		error.clear();
-		std::map<std::string, std::string> kv;
+		KeyValues kv;
 		if (!LoadKeyValues(path, kv, error))
 		{
 			return false;

@@ -44,6 +44,7 @@ The important distinction is **city** versus **regional city**. `cISC4City` is t
                                    │ │                        │ │
                        ┌───────────▼─▼────────────────────────▼─▼───────────┐
                        │ <install>\Plugins\RegionSync\<region dir>\          │
+                       │ <install>\Plugins\RegionSync\_instances\<pid>-<start>.status │
                        │   2_3.snapshot   3_3.snapshot   4_3.snapshot ...    │
                        └─────────────────────────────────────────────────────┘
                                          shared store (filesystem, phase 1)
@@ -83,21 +84,21 @@ Nothing the plugin controls. The demand simulator consults regional totals when 
 game start
   RZGetCOMDllDirector()      static RegionSyncDllDirector constructed; Logger initialized
   OnStart(cIGZCOM*)          version check (641 or disable); load INI; AddHook(this)
-  PostAppInit()              grab cheat manager; subscribe to 6 message IDs; SaveLock=1: patch App vtable slot 15 (SaveCity) with the lock wrapper
+  PostAppInit()              grab cheat manager; subscribe to 6 message IDs; SaveLock=1: patch App vtable slot 15 (SaveCity) with the lock wrapper; reap dead status files, write own status (starting)
 region opened
-  PostRegionInit             cache cISC4Region*, region dir name, resolve store path; open the save mutex
+  PostRegionInit             cache cISC4Region*, region dir name, resolve store path; open the save mutex; status (region)
 city opened
   PostCityInit               cache cISC4City*; register 6 cheat codes; subscribe to cheat messages
-  PostCityInitComplete       cache regional city, neighbors sim, simulator; publish + pull on load
+  PostCityInitComplete       cache regional city, neighbors sim, simulator; open the tile mutex (peer present = conflict, no store writes while this city is open); status (city); publish + pull on load
 playing
   SimNewMonth (0x66956816)   increment counters; publish / pull / autosave on cadence
   CheatIssued (0x230E27AC)   dispatch RegionSync* commands
 city closed
-  PostCityShutdown           publish once more; release a RegionSyncHoldLock hold; clear city pointers; unregister cheats
+  PostCityShutdown           publish once more (or remove own snapshot); release a RegionSyncHoldLock hold; close the tile mutex; status (region); clear city pointers; unregister cheats
 region closed
-  PreRegionShutdown          clear region pointer; close the save mutex
+  PreRegionShutdown          clear region pointer; close the save mutex; status (starting)
 game exit
-  PreAppShutdown             restore the SaveCity slot; clear the hold, close the save mutex (Exit sends no PostCityShutdown)
+  PreAppShutdown             restore the SaveCity slot; clear the hold, close the save and tile mutexes; delete own status file (Exit sends no PostCityShutdown)
 ```
 
 Pointers cached at `PostCityInitComplete` are only valid until `PostCityShutdown`. Every operation null-checks them because cheats and month messages can arrive in odd orders during transitions.
@@ -131,6 +132,9 @@ src/
                               runs (OpenProcess, creation time, exit code). Windows only, no game headers.
   SaveLock.{h,cpp}            Region-wide named save mutex with depth counter and timeout. Windows only,
                               no game headers.
+  TileLock.{h,cpp}            Per-tile named mutex (same-tile guard). Windows only, no game headers.
+  InstanceStatus.{h,cpp}      The per-process status record the launcher reads, and the reap rule for
+                              stale ones. No game headers, no Windows headers, unit-tested.
   SaveHook641.{h,cpp}         Patches App vtable slot 15 (SaveCity(path, fast), 1.1.641 only) with a
                               wrapper that holds the save lock across the game's save routine.
   SyncSettings.{h,cpp}        INI parsing with safe defaults; resolves the store directory.
@@ -152,6 +156,9 @@ vendor/                       git submodules, never edited here
 scripts/
   setup-toolchain.sh          Fetch xwin and the MSVC/SDK splat (Linux build prerequisite).
   Setup-MultiInstance.ps1     Per-instance user dirs + Regions junction + launcher (Windows).
+
+launcher/                     Win32 instance launcher (list, raise, launch, resource estimate). Built
+                              with the same toolchain, shares WriterIdentity.cpp, reads _instances only.
 
 docs/
   DESIGN.md                   Why this seam, why file-based store, what stays local.
