@@ -46,5 +46,6 @@ Exit criterion: growth in instance B visibly changes regional demand in instance
 - [x] Coordinator slice 2: grid of live DWM thumbnails, observed 2026-10-18 (Q14 step 6). No Close button: the game ignores WM_CLOSE (Q14 step 5).
 - [x] Coordinator slice 3: Settings dialog for startup parameters (resolution, windowed, intro, CPU, renderer, extra args, limits), 2026-10-18.
 - [x] Coordinator slice 4: orphan game processes listed with End Task, observed 2026-10-18 (Q15).
+- [x] Demand saw-tooth from the game's neighbor extrapolation fixed by pinning the record cap (Q16, 2026-10-18).
 - [x] First play soak: three cities, about an hour, saves and sync clean (Q15, 2026-10-18).
 - [ ] Publish to Simtropolis once it has survived a few hundred hours of play.
