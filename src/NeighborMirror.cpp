@@ -104,8 +104,8 @@ namespace
 	}
 
 	// Creates the connection at c's cell, Repairs it against pA and links it
-	// into pA's +0x90 list. Returns true when FindConnection then finds it.
-	bool InjectRecordConnection(const regionsync::MirrorContext& ctx, cISC4RegionalCity* pA, const regionsync::ConnectionRecord& c)
+	// into pA's +0x90 list. Returns it when FindConnection then finds it.
+	cISC4NeighborConnection* InjectRecordConnection(const regionsync::MirrorContext& ctx, cISC4RegionalCity* pA, const regionsync::ConnectionRecord& c)
 	{
 		namespace rc641 = regionsync::rc641;
 		Logger& logger = Logger::GetInstance();
@@ -116,7 +116,7 @@ namespace
 		logger.WriteLineFormatted(LogLevel::Info, "RecordConnection: GetClassObject=%d object=%p", ok ? 1 : 0, static_cast<void*>(pNew));
 		if (!ok || !pNew)
 		{
-			return false;
+			return nullptr;
 		}
 		rc641::InitRawConnection(pNew, c.type, c.cellX, c.cellZ);
 		logger.WriteLineFormatted(LogLevel::Info, "RecordConnection: raw type=%u cell=(%d,%d) written; Repair(%p) ...", c.type, c.cellX, c.cellZ, static_cast<void*>(pA));
@@ -133,7 +133,7 @@ namespace
 		if (pOther != ctx.pOwnRegionalCity)
 		{
 			logger.WriteLine(LogLevel::Info, "RecordConnection: other side is not our city, skipped.");
-			return false;
+			return nullptr;
 		}
 
 		logger.WriteLine(LogLevel::Info, "RecordConnection: insert at the end of the record's +0x90 list ...");
@@ -148,18 +148,18 @@ namespace
 		{
 			list.erase(node);   // Releases the list's reference
 			logger.WriteLine(LogLevel::Error, "RecordConnection: FindConnection does not see the inserted object; removed again.");
-			return false;
+			return nullptr;
 		}
-		return true;
+		return raw;
 	}
 
 	// The record-side step (record-connections-641.md): make sure the
 	// publisher's record copy in this process holds the connection at its
 	// cell, active, so FindConnectionOnOtherSide and the buy-side deal check
-	// find it. Injection only when ctx.allowRecordInjection. Returns true
-	// when a new object was linked in. listState: 0 = not checked this call,
+	// find it. Injection only when ctx.allowRecordInjection. Returns the
+	// object linked in, or null. listState: 0 = not checked this call,
 	// 1 = ok, 2 = check failed.
-	bool EnsureRecordConnection(const regionsync::MirrorContext& ctx, int32_t aX, int32_t aZ, int32_t aCells,
+	cISC4NeighborConnection* EnsureRecordConnection(const regionsync::MirrorContext& ctx, int32_t aX, int32_t aZ, int32_t aCells,
 		const regionsync::ConnectionRecord& c, cISC4NeighborConnection* bConn, int& listState)
 	{
 		namespace rc641 = regionsync::rc641;
@@ -168,14 +168,14 @@ namespace
 		{
 			logger.WriteLineFormatted(LogLevel::Info, "RecordConnection: type %u inner=(%d,%d) cell=(%d,%d) known=%d cellsA=%d not usable, skipped.",
 				c.type, c.innerX, c.innerZ, c.cellX, c.cellZ, c.cellKnown ? 1 : 0, aCells);
-			return false;
+			return nullptr;
 		}
 		// ReloadCity replaces record objects: resolve every time.
 		cISC4RegionalCity* pA = regionsync::FindRegionalCity(ctx.pRegion, aX, aZ);
 		if (!pA)
 		{
 			logger.WriteLineFormatted(LogLevel::Info, "RecordConnection: no record for (%d,%d), skipped.", aX, aZ);
-			return false;
+			return nullptr;
 		}
 		if (ctx.allowRecordInjection && listState == 0)
 		{
@@ -188,7 +188,7 @@ namespace
 		logger.WriteLineFormatted(LogLevel::Info, "RecordConnection: FindConnection=%p active=%d", static_cast<void*>(pRec), pRec && pRec->GetIsActive() ? 1 : 0);
 		logger.Flush();
 
-		bool injected = false;
+		cISC4NeighborConnection* injected = nullptr;
 		if (pRec)
 		{
 			if (!pRec->GetIsActive())
@@ -205,13 +205,13 @@ namespace
 			{
 				logger.WriteLineFormatted(LogLevel::Info, "RecordConnection: not injected (allowed=%d, list check=%d, COM=%p).",
 					ctx.allowRecordInjection ? 1 : 0, listState, static_cast<void*>(ctx.pCOM));
-				return false;
+				return nullptr;
 			}
-			if (!InjectRecordConnection(ctx, pA, c))
+			injected = InjectRecordConnection(ctx, pA, c);
+			if (!injected)
 			{
-				return false;
+				return nullptr;
 			}
-			injected = true;
 		}
 
 		if (ctx.pNeighborsSim && bConn)
@@ -238,15 +238,63 @@ namespace regionsync
 {
 	void NeighborMirror::Reset()
 	{
+		sessions.clear();
 		mirroredConnections.clear();
+		injectedRecord.clear();
+		gateLogged.clear();
+		deleteFailed.clear();
 		edgeLayTried.clear();
 		seenDeals.clear();
+	}
+
+	void NeighborMirror::DropHistory(int32_t x, int32_t z)
+	{
+		const auto ofTile = [x, z](const auto& key) { return std::get<0>(key) == x && std::get<1>(key) == z; };
+		std::erase_if(mirroredConnections, [&](const auto& e) { return ofTile(e.first); });
+		std::erase_if(injectedRecord, [&](const auto& e) { return ofTile(e.first); });
+		std::erase_if(edgeLayTried, ofTile);
+		std::erase_if(gateLogged, ofTile);
+		std::erase_if(deleteFailed, ofTile);
+		std::erase_if(seenDeals, [&](const auto& e) { return std::get<1>(e.first) == x && std::get<2>(e.first) == z; });
+	}
+
+	void NeighborMirror::ForgetPublisher(int32_t x, int32_t z)
+	{
+		if (sessions.erase({ x, z }))
+		{
+			Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "Mirror (%d,%d): snapshot dead or missing, history dropped", x, z);
+		}
+		DropHistory(x, z);
+	}
+
+	std::vector<std::pair<int32_t, int32_t>> NeighborMirror::Publishers() const
+	{
+		std::vector<std::pair<int32_t, int32_t>> tiles;
+		for (const auto& [tile, session] : sessions) tiles.push_back(tile);
+		return tiles;
+	}
+
+	// A relaunched or reloaded publisher converges by creation only.
+	void NeighborMirror::CheckPublisherSession(const NeighborSnapshot& a)
+	{
+		const PublisherSession now{ a.writer.host, a.writer.pid, a.writer.start, a.cityLoadedAt };
+		const auto it = sessions.find({ a.regionX, a.regionZ });
+		if (it != sessions.end() && it->second == now)
+		{
+			return;
+		}
+		Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "Mirror (%d,%d): publisher session changed, history dropped (host=%s pid=%u start=%llu loadedAt=%llu, %s)",
+			a.regionX, a.regionZ, now.host.c_str(), now.pid, static_cast<unsigned long long>(now.start), static_cast<unsigned long long>(now.cityLoadedAt),
+			it == sessions.end() ? "none stored" : "differs");
+		DropHistory(a.regionX, a.regionZ);
+		sessions[{ a.regionX, a.regionZ }] = now;
 	}
 
 	ConnectionMirrorResult NeighborMirror::MirrorConnections(const MirrorContext& ctx, const NeighborSnapshot& a)
 	{
 		Logger& logger = Logger::GetInstance();
 		ConnectionMirrorResult result;
+		CheckPublisherSession(a);
 		if (!ctx.pRegion || !ctx.pOwnRegionalCity || !ctx.pNeighborsSim)
 		{
 			logger.WriteLine(LogLevel::Error, "MirrorConnections: no region, city or neighbors simulator.");
@@ -275,12 +323,14 @@ namespace regionsync
 			a.regionX, a.regionZ, a.cityName.c_str(), a.connections.size(), ownX, ownZ, sizeX, sizeZ, sizeEnum, cells);
 
 		int listState = 0;
+		std::set<ConnectionKey> listed;
 		for (const ConnectionRecord& c : a.connections)
 		{
 			if (c.otherTileX != ownX || c.otherTileZ != ownZ)
 			{
 				continue;
 			}
+			listed.insert({ a.regionX, a.regionZ, c.type, c.innerX, c.innerZ });
 			if (!IsMirrorableConnectionType(c.type))
 			{
 				logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: type %u not in the slice 1 whitelist, skipped.", c.type);
@@ -294,9 +344,23 @@ namespace regionsync
 				continue;
 			}
 			const ConnectionKey key{ a.regionX, a.regionZ, c.type, c.innerX, c.innerZ };
-			if (!mirroredConnections.count(key))
+			const auto known = mirroredConnections.find(key);
+			if (known != mirroredConnections.end())
 			{
-
+				deleteFailed.erase(key);
+				// Pointer for this pass. Null while still listed is a tombstone: not re-created.
+				const auto type = static_cast<cISC4NeighborsSimulator::ConnectionType>(c.type);
+				cISC4NeighborConnection* pNow = ctx.pNeighborsSim->FindConnection(type, bx, bz);
+				if (pNow != known->second)
+				{
+					logger.WriteLineFormatted(LogLevel::Info, pNow ? "MirrorConnections: type %u (%d,%d) connection %p -> %p, refreshed"
+						: "MirrorConnections: type %u (%d,%d) connection %p -> %p, tombstone (gone here, publisher still lists it)",
+						c.type, bx, bz, static_cast<void*>(known->second), static_cast<void*>(pNow));
+					known->second = pNow;
+				}
+			}
+			else
+			{
 				const auto type = static_cast<cISC4NeighborsSimulator::ConnectionType>(c.type);
 				logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: type %u inner=(%d,%d) -> our cell (%d,%d). HasConnection ...",
 					c.type, c.innerX, c.innerZ, bx, bz);
@@ -325,19 +389,20 @@ namespace regionsync
 				if (pFound)
 				{
 					logger.WriteLineFormatted(LogLevel::Info, "RecordConnection: own GetAllConnections count before=%zu", OwnConnectionCount(ctx.pNeighborsSim));
-					if (EnsureRecordConnection(ctx, a.regionX, a.regionZ, aCells, c, pFound, listState))
+					if (cISC4NeighborConnection* pInjected = EnsureRecordConnection(ctx, a.regionX, a.regionZ, aCells, c, pFound, listState))
 					{
+						injectedRecord[key] = { FindRegionalCity(ctx.pRegion, a.regionX, a.regionZ), pInjected };
 						result.injected++;
 					}
 					logger.WriteLineFormatted(LogLevel::Info, "RecordConnection: own GetAllConnections count after=%zu", OwnConnectionCount(ctx.pNeighborsSim));
 				}
-				mirroredConnections.insert(key);
+				mirroredConnections[key] = pFound;
 			}
 
 			// Idempotent, so it runs for every connection, not only new ones;
 			// once per key per session on the timed path, since a failed lay
 			// has already demolished the cells.
-			if (ctx.layEdgeNetwork && (ctx.allowRecordInjection || !edgeLayTried.count(key)))
+			if (ctx.layEdgeNetwork && (ctx.cheat || !edgeLayTried.count(key)))
 			{
 				edgeLayTried.insert(key);
 				const auto type = static_cast<cISC4NeighborsSimulator::ConnectionType>(c.type);
@@ -351,7 +416,179 @@ namespace regionsync
 				}
 			}
 		}
+		RemoveConnections(ctx, a, listed, ownX, ownZ, cells, aCells, result);
 		return result;
+	}
+
+	// Only a complete list says anything about unlisted keys: an incomplete one
+	// keeps them all, tombstones included.
+	bool NeighborMirror::ListComplete(const NeighborSnapshot& a, bool complete, const char* kind)
+	{
+		if (complete)
+		{
+			return true;
+		}
+		if (gateLogged.insert({ a.regionX, a.regionZ, std::string(kind) + " incomplete" }).second)
+		{
+			Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "Removal: (%d,%d) %s list incomplete, unlisted keys kept; logged once per publisher session",
+				a.regionX, a.regionZ, kind);
+		}
+		return false;
+	}
+
+	bool NeighborMirror::RemovalAllowed(const MirrorContext& ctx, const NeighborSnapshot& a, const char* kind, size_t pending)
+	{
+		if (ctx.publisherAlive && a.cityLoadedAt != 0 && ctx.syncRemovals)
+		{
+			return true;
+		}
+		if (gateLogged.insert({ a.regionX, a.regionZ, kind }).second)
+		{
+			Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "Removal: (%d,%d) %zu unlisted %s(s), not removed, keys dropped (alive=%d loadedAt=%d syncRemovals=%d); logged once per publisher session",
+				a.regionX, a.regionZ, pending, kind, ctx.publisherAlive ? 1 : 0, a.cityLoadedAt != 0 ? 1 : 0, ctx.syncRemovals ? 1 : 0);
+		}
+		return false;
+	}
+
+	// Keys of this publisher it no longer lists (docs/PLAN-REMOVAL.md).
+	void NeighborMirror::RemoveConnections(const MirrorContext& ctx, const NeighborSnapshot& a, const std::set<ConnectionKey>& listed,
+		int32_t ownX, int32_t ownZ, int32_t cells, int32_t aCells, ConnectionMirrorResult& result)
+	{
+		Logger& logger = Logger::GetInstance();
+		std::vector<ConnectionKey> unlisted;
+		for (const auto& [key, pointer] : mirroredConnections)
+		{
+			if (std::get<0>(key) == a.regionX && std::get<1>(key) == a.regionZ && !listed.count(key)) unlisted.push_back(key);
+		}
+		if (unlisted.empty())
+		{
+			return;
+		}
+		// The publisher stopped listing them: our memory goes either way.
+		if (!ListComplete(a, a.connectionsComplete, "connection"))
+		{
+			return;
+		}
+		if (!RemovalAllowed(ctx, a, "connection", unlisted.size()))
+		{
+			for (const ConnectionKey& key : unlisted)
+			{
+				mirroredConnections.erase(key);
+				injectedRecord.erase(key);
+				edgeLayTried.erase(key);
+				deleteFailed.erase(key);
+			}
+			return;
+		}
+
+		int listState = 0;
+		for (const ConnectionKey& key : unlisted)
+		{
+			const auto& [ax, az, connType, innerX, innerZ] = key;
+			const auto type = static_cast<cISC4NeighborsSimulator::ConnectionType>(connType);
+			const auto dropKey = [&] {
+				mirroredConnections.erase(key);
+				injectedRecord.erase(key);
+				edgeLayTried.erase(key);
+				deleteFailed.erase(key);
+			};
+			int32_t bx = 0, bz = 0;
+			if (!ToSubscriberFrame(ax, az, innerX, innerZ, ownX, ownZ, cells, bx, bz))
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "Removal: connection type %u inner=(%d,%d) not on our edge, key dropped.", connType, innerX, innerZ);
+				dropKey();
+				continue;
+			}
+			cISC4NeighborConnection* pConn = ctx.pNeighborsSim->FindConnection(type, bx, bz);
+			cISC4NeighborConnection* stored = mirroredConnections[key];
+			if (!pConn)
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "Removal: connection type %u (%d,%d) already gone here, key dropped.", connType, bx, bz);
+				dropKey();
+				continue;
+			}
+			if (pConn != stored)
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "Removal: connection type %u (%d,%d) %p -> %p, rebuilt since last pass, kept as the player's own, key dropped.",
+					connType, bx, bz, static_cast<void*>(stored), static_cast<void*>(pConn));
+				dropKey();
+				continue;
+			}
+
+			logger.WriteLineFormatted(LogLevel::Info, "Removal: connection type %u inner=(%d,%d) -> (%d,%d) no longer listed by (%d,%d). DeleteConnection ...",
+				connType, innerX, innerZ, bx, bz, ax, az);
+			logger.Flush();
+			ctx.pNeighborsSim->DeleteConnection(type, bx, bz);
+			cISC4NeighborConnection* pAfter = ctx.pNeighborsSim->FindConnection(type, bx, bz);
+			logger.WriteLineFormatted(LogLevel::Info, "Removal: DeleteConnection returned, FindConnection=%p", static_cast<void*>(pAfter));
+			logger.Flush();
+			if (pAfter)
+			{
+				if (deleteFailed.erase(key))
+				{
+					logger.WriteLineFormatted(LogLevel::Info, "Removal: connection type %u (%d,%d) still present after a second DeleteConnection, key dropped.", connType, bx, bz);
+					dropKey();
+					continue;
+				}
+				logger.WriteLineFormatted(LogLevel::Info, "Removal: connection type %u (%d,%d) still present, no edge clear or record step; retried next pass.", connType, bx, bz);
+				mirroredConnections[key] = pAfter;
+				deleteFailed.insert(key);
+				continue;
+			}
+			if (ConnectionToNetworkType(connType) >= 0)
+			{
+				const bool placed = ClearEdgePiece(ctx, connType, bx, bz, cells);
+				logger.WriteLineFormatted(LogLevel::Info, "Removal: edge clear type %u (%d,%d) re-solve=%d", connType, bx, bz, placed ? 1 : 0);
+			}
+
+			// The publisher's record copy here, or a later save writes a stale active entry into its file.
+			int32_t cx = 0, cz = 0;
+			cISC4RegionalCity* pA = FindRegionalCity(ctx.pRegion, ax, az);
+			const auto injected = injectedRecord.find(key);
+			if (!pA || !PublisherConnectionCell(innerX, innerZ, bx, bz, cells, cx, cz) || !IsConnectionCellAdjacent(innerX, innerZ, cx, cz, aCells))
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "Removal: record copy for (%d,%d) not usable (record=%p cell=(%d,%d) cellsA=%d).",
+					ax, az, static_cast<void*>(pA), cx, cz, aCells);
+			}
+			else
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "Removal: record FindConnection(%u, %d, %d) on %p ...", connType, cx, cz, static_cast<void*>(pA));
+				logger.Flush();
+				cISC4NeighborConnection* pRec = rc641::FindConnection(pA, connType, cx, cz);
+				const bool ours = pRec && injected != injectedRecord.end() && injected->second.record == pA && injected->second.connection == pRec;
+				logger.WriteLineFormatted(LogLevel::Info, "Removal: record FindConnection=%p active=%d injected=%d",
+					static_cast<void*>(pRec), pRec && pRec->GetIsActive() ? 1 : 0, ours ? 1 : 0);
+				if (pRec)
+				{
+					logger.Flush();
+					pRec->SetIsActive(false);
+					logger.WriteLineFormatted(LogLevel::Info, "Removal: record SetIsActive(false) returned, active=%d", pRec->GetIsActive() ? 1 : 0);
+				}
+				if (ours && listState == 0)
+				{
+					listState = CheckRecordList(pA, ax, az) ? 1 : 2;
+				}
+				if (ours && listState == 1)
+				{
+					SC4List<cISC4NeighborConnection*>& list = rc641::ConnectionList(pA);
+					for (auto it = list.begin(); it != list.end(); ++it)
+					{
+						if (*it != pRec) continue;
+						logger.WriteLine(LogLevel::Info, "Removal: erase our object from the record's +0x90 list (Releases the list's reference) ...");
+						logger.Flush();
+						list.erase(it);
+						logger.WriteLineFormatted(LogLevel::Info, "Removal: erased, record FindConnection=%p", static_cast<void*>(rc641::FindConnection(pA, connType, cx, cz)));
+						break;
+					}
+				}
+				else if (ours)
+				{
+					logger.WriteLine(LogLevel::Info, "Removal: record list check failed, our object left inactive in the list.");
+				}
+			}
+			dropKey();
+			result.removed++;
+		}
 	}
 
 	void NeighborMirror::SetAmountLogged(cISC4NeighborDeal* deal, int32_t amount)
@@ -389,6 +626,7 @@ namespace regionsync
 	{
 		Logger& logger = Logger::GetInstance();
 		DealMirrorResult result;
+		CheckPublisherSession(a);
 		if (!ctx.pRegion || !ctx.pOwnRegionalCity || !ctx.pNeighborsSim || !ctx.pSimulator)
 		{
 			logger.WriteLine(LogLevel::Error, "MirrorDeals: no region, city, neighbors simulator or simulator.");
@@ -405,6 +643,7 @@ namespace regionsync
 		logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: from (%d,%d) '%s', %zu deal(s).", a.regionX, a.regionZ, a.cityName.c_str(), a.deals.size());
 
 		std::set<DealKey> listed;
+		std::set<DealKey> present;   // listed and not cancelled, whatever else validation says
 		for (const DealRecord& d : a.deals)
 		{
 			if (d.otherTileX != ownX || d.otherTileZ != ownZ)
@@ -412,6 +651,16 @@ namespace regionsync
 				continue;
 			}
 			const uint32_t flags = MaskDealFlags(d.flags);
+			if (IsDealType(d.type) && !(flags & kDealFlagCancelled))
+			{
+				present.insert({ DealCommodity(d.type), a.regionX, a.regionZ });
+			}
+			if (IsProposedOnlyDeal(flags))
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: type=0x%08X flags=0x%X proposed only, ignored.", d.type, flags);
+				if (IsDealType(d.type)) listed.insert({ DealCommodity(d.type), a.regionX, a.regionZ });
+				continue;
+			}
 			if (!IsDealType(d.type) || !IsValidDealAmount(d.amount) || !IsValidExpiresIn(d.expiresIn) || (flags & kDealFlagCancelled))
 			{
 				logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: type=0x%08X amount=%d expiresIn=%d flags=0x%X rejected by validation, skipped.",
@@ -424,7 +673,7 @@ namespace regionsync
 			listed.insert(key);
 			const auto seen = seenDeals.find(key);
 			const bool seenBefore = seen != seenDeals.end();
-			const bool changed = !seenBefore || seen->second != d.amount;
+			const bool changed = !seenBefore || seen->second.amount != d.amount;
 
 			// ReloadCity replaces record objects: resolve every time.
 			cISC4RegionalCity* pA = FindRegionalCity(ctx.pRegion, a.regionX, a.regionZ);
@@ -456,13 +705,13 @@ namespace regionsync
 							logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: existing deal, publisher loaded earlier, following amount=%d.", d.amount);
 							if (FollowAmount(*existing.begin(), d.amount, result))
 							{
-								seenDeals[key] = d.amount;
+								seenDeals[key] = { d.amount, typeB };
 							}
 						}
 						else
 						{
 							logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: existing deal seen (%zu match), amount=%d recorded.", n, d.amount);
-							seenDeals[key] = d.amount;
+							seenDeals[key] = { d.amount, typeB };
 						}
 					}
 					else if (changed && n == 1)
@@ -470,7 +719,7 @@ namespace regionsync
 						// Not recorded when the follow was refused, so it is retried.
 						if (FollowAmount(*existing.begin(), d.amount, result))
 						{
-							seenDeals[key] = d.amount;
+							seenDeals[key] = { d.amount, typeB };
 						}
 					}
 					else if (changed)
@@ -527,17 +776,72 @@ namespace regionsync
 				continue;
 			}
 			SetAmountLogged(deal, d.amount);
-			seenDeals[key] = d.amount;
+			seenDeals[key] = { d.amount, typeB };
 			result.created++;
 		}
+		CancelDeals(ctx, a, present, result);
 		// Forget this publisher's deals it no longer lists, so a later deal
 		// with the same commodity is mirrored again.
 		for (auto it = seenDeals.begin(); it != seenDeals.end();)
 		{
 			const bool thisPublisher = std::get<1>(it->first) == a.regionX && std::get<2>(it->first) == a.regionZ;
-			if (thisPublisher && !listed.count(it->first)) it = seenDeals.erase(it);
+			if (thisPublisher && a.dealsComplete && !listed.count(it->first)) it = seenDeals.erase(it);
 			else ++it;
 		}
 		return result;
+	}
+
+	// Seen deals of this publisher it no longer lists or lists as cancelled.
+	void NeighborMirror::CancelDeals(const MirrorContext& ctx, const NeighborSnapshot& a, const std::set<DealKey>& present, DealMirrorResult& result)
+	{
+		Logger& logger = Logger::GetInstance();
+		std::vector<DealKey> gone;
+		for (const auto& [key, seen] : seenDeals)
+		{
+			if (std::get<1>(key) == a.regionX && std::get<2>(key) == a.regionZ && !present.count(key)) gone.push_back(key);
+		}
+		if (gone.empty())
+		{
+			return;
+		}
+		if (!ListComplete(a, a.dealsComplete, "deal"))
+		{
+			return;
+		}
+		if (!RemovalAllowed(ctx, a, "deal", gone.size()))
+		{
+			for (const DealKey& key : gone) seenDeals.erase(key);
+			return;
+		}
+		cISC4RegionalCity* pA = FindRegionalCity(ctx.pRegion, a.regionX, a.regionZ);
+		for (const DealKey& key : gone)
+		{
+			const uint32_t localType = seenDeals[key].localType;
+			seenDeals.erase(key);
+			if (!pA)
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "Removal: deal 0x%08X, no record for (%d,%d), key dropped.", localType, a.regionX, a.regionZ);
+				continue;
+			}
+			SC4List<cISC4NeighborDeal*> deals;   // held across Cancel
+			logger.WriteLineFormatted(LogLevel::Info, "Removal: deal 0x%08X no longer listed by (%d,%d). FindDeals ...", localType, a.regionX, a.regionZ);
+			logger.Flush();
+			ns641::FindDeals(ctx.pNeighborsSim, static_cast<int32_t>(localType), pA, deals);
+			const size_t n = deals.size();
+			if (n != 1)
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "Removal: deal 0x%08X FindDeals count=%zu, not cancelled.", localType, n);
+				continue;
+			}
+			cISC4NeighborDeal* deal = *deals.begin();
+			logger.WriteLineFormatted(LogLevel::Info, "Removal: deal 0x%08X %p flags before=0x%X amount=%d. Cancel() ...",
+				localType, static_cast<void*>(deal), static_cast<uint32_t>(deal->GetFlags()), deal->GetAmount());
+			logger.Flush();
+			deal->Cancel();
+			// A status 2 sent inside Cancel is logged by the director's event handler above this line.
+			logger.WriteLineFormatted(LogLevel::Info, "Removal: deal 0x%08X Cancel() returned, flags after=0x%X", localType, static_cast<uint32_t>(deal->GetFlags()));
+			logger.Flush();
+			result.cancelled++;
+		}
 	}
 }

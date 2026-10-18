@@ -109,6 +109,7 @@ namespace regionsync
 				syncConnections = ParseBool(sync->get_value("SyncConnections", ""), syncConnections);
 				syncDeals = ParseBool(sync->get_value("SyncDeals", ""), syncDeals);
 				layEdgeNetwork = ParseBool(sync->get_value("LayEdgeNetwork", ""), layEdgeNetwork);
+				syncRemovals = ParseBool(sync->get_value("SyncRemovals", ""), syncRemovals);
 				checkWriterLiveness = ParseBool(sync->get_value("CheckWriterLiveness", ""), checkWriterLiveness);
 			}
 

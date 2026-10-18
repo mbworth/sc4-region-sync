@@ -72,6 +72,10 @@ namespace regionsync
 		// path. Off until Q10 is observed; RegionSyncMirror always lays.
 		bool layEdgeNetwork = false;
 
+		// Remove connections and deals a live publisher stopped listing
+		// (docs/PLAN-REMOVAL.md). Off until Q11 is observed.
+		bool syncRemovals = false;
+
 		// Drop another instance's snapshot when its writer process has exited
 		// (the Exit button sends no shutdown). Same machine only.
 		bool checkWriterLiveness = true;

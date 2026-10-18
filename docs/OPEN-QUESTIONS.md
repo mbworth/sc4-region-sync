@@ -212,3 +212,22 @@ Run with `SyncConnections=1` as shipped; the lay decision is idempotent, so the 
 4. Flip `LayEdgeNetwork=1`, repeat 1 with no cheats.
 
 **Observed.** (unknown)
+
+## Q11. Does removing what a live publisher stopped listing converge both instances without demolition?
+
+Slice 2c (`docs/PLAN-REMOVAL.md`, research `docs/research/edge-tile-641.md` add=0, `docs/research/deals-641.md`). `SyncRemovals` stays 0 in the shipped INI until this has an observation; `RegionSyncMirror` always removes. Removal needs the publisher Alive at mirror time, its `cityLoadedAt` known, its lists complete (`connectionsComplete`/`dealsComplete`: false until `0x6AC284F3` arrives, in the shutdown publish, when a capture skipped an entry, or when the file had a parse warning) and an earlier listing in the same publisher session. Creation does not need Complete. Calls log under `Removal:` and `EdgeClear:`; an incomplete list keeps every unlisted key (tombstones included) and logs `list incomplete, unlisted keys kept` once per publisher session; with a complete list a closed gate logs `not removed, keys dropped (alive=.. loadedAt=.. syncRemovals=..)` once per publisher session and drops the unlisted keys, so a re-made entry is mirrored again.
+
+1. Road mirrored both ways with stubs. B bulldozes its stub: B logs `0xEA0D163E`, publishes without it; A's next `RegionSyncMirror` logs `Removal: connection ... DeleteConnection`, the edge flags cleared, the one-cell re-solve result, arrow gone, road stays. Reverse. Power line the same (confirm the one-cell re-solve result for poles).
+2. Cancel the water deal in A: B logs `Removal: deal ... Cancel()`, an `Event 0xEA418D8F data1=2` between the before and after lines, deal gone from B's window, Imported/Exported updated. Reverse. Also a deal with two matches (expect `count=2, not cancelled`).
+3. Exit A with the Exit button while B runs: `dead=1`, `snapshot dead or missing, history dropped`, nothing removed.
+4. A quits to the region without saving and reopens the city: B logs `publisher session changed, history dropped`; nothing removed; connections converge by creation.
+5. B bulldozes and rebuilds a stub within one month: A must not delete it (`rebuilt since last pass, kept`).
+6. B reloads next to running A: no removal in either.
+7. `CheckWriterLiveness=0`: no removal (`alive=0`).
+8. Flip `SyncRemovals=1`, repeat 1 and 2 with no cheats. Save in both orders, reload the subscriber first each time: nothing resurrects, nothing is demolished.
+9. Every city load, in both instances, logs `Event 0x6AC284F3 (connections ready) first this session`. If one does not, that publisher never publishes complete lists and nothing it drops is removed.
+10. Run both instances a few sim months with no edits: every `Mirror` line shows `removed=0` and `cancelledDeals=0`.
+
+Accepted divergences: a subscriber reloaded from an older save keeps a connection or deal the peer removed earlier (first sighting only records); each `DeleteConnection` queues an add=0 entry on the publisher's record copy, which a save writes into the publisher's file (vanilla does the same); bulldozing a house under a pre-2b arrow deletes the connection on both sides (vanilla's result at the next load too).
+
+**Observed.** (unknown)

@@ -30,7 +30,9 @@ int main(int argc, char** argv)
 	a.rciGroups[0] = { 0x1010, 100 }; a.rciGroups[1] = { 0x3110, 200 }; a.rciGroups[2] = { 0x4400, -1 };
 	a.connectionsKnown = true;
 	a.connections = { { 2, 0, 17, -1, 17, true, 2, 7 }, { 4, 127, 0, 127, -1, true, 3, 6 }, { 5, 3, 0, 0, 0, false, 3, 6 } };
+	a.connectionsComplete = true;
 	a.dealsKnown = true;
+	a.dealsComplete = false;
 	a.deals = { { 0x4773FFE4, 2, 7, 1500, 0x2, 365 }, { 0x4773FFE1, 4, 7, 0, 0x101, 0 } };
 
 	// Scratch dir under the build tree, not the shared system temp dir.
@@ -83,6 +85,7 @@ int main(int argc, char** argv)
 		CHECK(x.cellKnown == y.cellKnown && (!x.cellKnown || (x.cellX == y.cellX && x.cellZ == y.cellZ)));
 	}
 	CHECK(b.dealsKnown && b.deals.size() == a.deals.size());
+	CHECK(b.connectionsComplete && !b.dealsComplete);
 	for (size_t i = 0; i < a.deals.size() && i < b.deals.size(); i++)
 	{
 		const DealRecord& x = a.deals[i];
@@ -100,6 +103,7 @@ int main(int argc, char** argv)
 	CHECK(ReadSnapshotFile(path, e2, error));
 	CHECK(e2.connectionsKnown && e2.connections.empty());
 	CHECK(!e2.dealsKnown && e2.deals.empty());
+	CHECK(!e2.connectionsComplete && !e2.dealsComplete);   // absent reads false
 	CHECK(!e2.writer.Known());
 
 	// Writer identity: missing or bad values read as unknown, and an invalid
@@ -167,7 +171,7 @@ int main(int argc, char** argv)
 	// Overflowing numbers fail the parse; bad or oversized counts are reported.
 	{
 		std::ofstream f(path, std::ios::trunc);
-		f << "regionX=4294967296\npopulation=99999999999\ncitySerial=-1\nconnectionCount=x\ndealCount=999999\n";
+		f << "regionX=4294967296\npopulation=99999999999\ncitySerial=-1\nconnectionsComplete=1\nconnectionCount=x\ndealsComplete=1\ndealCount=999999\n";
 	}
 	NeighborSnapshot o;
 	CHECK(ReadSnapshotFile(path, o, error));
@@ -175,6 +179,23 @@ int main(int argc, char** argv)
 	CHECK(o.connectionsKnown && o.connections.empty());
 	CHECK(o.dealsKnown && o.deals.size() == kMaxListEntries);
 	CHECK(error.find("connectionCount") != std::string::npos && error.find("dealCount") != std::string::npos);
+	CHECK(!o.connectionsComplete && !o.dealsComplete);   // any parse warning clears both
+
+	// A missing per-entry key also clears both; a clean file keeps them.
+	{
+		std::ofstream f(path, std::ios::trunc);
+		f << "connectionsComplete=1\nconnectionCount=1\nconnection.0.type=2\nconnection.0.innerX=0\nconnection.0.innerZ=5\n"
+			"connection.0.otherTileX=1\nconnection.0.otherTileZ=0\ndealsComplete=1\ndealCount=1\ndeal.0.type=1198784480\n";
+	}
+	NeighborSnapshot m;
+	CHECK(ReadSnapshotFile(path, m, error));
+	CHECK(error.find("deal.0.") != std::string::npos && !m.connectionsComplete && !m.dealsComplete);
+	{
+		std::ofstream f(path, std::ios::trunc);
+		f << "connectionsComplete=1\nconnectionCount=1\nconnection.0.type=2\nconnection.0.innerX=0\nconnection.0.innerZ=5\n"
+			"connection.0.otherTileX=1\nconnection.0.otherTileZ=0\ndealsComplete=1\ndealCount=0\n";
+	}
+	CHECK(ReadSnapshotFile(path, m, error) && error.empty() && m.connectionsComplete && m.dealsComplete);
 
 	// Validation helpers.
 	// Connection cell: west, east, north, south of a 64-cell tile accepted.
@@ -209,6 +230,17 @@ int main(int argc, char** argv)
 	CHECK(!EdgeStubGeometry(-1, -1, 128) && !EdgeStubGeometry(128, 128, 128) && !EdgeStubGeometry(-1, 128, 128)); // corners
 	CHECK(!EdgeStubGeometry(5, 5, 128) && !EdgeStubGeometry(-2, 5, 128) && !EdgeStubGeometry(129, 5, 128));       // interior, too far
 	CHECK(!EdgeStubGeometry(-1, 5, 0) && !EdgeStubGeometry(-1, 0, 2));                                            // degenerate size
+
+	// Removal helpers.
+	CHECK(IsProposedOnlyDeal(0x1) && IsProposedOnlyDeal(0x81) && IsProposedOnlyDeal(0x101));
+	CHECK(!IsProposedOnlyDeal(0x0) && !IsProposedOnlyDeal(0x2) && !IsProposedOnlyDeal(0x3) && !IsProposedOnlyDeal(0x4));
+	int32_t pcx = 0, pcz = 0;
+	CHECK(PublisherConnectionCell(0, 17, 128, 17, 128, pcx, pcz) && pcx == -1 && pcz == 17);     // publisher east of us
+	CHECK(PublisherConnectionCell(127, 5, -1, 5, 128, pcx, pcz) && pcx == 128 && pcz == 5);      // publisher west
+	CHECK(PublisherConnectionCell(40, 0, 40, 128, 128, pcx, pcz) && pcx == 40 && pcz == -1);     // publisher south
+	CHECK(PublisherConnectionCell(0, 127, 0, -1, 128, pcx, pcz) && pcx == 0 && pcz == 128);      // publisher north
+	CHECK(IsConnectionCellAdjacent(0, 17, -1, 17, 128) && IsConnectionCellAdjacent(127, 5, 128, 5, 128));
+	CHECK(!PublisherConnectionCell(0, 0, -1, -1, 128, pcx, pcz) && !PublisherConnectionCell(0, 0, 5, 5, 128, pcx, pcz)); // corner, interior
 
 	// Missing file reports an error.
 	NeighborSnapshot c;

@@ -157,43 +157,99 @@ namespace
 	}
 }
 
+namespace
+{
+	struct EdgeSetup
+	{
+		cISC4City* city = nullptr;
+		cISC4OccupantManager* occ = nullptr;
+		cISC4ZoneManager* zones = nullptr;
+		cISC4NetworkManager* nm = nullptr;
+		int32_t net = -1;
+		int32_t cells = 0;   // city width from CellCountX/Z when they agree
+		regionsync::EdgeStub stub;
+	};
+
+	// Managers, network type and stub geometry; reason is set on failure.
+	bool SetUpEdge(const regionsync::MirrorContext& ctx, uint32_t connType, int32_t bx, int32_t bz, int32_t cells, EdgeSetup& e, const char*& reason)
+	{
+		Logger& logger = Log();
+		e.net = regionsync::ConnectionToNetworkType(connType);
+		if (e.net < 0)
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: type %u has no single network.", connType);
+			reason = "unsupported type";
+			return false;
+		}
+		e.city = ctx.pCity;
+		e.occ = e.city ? e.city->GetOccupantManager() : nullptr;
+		e.zones = e.city ? e.city->GetZoneManager() : nullptr;
+		e.nm = e.city ? e.city->GetNetworkManager() : nullptr;
+		if (!e.occ || !e.zones || !e.nm)
+		{
+			logger.WriteLineFormatted(LogLevel::Error, "EdgeTile: city=%p occupants=%p zones=%p network=%p.",
+				static_cast<void*>(e.city), static_cast<void*>(e.occ), static_cast<void*>(e.zones), static_cast<void*>(e.nm));
+			reason = "no managers";
+			return false;
+		}
+
+		const int32_t countX = static_cast<int32_t>(e.city->CellCountX());
+		const int32_t countZ = static_cast<int32_t>(e.city->CellCountZ());
+		e.cells = cells;
+		if (countX != cells || countZ != cells)
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: CellCountX/Z=(%d,%d) differs from cells=%d.", countX, countZ, cells);
+			if (countX == countZ && countX > 0) e.cells = countX;
+		}
+		const std::optional<regionsync::EdgeStub> stub = regionsync::EdgeStubGeometry(bx, bz, e.cells);
+		if (!stub)
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: cell (%d,%d) is not just outside a %d-cell edge.", bx, bz, e.cells);
+			reason = "geometry";
+			return false;
+		}
+		e.stub = *stub;
+		return true;
+	}
+
+	// SetEdgeTypesFlag(net, update(f)) on each piece of net on the cell; returns the OR of the old flags.
+	uint32_t UpdateEdgeFlags(cISC4OccupantManager* occ, int32_t x, int32_t z, NetType netType, const std::function<uint32_t(uint32_t)>& update)
+	{
+		uint32_t seen = 0;
+		ForEachOccupant(occ, x, z, kOccupantTypeNetwork, [&](cISC4Occupant* o) {
+			cRZAutoRefCount<cISC4NetworkOccupant> no;
+			if (!o->QueryInterface(GZIID_cISC4NetworkOccupant, no.AsPPVoid()) || !no || !no->IsOfType(netType)) return;
+			const uint32_t f = no->GetEdgeTypesFlag(netType);
+			const uint32_t nf = update(f);
+			seen |= f;
+			Log().WriteLineFormatted(LogLevel::Info, "EdgeTile: %p GetEdgeTypesFlag=0x%08X (0x04 bits 0x%08X). SetEdgeTypesFlag(0x%08X) ...",
+				static_cast<void*>(no), f, f & 0x04040404u, nf);
+			Log().Flush();
+			no->SetEdgeTypesFlag(netType, nf);
+			Log().WriteLineFormatted(LogLevel::Info, "EdgeTile: SetEdgeTypesFlag returned, now 0x%08X", no->GetEdgeTypesFlag(netType));
+		});
+		return seen;
+	}
+}
+
 namespace regionsync
 {
 	EdgeLayResult LayEdgePiece(const MirrorContext& ctx, uint32_t connType, int32_t bx, int32_t bz, int32_t cells)
 	{
 		Logger& logger = Log();
-		const int32_t net = ConnectionToNetworkType(connType);
-		if (net < 0)
+		EdgeSetup e;
+		const char* reason = "";
+		if (!SetUpEdge(ctx, connType, bx, bz, cells, e, reason))
 		{
-			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: type %u has no single network, not laid.", connType);
-			return { false, "unsupported type" };
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: not laid (%s).", reason);
+			return { false, reason };
 		}
-		cISC4City* pCity = ctx.pCity;
-		cISC4OccupantManager* occ = pCity ? pCity->GetOccupantManager() : nullptr;
-		cISC4ZoneManager* zones = pCity ? pCity->GetZoneManager() : nullptr;
-		cISC4NetworkManager* nm = pCity ? pCity->GetNetworkManager() : nullptr;
-		if (!occ || !zones || !nm)
-		{
-			logger.WriteLineFormatted(LogLevel::Error, "EdgeTile: city=%p occupants=%p zones=%p network=%p, not laid.",
-				static_cast<void*>(pCity), static_cast<void*>(occ), static_cast<void*>(zones), static_cast<void*>(nm));
-			return { false, "no managers" };
-		}
-
-		const int32_t countX = static_cast<int32_t>(pCity->CellCountX());
-		const int32_t countZ = static_cast<int32_t>(pCity->CellCountZ());
-		int32_t n = cells;
-		if (countX != cells || countZ != cells)
-		{
-			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: CellCountX/Z=(%d,%d) differs from cells=%d.", countX, countZ, cells);
-			if (countX == countZ && countX > 0) n = countX;
-		}
-		const std::optional<EdgeStub> stub = EdgeStubGeometry(bx, bz, n);
-		if (!stub)
-		{
-			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: cell (%d,%d) is not just outside a %d-cell edge, not laid.", bx, bz, n);
-			return { false, "geometry" };
-		}
-		const EdgeStub& s = *stub;
+		cISC4City* pCity = e.city;
+		cISC4OccupantManager* occ = e.occ;
+		cISC4ZoneManager* zones = e.zones;
+		cISC4NetworkManager* nm = e.nm;
+		const int32_t net = e.net;
+		const EdgeStub& s = e.stub;
 		const NetType netType = static_cast<NetType>(net);
 		const int32_t dx = (s.ex > s.sx) - (s.ex < s.sx);
 		const int32_t dz = (s.ez > s.sz) - (s.ez < s.sz);
@@ -286,17 +342,7 @@ namespace regionsync
 		{
 			const uint32_t clear = ~(0xFFu << (s.side * 8));
 			const uint32_t set = 2u << (s.side * 8);
-			ForEachOccupant(occ, s.sx, s.sz, kOccupantTypeNetwork, [&](cISC4Occupant* o) {
-				cRZAutoRefCount<cISC4NetworkOccupant> no;
-				if (!o->QueryInterface(GZIID_cISC4NetworkOccupant, no.AsPPVoid()) || !no || !no->IsOfType(netType)) return;
-				const uint32_t f = no->GetEdgeTypesFlag(netType);
-				const uint32_t nf = (f & clear) | set;
-				logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: %p GetEdgeTypesFlag=0x%08X (0x04 bits 0x%08X). SetEdgeTypesFlag(0x%08X) ...",
-					static_cast<void*>(no), f, f & 0x04040404u, nf);
-				logger.Flush();
-				no->SetEdgeTypesFlag(netType, nf);
-				logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: SetEdgeTypesFlag returned, now 0x%08X", no->GetEdgeTypesFlag(netType));
-			});
+			UpdateEdgeFlags(occ, s.sx, s.sz, netType, [&](uint32_t f) { return (f & clear) | set; });
 		}
 
 		Place(tool, s, "second");
@@ -310,5 +356,65 @@ namespace regionsync
 		logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: result cells=%d,%d,%d -> %s", pieces[0], pieces[1], pieces[2],
 			full ? "laid" : edge ? "partial (inner cells missing)" : "edge piece gone after second placement");
 		return { edge, full ? "laid" : edge ? "partial" : "no piece" };
+	}
+
+	bool ClearEdgePiece(const MirrorContext& ctx, uint32_t connType, int32_t bx, int32_t bz, int32_t cells)
+	{
+		Logger& logger = Log();
+		EdgeSetup e;
+		const char* reason = "";
+		if (!SetUpEdge(ctx, connType, bx, bz, cells, e, reason))
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeClear: not cleared (%s).", reason);
+			return false;
+		}
+		const EdgeStub& s = e.stub;
+		const NetType netType = static_cast<NetType>(e.net);
+		const uint32_t clear = ~(0xFFu << (s.side * 8));
+		logger.WriteLineFormatted(LogLevel::Info, "EdgeClear: type %u net %d connection (%d,%d) side %u edge cell (%d,%d)",
+			connType, e.net, bx, bz, s.side, s.sx, s.sz);
+		if (CountPieces(e.occ, s.sx, s.sz, netType) == 0)
+		{
+			logger.WriteLine(LogLevel::Info, "EdgeClear: no piece on the edge cell, nothing to re-solve.");
+			return false;
+		}
+		const auto clearSide = [&](uint32_t f) { return f & clear; };
+		const uint32_t seen = UpdateEdgeFlags(e.occ, s.sx, s.sz, netType, clearSide);
+
+		// 0x04 in byte i: the piece continues one cell west, north, east, south.
+		constexpr int32_t kStepX[4] = { -1, 0, 1, 0 };
+		constexpr int32_t kStepZ[4] = { 0, -1, 0, 1 };
+		for (uint32_t i = 0; i < 4; i++)
+		{
+			if (!((seen >> (i * 8)) & 0x04u)) continue;
+			const int32_t px = s.sx + kStepX[i], pz = s.sz + kStepZ[i];
+			if (px < 0 || pz < 0 || px >= e.cells || pz >= e.cells)
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "EdgeClear: partner cell (%d,%d) outside the city, skipped.", px, pz);
+				continue;
+			}
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeClear: partner cell (%d,%d)", px, pz);
+			UpdateEdgeFlags(e.occ, px, pz, netType, clearSide);
+		}
+
+		logger.WriteLineFormatted(LogLevel::Info, "EdgeClear: GetNetworkTool(%d, true) ...", e.net);
+		logger.Flush();
+		cISC4NetworkTool* rawTool = e.nm->GetNetworkTool(e.net, true);
+		logger.WriteLineFormatted(LogLevel::Info, "EdgeClear: GetNetworkTool=%p", static_cast<void*>(rawTool));
+		if (!rawTool)
+		{
+			return false;
+		}
+		const ToolGuard guard(rawTool);
+		logger.WriteLine(LogLevel::Info, "EdgeClear: Init ...");
+		logger.Flush();
+		const bool inited = guard.tool->Init();
+		logger.WriteLineFormatted(LogLevel::Info, "EdgeClear: Init=%d", inited ? 1 : 0);
+		const EdgeStub one{ s.sx, s.sz, s.sx, s.sz, s.side };
+		logger.WriteLineFormatted(LogLevel::Info, "EdgeClear: funds before=%lld", Funds(e.city));
+		const bool placed = Place(guard.tool, one, "one-cell re-solve");
+		logger.WriteLineFormatted(LogLevel::Info, "EdgeClear: funds after=%lld", Funds(e.city));
+		CountPieces(e.occ, s.sx, s.sz, netType);
+		return placed;
 	}
 }

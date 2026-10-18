@@ -167,6 +167,7 @@ namespace regionsync
 
 		if (s.connectionsKnown)
 		{
+			out << "connectionsComplete=" << (s.connectionsComplete ? 1 : 0) << '\n';
 			out << "connectionCount=" << s.connections.size() << '\n';
 			for (size_t i = 0; i < s.connections.size(); i++)
 			{
@@ -187,6 +188,7 @@ namespace regionsync
 
 		if (s.dealsKnown)
 		{
+			out << "dealsComplete=" << (s.dealsComplete ? 1 : 0) << '\n';
 			out << "dealCount=" << s.deals.size() << '\n';
 			for (size_t i = 0; i < s.deals.size(); i++)
 			{
@@ -304,13 +306,14 @@ namespace regionsync
 			{
 				ConnectionRecord& c = s.connections[i];
 				const std::string p = "connection." + std::to_string(i) + ".";
-				Read(kv, p + "type", c.type);
-				Read(kv, p + "innerX", c.innerX);
-				Read(kv, p + "innerZ", c.innerZ);
+				bool ok = Read(kv, p + "type", c.type);
+				ok = Read(kv, p + "innerX", c.innerX) && ok;
+				ok = Read(kv, p + "innerZ", c.innerZ) && ok;
 				const bool cellXKnown = Read(kv, p + "cellX", c.cellX);
 				c.cellKnown = Read(kv, p + "cellZ", c.cellZ) && cellXKnown;
-				Read(kv, p + "otherTileX", c.otherTileX);
-				Read(kv, p + "otherTileZ", c.otherTileZ);
+				ok = Read(kv, p + "otherTileX", c.otherTileX) && ok;
+				ok = Read(kv, p + "otherTileZ", c.otherTileZ) && ok;
+				if (!ok) error += p + " keys missing; ";
 			}
 		}
 
@@ -323,13 +326,25 @@ namespace regionsync
 			{
 				DealRecord& d = s.deals[i];
 				const std::string p = "deal." + std::to_string(i) + ".";
-				Read(kv, p + "type", d.type);
-				Read(kv, p + "otherTileX", d.otherTileX);
-				Read(kv, p + "otherTileZ", d.otherTileZ);
-				Read(kv, p + "amount", d.amount);
-				Read(kv, p + "flags", d.flags);
-				Read(kv, p + "expiresIn", d.expiresIn);
+				bool ok = Read(kv, p + "type", d.type);
+				ok = Read(kv, p + "otherTileX", d.otherTileX) && ok;
+				ok = Read(kv, p + "otherTileZ", d.otherTileZ) && ok;
+				ok = Read(kv, p + "amount", d.amount) && ok;
+				ok = Read(kv, p + "flags", d.flags) && ok;
+				ok = Read(kv, p + "expiresIn", d.expiresIn) && ok;
+				if (!ok) error += p + " keys missing; ";
 			}
+		}
+
+		int32_t complete = 0;
+		s.connectionsComplete = s.connectionsKnown && Read(kv, "connectionsComplete", complete) && complete != 0;
+		complete = 0;
+		s.dealsComplete = s.dealsKnown && Read(kv, "dealsComplete", complete) && complete != 0;
+		// Any parse problem: a missing entry must not read as a removal.
+		if (!error.empty())
+		{
+			s.connectionsComplete = false;
+			s.dealsComplete = false;
 		}
 
 		return true;

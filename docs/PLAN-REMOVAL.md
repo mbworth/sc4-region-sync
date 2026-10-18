@@ -16,10 +16,10 @@ Keys are the existing `mirroredConnections` entries (publisher tile, type, publi
 
 Removal pass, per publisher, after the create pass: for each key of this publisher not listed now:
 1. `pConn = FindConnection(type, bx, bz)`. Null: the player already removed it locally; erase the key, done.
-2. If `pConn` differs from the pointer recorded last pass, the player bulldozed and rebuilt it since: refresh the pointer, keep the key, no removal this pass (rebuild race).
+2. If `pConn` differs from the pointer recorded last pass, the player bulldozed and rebuilt it since: it is the player's own now; drop the key, no removal.
 3. `DeleteConnection(type, bx, bz)`, then the add=0 edge clear for mapped network types (`ClearEdgePiece`: on the edge cell's `0xC772BF98` occupants with `IsOfType(netType)`, `SetEdgeTypesFlag(netType, f & ~(0xFFu << side*8))`, same on the `0x04` partner cell if the bit is set; private tool `Init`, one-cell `PlaceNetworkOccupants(sx, sz, sx, sz, 0, nullptr, true, -1)` with the return and `GetFailureState` logged, `Shutdown`, `Release`). Ferry and unmapped types: `DeleteConnection` only. Pieces stay (vanilla).
 4. Record copy: if the publisher's record copy holds the counterpart (`rc641::FindConnection(pA, type, cell outside its edge)`), `SetIsActive(false)` and, when it is one we injected, erase it from the `+0x90` list (code exists in `EnsureRecordConnection`). Otherwise a later save writes a stale active entry into the publisher's file and its next load rebuilds the stub through demolition.
-5. Erase the key.
+5. Erase the key. If `FindConnection` is still non-null after `DeleteConnection`, skip the edge and record steps, retry once on the next pass, then drop the key.
 
 Tombstones (create side of the race): a key whose local connection is gone (`FindConnection` null) while the publisher still lists it is not re-created; the key stays as a tombstone until the publisher stops listing it, then it is erased. So a player who bulldozes a mirrored connection does not get it back every pull, and the publisher's removal (their side, on their next pull) clears it on both ends.
 
@@ -29,13 +29,12 @@ Tombstones (create side of the race): a key whose local connection is gone (`Fin
 
 ## Publisher side
 
-- `CaptureConnections` / `CaptureDeals`: any skipped entry (null other side) sets `*Known = false` and logs at Info, so a partial capture can never read as a removal.
-- `connectionsKnown` is published as false until `0x6AC284F3` (connections ready) has arrived this session: the load-time publish runs before vanilla's own reconcile.
+- Snapshot `connectionsComplete` / `dealsComplete` (absent reads false). Capture sets them false when any entry was skipped (lists stay Known, so creation and amount follow are unchanged); the director publishes both false until `0x6AC284F3` (connections ready) has arrived this session and on the shutdown publish; any parse warning reads both false. Removal, key drops and the deals forget loop require Complete; an incomplete list leaves every key, tombstones included, untouched.
 - The `0xEA0D163E` and `0xEA418D8F` handlers already set the dirty bit; the next SimNewDay publish carries the change.
 
 ## Gating
 
-`SyncRemovals` (INI, default 0 until Q11 is observed; `RegionSyncMirror` always runs removals). Connection removal also needs `SyncConnections`, deal removal `SyncDeals`. Liveness is read at mirror time.
+`SyncRemovals` (INI, default 0 until Q11 is observed; `RegionSyncMirror` always runs removals). Connection removal also needs `SyncConnections`, deal removal `SyncDeals`. Liveness is read at mirror time. With a complete list and the gate closed, unlisted keys are dropped (logged once per publisher session), so a re-made entry mirrors again; the tombstone of a locally bulldozed connection lasts only while the publisher lists it.
 
 ## What must not break
 

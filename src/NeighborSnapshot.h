@@ -142,6 +142,10 @@ namespace regionsync
 		std::vector<ConnectionRecord> connections;
 		bool dealsKnown = false;
 		std::vector<DealRecord> deals;
+		// Every entry captured and the publisher's load reconcile done: only
+		// then may a missing entry read as a removal. Absent reads false.
+		bool connectionsComplete = false;
+		bool dealsComplete = false;
 	};
 
 	// Slice 1 mirrors single-cell networks only: rail, road, power, pipe,
@@ -157,6 +161,8 @@ namespace regionsync
 
 	constexpr uint32_t kDealTypeFirst = 0x4773FFE0;
 	constexpr uint32_t kDealTypeLast = 0x4773FFE5;
+	constexpr uint32_t kDealFlagProposed = 0x1;
+	constexpr uint32_t kDealFlagActive = 0x2;
 	constexpr uint32_t kDealFlagCancelled = 0x4;
 	constexpr uint32_t kDealFlagSilent = 0x80;
 	constexpr uint32_t kDealFlagsAmountLocked = 0x300;   // grace or probation: SetAmount is ignored
@@ -170,6 +176,8 @@ namespace regionsync
 	constexpr bool IsValidDealAmount(int32_t amount) { return amount >= 0 && amount <= 10000000; }
 	constexpr bool IsValidExpiresIn(int32_t days) { return days >= 0 && days <= 36500; }
 	constexpr uint32_t MaskDealFlags(uint32_t flags) { return flags & kDealFlagsKnown; }
+	// An offer not yet accepted: neither created nor removed by the mirror.
+	constexpr bool IsProposedOnlyDeal(uint32_t flags) { return (flags & kDealFlagProposed) && !(flags & kDealFlagActive); }
 
 	// The connection cell lies just outside one edge of A (cellsA wide), one
 	// step outward from the inner cell; the other axis equals the inner cell's
@@ -210,6 +218,23 @@ namespace regionsync
 		const bool xIn = bx >= 0 && bx < bCells;
 		const bool zIn = bz >= 0 && bz < bCells;
 		return (xEdge && zIn) || (zEdge && xIn);
+	}
+
+	// The publisher's connection cell (just outside its edge, its frame) from
+	// its inner cell and our cell (bx,bz) just outside our edge: one step from
+	// the inner cell toward us. False when (bx,bz) is not just outside a
+	// bCells-wide edge.
+	constexpr bool PublisherConnectionCell(int32_t innerX, int32_t innerZ, int32_t bx, int32_t bz, int32_t bCells, int32_t& cellX, int32_t& cellZ)
+	{
+		cellX = innerX;
+		cellZ = innerZ;
+		const auto in = [bCells](int32_t v) { return v >= 0 && v < bCells; };
+		if (bx == -1 && in(bz)) cellX = innerX + 1;
+		else if (bx == bCells && in(bz)) cellX = innerX - 1;
+		else if (bz == -1 && in(bx)) cellZ = innerZ + 1;
+		else if (bz == bCells && in(bx)) cellZ = innerZ - 1;
+		else return false;
+		return true;
 	}
 
 	// Connection type to cISC4NetworkOccupant::eNetworkType; -1 when the edge

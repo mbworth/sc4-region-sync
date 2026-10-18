@@ -241,6 +241,7 @@ namespace regionsync
 	{
 		out.connections.clear();
 		out.connectionsKnown = false;
+		out.connectionsComplete = false;
 		if (!pNeighborsSim)
 		{
 			return;
@@ -250,10 +251,13 @@ namespace regionsync
 		SC4List<cISC4NeighborConnection*> list;
 		pNeighborsSim->GetAllConnections(list);
 
+		// A partial list must never read as a removal (docs/PLAN-REMOVAL.md).
+		int skipped = 0;
 		for (cISC4NeighborConnection* pConn : list)
 		{
 			if (!pConn)
 			{
+				skipped++;
 				continue;
 			}
 			ConnectionRecord c;
@@ -262,8 +266,9 @@ namespace regionsync
 			cISC4RegionalCity* pOther = pConn->GetCityOnOtherSideOfConnection();
 			if (!innerOk || !pOther)
 			{
-				logger.WriteLineFormatted(LogLevel::Debug, "Capture: connection type=%u skipped (innerCell ok=%d, other=%p)",
+				logger.WriteLineFormatted(LogLevel::Info, "Capture: connection type=%u skipped (innerCell ok=%d, other=%p)",
 					c.type, innerOk ? 1 : 0, static_cast<void*>(pOther));
+				skipped++;
 				continue;
 			}
 			pOther->GetPosition(c.otherTileX, c.otherTileZ);
@@ -275,12 +280,18 @@ namespace regionsync
 			out.connections.push_back(c);
 		}
 		out.connectionsKnown = true;
+		out.connectionsComplete = skipped == 0;
+		if (skipped)
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "Capture: %d connection(s) skipped, connection list published as incomplete.", skipped);
+		}
 	}
 
 	void CaptureDeals(cISC4NeighborsSimulator* pNeighborsSim, cISC4Simulator* pSimulator, NeighborSnapshot& out, bool displayFields)
 	{
 		out.deals.clear();
 		out.dealsKnown = false;
+		out.dealsComplete = false;
 		if (!pNeighborsSim)
 		{
 			return;
@@ -301,10 +312,12 @@ namespace regionsync
 		SC4List<cISC4NeighborDeal*> list;
 		ns641::FindDealsAll(pNeighborsSim, list);
 
+		int skipped = 0;
 		for (cISC4NeighborDeal* pDeal : list)
 		{
 			if (!pDeal)
 			{
+				skipped++;
 				continue;
 			}
 			DealRecord d;
@@ -312,7 +325,8 @@ namespace regionsync
 			cISC4RegionalCity* pOther = pDeal->GetCityOnOtherSideOfConnection();
 			if (!pOther)
 			{
-				logger.WriteLineFormatted(LogLevel::Debug, "Capture: deal type=0x%08X skipped (no city on other side)", d.type);
+				logger.WriteLineFormatted(LogLevel::Info, "Capture: deal type=0x%08X skipped (no city on other side)", d.type);
+				skipped++;
 				continue;
 			}
 			pOther->GetPosition(d.otherTileX, d.otherTileZ);
@@ -334,6 +348,11 @@ namespace regionsync
 			out.deals.push_back(d);
 		}
 		out.dealsKnown = true;
+		out.dealsComplete = skipped == 0;
+		if (skipped)
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "Capture: %d deal(s) skipped, deal list published as incomplete.", skipped);
+		}
 	}
 
 	cISC4RegionalCity* FindRegionalCity(cISC4Region* pRegion, int32_t regionX, int32_t regionZ)

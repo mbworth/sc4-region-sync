@@ -64,9 +64,11 @@
 #include "SC4VersionDetection.h"
 
 #include <Windows.h>
+#include <algorithm>
 #include <cmath>
 #include <cwctype>
 #include <filesystem>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -88,6 +90,8 @@ static constexpr uint32_t kSC4MessageSimNewDay = 0x66956814;
 static constexpr uint32_t kMessageConnectionCreated = 0x8A0D15DA;
 static constexpr uint32_t kMessageConnectionDeleted = 0xEA0D163E;
 static constexpr uint32_t kMessageDealStatus = 0xEA418D8F;
+// Posted after the record apply pass at load (connections-641.md §2).
+static constexpr uint32_t kMessageConnectionsReady = 0x6AC284F3;
 
 // Director ID. Random 32-bit value, must not collide with other plugins.
 static constexpr uint32_t kRegionSyncDllDirector = 0x7A3C9E51;
@@ -272,6 +276,7 @@ public:
 			kMessageConnectionCreated,
 			kMessageConnectionDeleted,
 			kMessageDealStatus,
+			kMessageConnectionsReady,
 		};
 
 		for (uint32_t id : messages)
@@ -285,7 +290,7 @@ public:
 
 		logger.WriteLineFormatted(
 			LogLevel::Info,
-			"Initialized. instanceId=%u enabled=%d publishEveryMonths=%d pullEveryMonths=%d autoSaveEveryMonths=%d syncConnections=%d syncDeals=%d layEdgeNetwork=%d",
+			"Initialized. instanceId=%u enabled=%d publishEveryMonths=%d pullEveryMonths=%d autoSaveEveryMonths=%d syncConnections=%d syncDeals=%d layEdgeNetwork=%d syncRemovals=%d",
 			instanceId,
 			settings.enabled ? 1 : 0,
 			settings.publishEveryMonths,
@@ -293,7 +298,8 @@ public:
 			settings.autoSaveEveryMonths,
 			settings.syncConnections ? 1 : 0,
 			settings.syncDeals ? 1 : 0,
-			settings.layEdgeNetwork ? 1 : 0);
+			settings.layEdgeNetwork ? 1 : 0,
+			settings.syncRemovals ? 1 : 0);
 
 		ownWriter = regionsync::writer::Current();
 		logger.WriteLineFormatted(LogLevel::Info, "Writer: host=%s pid=%u start=%llu checkWriterLiveness=%d",
@@ -361,6 +367,14 @@ public:
 				Logger::GetInstance().WriteLine(LogLevel::Error, "SimNewDay threw a non-standard exception.");
 			}
 			break;
+		case kMessageConnectionsReady:
+			if (!connectionsReady)
+			{
+				connectionsReady = true;
+				publishDirty = true;
+				Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "Event 0x%08X (connections ready) first this session; lists published as complete from now on.", kMessageConnectionsReady);
+			}
+			break;
 		case kMessageConnectionCreated:
 		case kMessageConnectionDeleted:
 		case kMessageDealStatus:
@@ -420,6 +434,7 @@ private:
 		mirror.Reset();
 		mirrorPending.clear();
 		publishDirty = false;
+		connectionsReady = false;
 	}
 
 	void PostCityInit(cIGZMessage2Standard* pStandardMsg)
@@ -705,7 +720,7 @@ private:
 		{
 			if (settings.publishOnShutdown)
 			{
-				Publish("city shutdown");
+				Publish("city shutdown", false);
 			}
 			else
 			{
@@ -817,7 +832,7 @@ private:
 			pending.swap(mirrorPending);
 			for (const regionsync::NeighborSnapshot& snapshot : pending)
 			{
-				MirrorSnapshot(snapshot, settings.syncConnections, settings.syncDeals, true, settings.layEdgeNetwork);
+				MirrorSnapshot(snapshot, false);
 			}
 		}
 	}
@@ -829,7 +844,8 @@ private:
 	// Publish: refresh this tile's regional record from the live city, then
 	// write it to the shared store so other instances can pull it. Per-group
 	// values go out raw: +0x3c is index-0 supply, which holds no regional share.
-	void Publish(const char* reason)
+	// listsComplete=false: a missing entry must not read as a removal (shutdown).
+	void Publish(const char* reason, bool listsComplete = true)
 	{
 		Logger& logger = Logger::GetInstance();
 
@@ -868,6 +884,17 @@ private:
 		}
 		snapshot.writer = ownWriter;
 		snapshot.cityLoadedAt = cityLoadedAt;
+		// The load-time publish runs before vanilla's own reconcile.
+		if (!connectionsReady || !listsComplete)
+		{
+			if (snapshot.connectionsComplete || snapshot.dealsComplete)
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "Publish (%s): lists published as incomplete (connections ready 0x%08X seen=%d).",
+					reason, kMessageConnectionsReady, connectionsReady ? 1 : 0);
+			}
+			snapshot.connectionsComplete = false;
+			snapshot.dealsComplete = false;
+		}
 
 		const std::filesystem::path path =
 			storeDirectory / regionsync::SnapshotFileName(snapshot.regionX, snapshot.regionZ);
@@ -912,7 +939,8 @@ private:
 
 	// Every snapshot in the store except our own tile, a held fake neighbor,
 	// and snapshots whose writer process is gone (removed from the store).
-	std::vector<regionsync::NeighborSnapshot> ReadOtherSnapshots(const char* who, int& filesSeen, int& dead)
+	// deadTiles: tiles whose snapshot was found Dead (removed or remove failed).
+	std::vector<regionsync::NeighborSnapshot> ReadOtherSnapshots(const char* who, int& filesSeen, int& dead, std::set<std::pair<int32_t, int32_t>>& deadTiles)
 	{
 		Logger& logger = Logger::GetInstance();
 		std::vector<regionsync::NeighborSnapshot> result;
@@ -981,6 +1009,7 @@ private:
 				logger.WriteLineFormatted(LogLevel::Info, "%s: snapshot (%d,%d) rewritten since the scan, kept.", who, snapshot.regionX, snapshot.regionZ);
 				continue;
 			}
+			deadTiles.insert({ snapshot.regionX, snapshot.regionZ });
 			const bool removed = std::filesystem::remove(path, removeEc);
 			if (removeEc || !removed)
 			{
@@ -1005,12 +1034,28 @@ private:
 		~InPullScope() { flag = false; }
 	};
 
-	// allowRecordInjection: add missing connections to the neighbor's record copy (Q9, 2026-10-18).
-	// layEdgeNetwork: lay the edge stub under each connection (Q10).
-	void MirrorSnapshot(const regionsync::NeighborSnapshot& snapshot, bool connections, bool deals, bool allowRecordInjection, bool layEdgeNetwork)
+	// cheat (RegionSyncMirror): every pass on, ignoring SyncConnections, SyncDeals,
+	// LayEdgeNetwork and SyncRemovals. Record injection is on for both (Q9, 2026-10-18).
+	void MirrorSnapshot(const regionsync::NeighborSnapshot& snapshot, bool cheat)
 	{
 		Logger& logger = Logger::GetInstance();
-		const regionsync::MirrorContext ctx{ pRegion, pOwnRegionalCity, pNeighborsSim, pSimulator, GZCOM(), allowRecordInjection, cityLoadedAt, pCity, layEdgeNetwork };
+		const bool connections = cheat || settings.syncConnections;
+		const bool deals = cheat || settings.syncDeals;
+		const bool alive = WriterLiveness(snapshot) == regionsync::writer::Liveness::Alive;
+		const regionsync::MirrorContext ctx{
+			.pRegion = pRegion,
+			.pOwnRegionalCity = pOwnRegionalCity,
+			.pNeighborsSim = pNeighborsSim,
+			.pSimulator = pSimulator,
+			.pCOM = GZCOM(),
+			.allowRecordInjection = true,
+			.ownLoadedAt = cityLoadedAt,
+			.pCity = pCity,
+			.layEdgeNetwork = cheat || settings.layEdgeNetwork,
+			.publisherAlive = alive,
+			.syncRemovals = cheat || settings.syncRemovals,
+			.cheat = cheat,
+		};
 		regionsync::ConnectionMirrorResult connectionResult;
 		regionsync::DealMirrorResult dealResult;
 		try
@@ -1032,8 +1077,30 @@ private:
 		{
 			logger.WriteLineFormatted(LogLevel::Error, "Mirror (%d,%d) threw a non-standard exception.", snapshot.regionX, snapshot.regionZ);
 		}
-		logger.WriteLineFormatted(LogLevel::Info, "Mirror (%d,%d): created connections=%d recordConnections=%d laid=%d deals=%d updatedDeals=%d",
-			snapshot.regionX, snapshot.regionZ, connectionResult.created, connectionResult.injected, connectionResult.laid, dealResult.created, dealResult.updated);
+		logger.WriteLineFormatted(LogLevel::Info, "Mirror (%d,%d): created connections=%d recordConnections=%d laid=%d removed=%d deals=%d updatedDeals=%d cancelledDeals=%d alive=%d",
+			snapshot.regionX, snapshot.regionZ, connectionResult.created, connectionResult.injected, connectionResult.laid, connectionResult.removed,
+			dealResult.created, dealResult.updated, dealResult.cancelled, alive ? 1 : 0);
+	}
+
+	// Tiles with mirror history whose snapshot was Dead or is gone from the store.
+	// A file that exists but was not read (parse failure, held) keeps its history.
+	void ForgetAbsentPublishers(const std::vector<regionsync::NeighborSnapshot>& present, const std::set<std::pair<int32_t, int32_t>>& deadTiles)
+	{
+		for (const auto& [x, z] : mirror.Publishers())
+		{
+			const bool found = std::any_of(present.begin(), present.end(), [x, z](const regionsync::NeighborSnapshot& s) { return s.regionX == x && s.regionZ == z; });
+			if (found) continue;
+			std::error_code ec;
+			const bool exists = std::filesystem::exists(storeDirectory / regionsync::SnapshotFileName(x, z), ec);
+			if (deadTiles.count({ x, z }) || (!exists && !ec))
+			{
+				mirror.ForgetPublisher(x, z);
+			}
+			else
+			{
+				Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "Mirror (%d,%d): snapshot file present but not read, history kept.", x, z);
+			}
+		}
 	}
 
 	// Pull: read every snapshot in the store except our own and apply it to
@@ -1058,7 +1125,10 @@ private:
 		const bool feed = FeedsRegionalDemand();
 		const RegionalSums sumsBefore = feed ? SumRegional() : RegionalSums{};
 
-		for (regionsync::NeighborSnapshot& snapshot : ReadOtherSnapshots("Pull", filesSeen, dead))
+		std::set<std::pair<int32_t, int32_t>> deadTiles;
+		std::vector<regionsync::NeighborSnapshot> others = ReadOtherSnapshots("Pull", filesSeen, dead, deadTiles);
+		ForgetAbsentPublishers(others, deadTiles);
+		for (regionsync::NeighborSnapshot& snapshot : others)
 		{
 			cISC4RegionalCity* pTarget = regionsync::FindRegionalCity(pRegion, snapshot.regionX, snapshot.regionZ);
 			if (!pTarget)
@@ -1157,12 +1227,14 @@ private:
 		InPullScope scope(inPull);
 		int filesSeen = 0;
 		int dead = 0;
-		const std::vector<regionsync::NeighborSnapshot> snapshots = ReadOtherSnapshots("Mirror", filesSeen, dead);
+		std::set<std::pair<int32_t, int32_t>> deadTiles;
+		const std::vector<regionsync::NeighborSnapshot> snapshots = ReadOtherSnapshots("Mirror", filesSeen, dead, deadTiles);
+		ForgetAbsentPublishers(snapshots, deadTiles);
 		logger.WriteLineFormatted(LogLevel::Info, "==== RegionSyncMirror begin: files=%d dead=%d others=%zu ====", filesSeen, dead, snapshots.size());
 		logger.Flush();
 		for (const regionsync::NeighborSnapshot& snapshot : snapshots)
 		{
-			MirrorSnapshot(snapshot, true, true, true, true);
+			MirrorSnapshot(snapshot, true);
 		}
 		logger.WriteLine(LogLevel::Info, "==== RegionSyncMirror end ====");
 	}
@@ -1754,6 +1826,7 @@ private:
 	regionsync::NeighborMirror mirror;
 	std::vector<regionsync::NeighborSnapshot> mirrorPending;
 	bool publishDirty = false;
+	bool connectionsReady = false;   // 0x6AC284F3 arrived this city session
 	bool inPull = false;
 	bool sawNewDay = false;
 };
