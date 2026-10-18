@@ -58,6 +58,10 @@ namespace regionsync
 		// pull (Phase 1b). See the director's ApplyRegionalDemandDelta.
 		bool applyRegionalDemand = true;
 
+		// Regional sum for that feed: false = every established tile,
+		// true = GetAllConnectedCities (what the game's fold uses).
+		bool regionalSumConnected = false;
+
 		// Mirror other instances' connections and deals into this city on
 		// each pull (Phase 2 slice 1). Off until Q9 is recorded; the
 		// RegionSyncMirror cheat runs the same steps on demand.

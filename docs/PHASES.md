@@ -22,6 +22,7 @@ Exit criterion: growth in instance B visibly changes regional demand in instance
 
 - [x] The simulator caches regional population at load (Q2). Instead of `ReloadCity`, the director mirrors the simulator's own init: after every pull it feeds the change in regional extrapolated population into the 12 region-use demand objects (`AddToSupplyValue`). Verified in game 2026-10-17.
 - [x] Two-instance confirmation: TuggersVille grew 17.5k -> 21.8k, BumperVille's record and demand supply followed month by month with no drift (2026-10-17, after fixing the publish feedback loop and stale snapshots).
+- [ ] Target fix (Q2 correction, 2026-10-17): the feed now goes into `GetDemand(group, 0x10000)`, not index 0, and the publish is raw. Unverified until the next run shows the load check.
 - [ ] Q3 (`ReloadCity`) is now optional; keep for the thumbnail refresh in Phase 3.
 
 ## Phase 2: hardening

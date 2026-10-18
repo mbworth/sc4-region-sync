@@ -100,6 +100,12 @@ namespace regionsync
 				}
 				markDealsDirty = ParseBool(sync->get_value("MarkDealsDirty", ""), markDealsDirty);
 				applyRegionalDemand = ParseBool(sync->get_value("ApplyRegionalDemand", ""), applyRegionalDemand);
+				{
+					std::string set = sync->get_value("RegionalSumSet", "");
+					std::transform(set.begin(), set.end(), set.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+					if (set == "connected") regionalSumConnected = true;
+					else if (set == "all") regionalSumConnected = false;
+				}
 				syncConnections = ParseBool(sync->get_value("SyncConnections", ""), syncConnections);
 				syncDeals = ParseBool(sync->get_value("SyncDeals", ""), syncDeals);
 			}

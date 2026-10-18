@@ -83,7 +83,7 @@ Plus, once per snapshot: A's tile position and size. Publish the full set each t
 ## GetAdjacentCities crash
 
 - The SC4List layout matches the game's: a single root pointer, with nodes laid out `{next, prev, value}`.
-- Elements are raw `cISC4RegionalCity*`, not slots. Each one is **AddRef'd** (`0x6d01e0`), so the caller must Release each one. `SC4List`'s destructor does not, so it leaks rather than crashes.
+- Elements are raw `cISC4RegionalCity*`, not slots. Each one is **AddRef'd** (`0x6d01e0`), so the caller must Release each one. The vendored `SC4List` destructor does that (verified 2026-10-17, see deals-641.md ownership table).
 - The function clears the output list first (`0x411df0`).
 - The cause of the earlier crash is not found statically. It could be from treating elements as slots, or from the clear running on a list that was not empty.
 

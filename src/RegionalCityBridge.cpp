@@ -166,18 +166,20 @@ namespace regionsync
 					}
 					continue;
 				}
+				// Never insert: +0x48 is written only if the node exists (slot 17 falls back to +0x3c).
 				int32_t* pExtrapolated = rc641::FindExtrapolatedPopulationByType(pRegionalCity, g.groupId);
-				const bool plainDiffers = *pValue != g.population;
-				const bool extrapolatedDiffers = pExtrapolated && *pExtrapolated != g.population;
+				const int32_t value = g.population < 0 ? 0 : g.population;
+				const bool plainDiffers = *pValue != value;
+				const bool extrapolatedDiffers = pExtrapolated && *pExtrapolated != value;
 				if (!plainDiffers && !extrapolatedDiffers)
 				{
 					continue;
 				}
-				logger.WriteLineFormatted(LogLevel::Info, "Apply: rci 0x%04X %d (extrapolated %d) -> %d",
-					g.groupId, *pValue, pExtrapolated ? *pExtrapolated : -1, g.population);
+				logger.WriteLineFormatted(LogLevel::Info, "Apply: rci 0x%04X %d (extrapolated %d) -> %d (snapshot %d)",
+					g.groupId, *pValue, pExtrapolated ? *pExtrapolated : -1, value, g.population);
 				logger.Flush();
-				*pValue = g.population;
-				if (pExtrapolated) *pExtrapolated = g.population;
+				*pValue = value;
+				if (pExtrapolated) *pExtrapolated = value;
 				changed++;
 			}
 		}
