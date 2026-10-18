@@ -43,5 +43,5 @@ Exit criterion: growth in instance B visibly changes regional demand in instance
 
 - [ ] Region view in each instance refreshes thumbnails for tiles the other instance is playing.
 - [x] Coordinator slice 1 (`docs/PLAN-LAUNCHER.md`): status file, same-tile guard (tile mutex, second opener stops writing), Win32 launcher with list, raise, launch gate and resource estimate. Observed 2026-10-18 (Q14).
-- [ ] Coordinator slice 2: grid of live DWM thumbnails. No Close button: the game ignores WM_CLOSE (Q14 step 5).
+- [x] Coordinator slice 2: grid of live DWM thumbnails, observed 2026-10-18 (Q14 step 6). No Close button: the game ignores WM_CLOSE (Q14 step 5).
 - [ ] Publish to Simtropolis once it has survived a few hundred hours of play.
