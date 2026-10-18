@@ -425,6 +425,9 @@ private:
 	{
 		pCity = static_cast<cISC4City*>(pStandardMsg->GetVoid1());
 		ResetSessionState();
+		FILETIME now{};
+		GetSystemTimeAsFileTime(&now);
+		cityLoadedAt = (static_cast<uint64_t>(now.dwHighDateTime) << 32) | now.dwLowDateTime;
 
 		if (pCheatCodeManager)
 		{
@@ -863,6 +866,7 @@ private:
 			return;
 		}
 		snapshot.writer = ownWriter;
+		snapshot.cityLoadedAt = cityLoadedAt;
 
 		const std::filesystem::path path =
 			storeDirectory / regionsync::SnapshotFileName(snapshot.regionX, snapshot.regionZ);
@@ -1004,7 +1008,7 @@ private:
 	void MirrorSnapshot(const regionsync::NeighborSnapshot& snapshot, bool connections, bool deals, bool allowRecordInjection)
 	{
 		Logger& logger = Logger::GetInstance();
-		const regionsync::MirrorContext ctx{ pRegion, pOwnRegionalCity, pNeighborsSim, pSimulator, GZCOM(), allowRecordInjection };
+		const regionsync::MirrorContext ctx{ pRegion, pOwnRegionalCity, pNeighborsSim, pSimulator, GZCOM(), allowRecordInjection, cityLoadedAt };
 		regionsync::ConnectionMirrorResult connectionResult;
 		regionsync::DealMirrorResult dealResult;
 		try
@@ -1736,6 +1740,7 @@ private:
 	int pullCount;
 	uint32_t instanceId;
 	regionsync::WriterIdentity ownWriter;
+	uint64_t cityLoadedAt = 0;
 
 	std::vector<RegionalDemandEntry> regionalDemand;
 	bool fakeNeighborHeld = false;

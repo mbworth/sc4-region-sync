@@ -136,6 +136,10 @@ namespace regionsync
 			out << "writerPid=" << s.writer.pid << '\n';
 			out << "writerStart=" << s.writer.start << '\n';
 		}
+		if (s.cityLoadedAt != 0)
+		{
+			out << "cityLoadedAt=" << s.cityLoadedAt << '\n';
+		}
 		out << "population=" << s.population << '\n';
 		out << "commercialJobs=" << s.commercialJobs << '\n';
 		out << "industrialJobs=" << s.industrialJobs << '\n';
@@ -259,6 +263,8 @@ namespace regionsync
 				s.writer = std::move(w);
 			}
 		}
+		s.cityLoadedAt = 0;
+		Read(kv, "cityLoadedAt", s.cityLoadedAt);
 		Read(kv, "population", s.population);
 		Read(kv, "commercialJobs", s.commercialJobs);
 		Read(kv, "industrialJobs", s.industrialJobs);

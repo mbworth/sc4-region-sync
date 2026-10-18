@@ -430,8 +430,22 @@ namespace regionsync
 					// be the player's own, or a reload's copy (Q9 step 4).
 					if (!seenBefore)
 					{
-						logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: existing deal seen, amount=%d recorded.", d.amount);
-						seenDeals[key] = d.amount;
+						// The city loaded first holds the newer state (vanilla: the
+						// neighbor's saved deal wins at load).
+						const bool publisherOlder = a.cityLoadedAt != 0 && ctx.ownLoadedAt != 0 && a.cityLoadedAt < ctx.ownLoadedAt;
+						if (publisherOlder && n == 1)
+						{
+							logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: existing deal, publisher loaded earlier, following amount=%d.", d.amount);
+							if (FollowAmount(*existing.begin(), d.amount, result))
+							{
+								seenDeals[key] = d.amount;
+							}
+						}
+						else
+						{
+							logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: existing deal seen (%zu match), amount=%d recorded.", n, d.amount);
+							seenDeals[key] = d.amount;
+						}
 					}
 					else if (changed && n == 1)
 					{

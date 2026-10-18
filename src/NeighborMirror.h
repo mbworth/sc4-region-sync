@@ -31,6 +31,7 @@ namespace regionsync
 		cISC4Simulator* pSimulator = nullptr;
 		cIGZCOM* pCOM = nullptr;   // creates connection objects for the record-side step
 		bool allowRecordInjection = false;   // RegionSyncMirror only; otherwise find and SetIsActive
+		uint64_t ownLoadedAt = 0;   // own city load time; a publisher whose city loaded earlier wins on first sighting
 	};
 
 	struct ConnectionMirrorResult

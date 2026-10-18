@@ -121,6 +121,7 @@ namespace regionsync
 		uint32_t simMonth = 0;
 		uint32_t simDay = 0;
 		WriterIdentity writer;
+		uint64_t cityLoadedAt = 0;   // wall clock (FILETIME) when the publisher loaded its city; 0 unknown
 
 		// Summary the demand/neighbor simulators consume
 		int32_t population = 0;

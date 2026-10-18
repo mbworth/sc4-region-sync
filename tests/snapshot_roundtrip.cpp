@@ -19,6 +19,7 @@ int main(int argc, char** argv)
 	a.writtenUnixTime = 1760000000123LL; a.simDateNumber = -42;
 	a.simYear = 2031; a.simMonth = 11; a.simDay = 30;
 	a.writer = { "GAMEBOX-01", 0xFFFFFFF0u, 134000000000000000ULL };
+	a.cityLoadedAt = 134000000001234567ULL;
 	a.population = 123456; a.commercialJobs = 2345; a.industrialJobs = 678;
 	a.workforcePercentage = 0.625f; a.mayorRating = -17; a.budget = -12345.5f; a.income = 987.25f;
 	for (size_t i = 0; i < kCommoditySlots; i++)
@@ -72,6 +73,7 @@ int main(int argc, char** argv)
 
 	CHECK(b.schemaVersion == 3);
 	CHECK(b.writer.host == a.writer.host && b.writer.pid == a.writer.pid && b.writer.start == a.writer.start);
+	CHECK(b.cityLoadedAt == a.cityLoadedAt);
 	CHECK(b.connectionsKnown && b.connections.size() == a.connections.size());
 	for (size_t i = 0; i < a.connections.size() && i < b.connections.size(); i++)
 	{
