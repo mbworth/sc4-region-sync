@@ -1,0 +1,117 @@
+# Phase 2 plan: connections and deals between running instances
+
+Status: reviewed 2026-10-17 (correctness, safety, simplicity lenses); slice 1 approved for implementation. Evidence: `docs/research/connections-641.md`, `docs/research/deals-641.md` (Ghidra only until the experiments below run).
+
+## Goal, slice 1 (create only)
+
+Player builds a single-cell network (road, rail, power line, pipe, dirt road, monorail, light rail, subway) to the edge in city A; city B, running in another instance, gets the connection within a sim day of the next pull without reloading. Player proposes a deal in A; B's copy appears in B's deal list and budget. Removal, amount follow, dual-cell networks (highway, avenue, ground highway), ferry, and the raw replay of the load routine are later slices, each with its own plan.
+
+## What must not break
+
+- Phase 1 sync (records, demand delta feed) keeps working.
+- No writes to `.sc4` files or the Regions folder; only game calls on in-memory objects.
+- No new game call runs automatically before it has run from a cheat with its log read.
+- No exception reaches game code; no game call from inside a synchronous message handler.
+- The plugin never removes or cancels anything in slice 1.
+
+## Facts the plan rests on
+
+Connections:
+- `CreateConnection(type, x, z, dir)` on the city's neighbors simulator creates the connection object, places the marker occupant on the inner edge cell, appends a pending entry on the other side's record, posts `0x8A0D15DA`. Delete posts `0xEA0D163E`. Both are posted, so their handlers run on the main thread outside the creating call. `RequestCreateConnection` is only the confirmation dialog. `CreateConnection`'s return value is garbage; confirm with `FindConnection`.
+- At load, B's record handler reads the pending entries that A left on B's record and the routine at `0x4aa6d0` lays the edge tile and calls `CreateConnection`. B's own save does not carry A's new connection.
+- `dir` alternates across the two cells of dual networks; for single networks 0 is assumed and must be checked in the cheat log.
+- The demand simulator re-sums regional population on `0x8A0D15DA` and `0xEA0D163E` (Q2).
+
+Deals:
+- Deal types: power `0x4773FFE0/E1`, water `E2/E3`, garbage `E4/E5`; even = buy, odd = sell; B's view of A's deal is `typeA ^ 1`. Flags: 1 proposed, 2 active, 4 cancelled, 8 no connection, 0x10 can't afford, 0x20 no landfill, 0x40 renewal due, 0x80 silent, 0x100 grace, 0x200 probation.
+- Each side holds its own copy from its own point of view. B learns of A's deal only at load in vanilla; there is no offer prompt in B.
+- `ProposeDeal(type, otherRecord, &out)` returns false without a matching connection in B's simulator list. `AddDeal` then `SetAmount` makes it active and recomputes cost. `SetAmount` sends `0xEA418D8F` synchronously; the others post it. `MarkDealsDirty` only re-pushes own deals onto records. Imported/Exported stats are recomputed from deals.
+- `FindDeals`/`FindDealsAll` return deals even though the header says connections.
+- `ReloadCity` replaces record objects; never cache a record pointer across pulls.
+
+## Design
+
+### Snapshot schema 2
+
+Additive keys. Counts are explicit; a reader that does not find `connectionCount`/`dealCount` treats the lists as unknown (not empty).
+
+```
+connectionCount=N
+connection.i.type=2              # ConnectionType enum, whitelist 1,2,4,5,6,7,10,11 in slice 1
+connection.i.innerX= innerZ=     # inner edge cell, publisher's frame
+connection.i.otherTileX= otherTileZ=   # GetCityOnOtherSideOfConnection()->GetPosition()
+dealCount=M
+deal.i.type=0x4773FFE4           # publisher's view
+deal.i.otherTileX= otherTileZ=   # GetCityOnOtherSideOfConnection()->GetPosition()
+deal.i.amount=
+deal.i.flags=                    # without 0x80
+deal.i.expiresIn=                # days: expiration - current
+```
+
+Identity: connection = (type, innerX, innerZ) in the publisher's frame; deal = (commodity, tile pair).
+
+Frame conversion lives in `NeighborSnapshot.h` as pure arithmetic and is covered by the host test: `bx = (A.regionX*64 + innerX) - B.regionX*64`, same for z. Valid when exactly one axis is -1 or `B.cells` (`B.cells = 64 << B.sizeEnum`, to be confirmed against `GetCitySize` in the cheat log) and the other axis is inside `[0, B.cells-1]`.
+
+### Publisher
+
+- Capture moves into the bridge: `CaptureConnections` (own simulator `GetAllConnections`) and `CaptureDeals` (own simulator `FindDealsAll` through a local wrapper that fixes the element type; it is the live list, `GetLocalDeals` can lag). The Dump cheat prints from the snapshot instead of its own loops.
+- Publish on the month tick as today. The handlers for `0x8A0D15DA`, `0xEA0D163E` and `0xEA418D8F` (reasons 1..7) only set a dirty bit. `SimNewDay` (`0x66956814`, to be confirmed in the log) flushes it with a normal publish. Nothing else happens in those handlers.
+- `0x8A0D15DA`/`0xEA0D163E` also mark the demand baseline for re-take on the next SimNewDay (`lastSum = SumOtherTiles` per entry), since the game re-sums on those messages. The cheat run logs supply before and after to confirm.
+
+### Subscriber, connections (city B, on each pull, after record apply)
+
+For each snapshot connection whose `otherTile` is B's tile and whose type is whitelisted:
+1. Convert to B's frame; invalid results are logged and skipped.
+2. Identity already in the session set `mirroredConnections`: skip. The set stops resurrection when the player bulldozes a mirror; the cost is that the mirror returns only after restart.
+3. `HasConnection(type, bx, bz)`: true means done (and stops the echo: B's own publish lists the mirror, A finds it present).
+4. `CreateConnection(type, bx, bz, 0)`, then `FindConnection(type, bx, bz)`; log both, Info. Record the identity in the set either way.
+
+### Subscriber, deals (city B, on each pull, after connections)
+
+For each snapshot deal whose `otherTile` is B's tile and whose type is one of the six, with `typeB = typeA ^ 1`:
+1. Identity in `mirroredDeals`: skip.
+2. `FindDeals(typeB, pA, list)` with `pA` resolved by `FindRegionalCity` on this pull: a match means done; record identity.
+3. `ProposeDeal(typeB, pA, &d)` into a `cRZAutoRefCount`; false is logged and skipped (no connection on B's side yet).
+4. While silent: current and start = today (clone the sim date, Release the clone), expiration = today + `expiresIn` via `+=`.
+5. `AddDeal(d)`, then `d->SetAmount(amount)`. Record identity. Never hold a `FindDeals` list across these calls.
+6. Pull sets `inPull`; the dirty bit set by the synchronous status message is flushed on SimNewDay, never inside the pull.
+
+### Validation
+
+All snapshot values are untrusted: type whitelists, cell bounds against B's size, `amount` in `[0, 10^7]`, `expiresIn` in `[0, 36500]`, `flags` masked to the known bits. Anything else is logged and skipped.
+
+### Settings
+
+- `SyncConnections=0`, `SyncDeals=0`: automatic mirroring on pull. They stay 0 in the shipped INI until the cheat run is recorded in `docs/OPEN-QUESTIONS.md` (Q9), and the INI comment cites that entry.
+- `RegionSyncMirror` cheat: runs the subscriber steps once for both lists regardless of the settings. This is the experiment.
+- `ApplyFields` already skips imported/exported (deal-derived); unchanged.
+
+### Code placement
+
+- `NeighborSnapshot.{h,cpp}`: schema 2 structs, read/write, frame conversion; `tests/snapshot_roundtrip.cpp` extended.
+- `RegionalCityBridge.cpp`: `CaptureConnections`, `CaptureDeals`.
+- `NeighborsSim641.h`: `FindDeals` wrapper with the corrected element type. Nothing else.
+- `NeighborMirror.{h,cpp}`: `MirrorConnections`, `MirrorDeals`, the identity sets, validation. Game-facing like the bridge, no message system.
+- `RegionSyncDllDirector.cpp`: subscriptions, dirty bit, SimNewDay flush, `inPull`, cheat dispatch. Each new `DoMessage` branch wrapped in try/catch.
+
+## Experiments (Q9 in OPEN-QUESTIONS)
+
+Before any of them: back up the region folder on the Windows box, `AutoSaveEveryMonths=0`, and nobody saves in either instance until experiment 4 says it is safe.
+
+1. Both instances up, A = TuggersVille, B = BumperVille. In A build a road to the shared edge. A's log: connection created, dirty bit, publish on SimNewDay. In B type `RegionSyncMirror`. B's log: converted cell, size in cells, HasConnection, CreateConnection, FindConnection, demand supply before/after. Look at B's edge: arrow, stub, both, neither. Then in A propose a power deal across that connection; in B `RegionSyncMirror` again; B's log: ProposeDeal result, dates, AddDeal, SetAmount, deal flags. Check B's budget line and, a month later, `amountUsed` > 0 (that is the test of whether power flows without an edge tile; the deal's existence alone proves nothing).
+2. Reverse direction.
+3. A quits without saving while B runs: B must change nothing (no removal in slice 1, but confirm the dirty-bit and publish paths do not misbehave on a missing snapshot).
+4. Flip `SyncConnections=1`, `SyncDeals=1`, repeat 1 with no cheats. Then save both, reload both normally, compare deal and connection lists before and after for duplicates. This result decides whether Q4 needs a save lock before slice 2.
+
+## Deferred, with the reason
+
+- Removal and amount follow: the review found three ways they cancel or re-create the player's own work (missing snapshot read as empty, origin ping-pong on vanilla deals, resurrection races). They need tombstones and two-snapshot agreement; separate plan.
+- Dual-cell networks and ferry: `dir` must be derived from the pair.
+- Raw replay of `0x4aa6d0` with a game-owned vector: only if experiment 1 shows no usable stub, as its own plan with a compile-time flag.
+- Third-city deals (A with C) on B's copy of A's record: nothing public writes that list.
+
+## Risks
+
+- `0x8A0D15DA` arrives before or after the game's own demand re-sum relative to our handler; the baseline re-take on SimNewDay assumes after. The cheat log decides.
+- Both sides persist mirrored copies when they save; vanilla `Init` may or may not dedupe. Experiment 4.
+- Everything is pinned to 1.1.641 addresses, as before.
