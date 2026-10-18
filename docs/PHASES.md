@@ -30,7 +30,8 @@ Exit criterion: growth in instance B visibly changes regional demand in instance
 - [x] Population and RCI-group setters on the regional record. Direct field writes at +0x24/0x28/0x2c and the type map at +0x3c (Ghidra, 2026-10-17).
 - [ ] Save lock (Q4). Turn on autosave.
 - [ ] Connections and deals between running instances: see `docs/PLAN-PHASE2.md`. Slice 1 (mirror single-cell connections and deals, create only) done 2026-10-18: Q9 steps 1 to 4 observed, on by default, save and reload produce no duplicates.
-- [ ] Later slices from the plan: removal and amount follow, dual-cell networks and ferry, each with its own plan.
+- [x] Amount follow (slice 2a): done 2026-10-18, observed both ways.
+- [ ] Later slices from the plan: removal of deals and connections (with a writer liveness check), dual-cell networks and ferry, each with its own plan.
 - [ ] Replace the monthly file poll with a change notification (`ReadDirectoryChangesW` on the store) if the cadence feels laggy.
 - [ ] Separate installs: make `StoreDirectory` a required setting when the DLL detects it is not under a shared Plugins folder.
 
