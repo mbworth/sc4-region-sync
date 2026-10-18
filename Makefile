@@ -165,4 +165,5 @@ deploy: release launcher
 
 logs:
 	@mkdir -p ingame_tests
-	@for i in 1 2 3; do scp -o BatchMode=yes -q "$(SC4_HOST):$(SC4_INSTANCES)/Instance$$i/SC4RegionSync.log" ingame_tests/instance$$i.log 2>/dev/null && echo "ingame_tests/instance$$i.log" || echo "Instance$$i: no log"; done
+	@# scp from this box truncates at 200 KB, so the log travels as base64 over ssh.
+	@for i in 1 2 3; do ssh -o BatchMode=yes "$(SC4_HOST)" "powershell -NoProfile -Command \"[Convert]::ToBase64String([IO.File]::ReadAllBytes('$(SC4_INSTANCES)/Instance$$i/SC4RegionSync.log'))\"" 2>/dev/null | tr -d '\r\n' | base64 -d > ingame_tests/instance$$i.log.tmp && [ -s ingame_tests/instance$$i.log.tmp ] && mv ingame_tests/instance$$i.log.tmp ingame_tests/instance$$i.log && echo "ingame_tests/instance$$i.log ($$(wc -c < ingame_tests/instance$$i.log) bytes)" || { rm -f ingame_tests/instance$$i.log.tmp; echo "Instance$$i: no log"; }; done
