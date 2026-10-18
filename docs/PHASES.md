@@ -28,12 +28,12 @@ Exit criterion: growth in instance B visibly changes regional demand in instance
 ## Phase 2: hardening
 
 - [x] Population and RCI-group setters on the regional record. Direct field writes at +0x24/0x28/0x2c and the type map at +0x3c (Ghidra, 2026-10-17).
-- [ ] Save lock (Q4).
-- [ ] Turn on autosave.
+- [x] Save lock (Q4): kernel mutex across the SaveCity slot, observed 2026-10-18 (wait, timeout, abandoned, neighbor writes inside the lock).
+- [ ] Turn on autosave: needs the Q4 step 8 soak and stale-copy check.
 - [ ] Connections and deals between running instances: see `docs/PLAN-PHASE2.md`. Slice 1 (mirror single-cell connections and deals, create only) done 2026-10-18: Q9 steps 1 to 4 observed, on by default, save and reload produce no duplicates.
 - [x] Amount follow (slice 2a): done 2026-10-18, observed both ways.
 - [x] Removal of connections and deals (slice 2c) and edge network stubs (slice 2b): observed with the cheat 2026-10-18 (Q10, Q11), on by default, no-cheat run observed the same day.
-- [ ] Dual-lane networks (avenue, highway, ground highway) mirrored as pairs with a 2 by 3 stub: implemented 2026-10-18 (`docs/PLAN-DUAL-FERRY.md`), Q12 observation pending.
+- [x] Dual-lane networks (avenue, highway, ground highway) mirrored as pairs with a 2 by 3 stub: observed 2026-10-18 for all three types (`docs/PLAN-DUAL-FERRY.md`, Q12).
 - [x] Ferry: not mirrored by design (each city's terrain scan makes its own; deals never use it); logged from the cheat.
 - [ ] Replace the monthly file poll with a change notification (`ReadDirectoryChangesW` on the store) if the cadence feels laggy.
 - [ ] Separate installs: make `StoreDirectory` a required setting when the DLL detects it is not under a shared Plugins folder.
