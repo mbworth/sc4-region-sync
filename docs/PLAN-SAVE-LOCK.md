@@ -44,7 +44,7 @@ Assumption, tested by experiment step 9: nothing inside `0x455e20` pumps message
 
 ## Settings
 
-`[Sync] SaveLock=1` (code default true, the Q4 observation decides whether it stays), `SaveLockTimeoutMs=5000`. 0 means try once, never wait. Step 1's `held=` across a large city, fast and full save, is the evidence for the default.
+`[Sync] SaveLock=1` (code default true, the Q4 observation decides whether it stays), `SaveLockTimeoutMs=15000` (raised from 5000 after a contended save held the lock 12.3 s, Q4 step 2). 0 means try once, never wait. Step 1's `held=` across a large city, fast and full save, is the evidence for the default.
 
 ## Cheat
 

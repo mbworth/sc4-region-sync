@@ -68,7 +68,7 @@ Open the cheat box with Ctrl+X.
 See `src\SC4RegionSync.ini`. Everything has a default; with no INI the plugin runs with monthly publish and pull, autosave off, and Info logging.
 
 - `SaveLock` (default 1): every save holds a region-wide named mutex, so two instances never write each other's `.sc4` files at the same time. Both instances need it on; the log shows `saveLock=`, `hook=` and `peer=`.
-- `SaveLockTimeoutMs` (default 5000): longest a save waits for the other instance before it saves unlocked (logged). 0 = never wait.
+- `SaveLockTimeoutMs` (default 15000): longest a save waits for the other instance before it saves unlocked (logged). 0 = never wait.
 
 ## Layout
 

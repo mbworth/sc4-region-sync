@@ -84,7 +84,7 @@ namespace regionsync
 		// Cooperative: an instance with 0 does not take it.
 		bool saveLock = true;
 		// Longest a save waits for the peer; then it goes ahead unlocked. 0 = never wait.
-		int saveLockTimeoutMs = 5000;
+		int saveLockTimeoutMs = 15000;
 
 		// Where snapshots live. Empty means "<DLL folder>\RegionSync\<region dir>".
 		// Both game instances share the install, so the default is already a

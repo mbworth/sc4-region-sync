@@ -377,6 +377,21 @@ namespace regionsync
 				logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: pair type %u lo inner=(%d,%d) -> (%d,%d) dir=%d, hi inner=(%d,%d) -> (%d,%d) dir=%d, side %u driveOnRight=%d",
 					lo.type, lo.innerX, lo.innerZ, lx, lz, lanes[loIndex].dir ? 1 : 0, hi.innerX, hi.innerZ, hx, hz, lanes[hiIndex].dir ? 1 : 0, hiSide, driveOnRight ? 1 : 0);
 			}
+			// Both lanes new here: pave first, so CreateConnection puts the markers on
+			// the stub (the avenue tool removes existing markers, Q12), as the player's tool commits.
+			if (!ctx.layEdgeNetwork || mirroredConnections.count(keyOf(lo)) || mirroredConnections.count(keyOf(hi))) continue;
+			const auto type = static_cast<cISC4NeighborsSimulator::ConnectionType>(lo.type);
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: pair type %u HasConnection lo (%d,%d) hi (%d,%d) ...", lo.type, lx, lz, hx, hz);
+			logger.Flush();
+			const bool hasLo = ctx.pNeighborsSim->HasConnection(type, lx, lz);
+			const bool hasHi = ctx.pNeighborsSim->HasConnection(type, hx, hz);
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: pair HasConnection lo=%d hi=%d", hasLo ? 1 : 0, hasHi ? 1 : 0);
+			if (hasLo || hasHi) continue;
+			const EdgeLayResult lay = LayEdgePair(ctx, lo.type, lx, lz, hx, hz, cells);
+			edgeLayTried.insert(keyOf(lo));
+			edgeLayTried.insert(keyOf(hi));
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: pair type %u lo (%d,%d) hi (%d,%d) laid before create=%d (%s)", lo.type, lx, lz, hx, hz, lay.laid ? 1 : 0, lay.reason);
+			if (lay.laid) result.laid++;
 		}
 		// A repeated entry of a paired lane follows that lane and is never laid on its own.
 		for (size_t i = 0; i < lanes.size(); i++)
