@@ -65,8 +65,8 @@ namespace regionsync
 		// Mirror other instances' connections and deals into this city on
 		// each pull (Phase 2 slice 1). Off until Q9 is recorded; the
 		// RegionSyncMirror cheat runs the same steps on demand.
-		bool syncConnections = false;
-		bool syncDeals = false;
+		bool syncConnections = true;
+		bool syncDeals = true;
 
 		// Where snapshots live. Empty means "<DLL folder>\RegionSync\<region dir>".
 		// Both game instances share the install, so the default is already a

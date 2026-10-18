@@ -93,7 +93,7 @@ All snapshot values are untrusted: type whitelists, cell bounds against B's size
 
 ### Settings
 
-- `SyncConnections=0`, `SyncDeals=0`: automatic mirroring: a pull queues the snapshots, the next SimNewDay mirrors them. They stay 0 in the shipped INI until the cheat run is recorded in `docs/OPEN-QUESTIONS.md` (Q9), and the INI comment cites that entry.
+- `SyncConnections=1`, `SyncDeals=1` (default since 2026-10-18, after the Q9 cheat runs): automatic mirroring: a pull queues the snapshots, the next SimNewDay mirrors them, including the record-copy injection.
 - `RegionSyncMirror` cheat: runs the subscriber steps once for both lists regardless of the settings. This is the experiment.
 - `ApplyFields` already skips imported/exported (deal-derived); unchanged.
 

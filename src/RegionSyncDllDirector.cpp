@@ -808,7 +808,7 @@ private:
 			pending.swap(mirrorPending);
 			for (const regionsync::NeighborSnapshot& snapshot : pending)
 			{
-				MirrorSnapshot(snapshot, settings.syncConnections, settings.syncDeals, false);
+				MirrorSnapshot(snapshot, settings.syncConnections, settings.syncDeals, true);
 			}
 		}
 	}
@@ -943,7 +943,7 @@ private:
 		~InPullScope() { flag = false; }
 	};
 
-	// allowRecordInjection: only the cheat may add objects to a neighbor's record.
+	// allowRecordInjection: add missing connections to the neighbor's record copy (Q9, 2026-10-18).
 	void MirrorSnapshot(const regionsync::NeighborSnapshot& snapshot, bool connections, bool deals, bool allowRecordInjection)
 	{
 		Logger& logger = Logger::GetInstance();

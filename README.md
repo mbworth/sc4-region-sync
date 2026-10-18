@@ -59,7 +59,7 @@ Open the cheat box with Ctrl+X.
 | `RegionSyncPull` | Read every other tile's snapshot and apply it. |
 | `RegionSyncReload` | Experimental: ask the region to reload adjacent tiles' records from their save files. |
 | `RegionSyncSave` | Fast-save the current city. |
-| `RegionSyncMirror` | Experimental (Q9): create other instances' published connections and deals in this city, ignoring `SyncConnections`/`SyncDeals`. |
+| `RegionSyncMirror` | Create other instances' published connections and deals in this city now, ignoring `SyncConnections`/`SyncDeals` (otherwise this happens on the sim day after each pull). |
 | `RegionSyncOffer` | Diagnostic: logs each neighbor/deal-type check behind a deal offer, then what `ProposeDeals` (not added to the sim) returns. |
 
 ## Settings
