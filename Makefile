@@ -34,12 +34,16 @@ SRCS = \
 	src/NeighborSnapshot.cpp \
 	src/RegionalCityBridge.cpp \
 	src/NeighborMirror.cpp \
+	src/EdgeNetwork.cpp \
 	src/SyncSettings.cpp \
 	src/InstanceMutex.cpp \
 	src/WriterIdentity.cpp \
 	src/RegionSyncDllDirector.cpp \
 	$(GZCOM)/src/cRZBaseString.cpp \
+	$(GZCOM)/src/cRZBaseUnknown.cpp \
+	$(GZCOM)/src/cRZCellMap.cpp \
 	$(GZCOM)/src/cRZCOMDllDirector.cpp \
+	$(GZCOM)/src/cSC4BaseOccupantFilter.cpp \
 	$(GZCOM)/src/StringResourceManager.cpp \
 	$(UTIL)/src/DebugUtil.cpp \
 	$(UTIL)/src/FileSystem.cpp \

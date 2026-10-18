@@ -11,6 +11,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="EdgeNetwork.h" />
     <ClInclude Include="NeighborMirror.h" />
     <ClInclude Include="NeighborsSim641.h" />
     <ClInclude Include="NeighborSnapshot.h" />
@@ -22,7 +23,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZBaseString.cpp" />
+    <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZBaseUnknown.cpp" />
+    <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZCellMap.cpp" />
     <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cRZCOMDllDirector.cpp" />
+    <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\cSC4BaseOccupantFilter.cpp" />
     <ClCompile Include="..\vendor\gzcom-dll\gzcom-dll\src\StringResourceManager.cpp" />
     <ClCompile Include="..\vendor\sc4-dll-utilities\sc4-dll-utilities\src\DebugUtil.cpp" />
     <ClCompile Include="..\vendor\sc4-dll-utilities\sc4-dll-utilities\src\FileSystem.cpp" />
@@ -32,6 +36,7 @@
     <ClCompile Include="..\vendor\sc4-dll-utilities\sc4-dll-utilities\src\StringConversion.cpp" />
     <ClCompile Include="..\vendor\sc4-dll-utilities\sc4-dll-utilities\src\StringViewUtil.cpp" />
     <ClCompile Include="..\vendor\sc4-dll-utilities\sc4-dll-utilities\src\Utf8TextOFStream.cpp" />
+    <ClCompile Include="EdgeNetwork.cpp" />
     <ClCompile Include="NeighborMirror.cpp" />
     <ClCompile Include="NeighborSnapshot.cpp" />
     <ClCompile Include="RegionalCityBridge.cpp" />

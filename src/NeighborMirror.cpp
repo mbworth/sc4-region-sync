@@ -8,6 +8,7 @@
  */
 
 #include "NeighborMirror.h"
+#include "EdgeNetwork.h"
 #include "NeighborsSim641.h"
 #include "RegionalCity641.h"
 #include "RegionalCityBridge.h"
@@ -292,46 +293,59 @@ namespace regionsync
 				continue;
 			}
 			const ConnectionKey key{ a.regionX, a.regionZ, c.type, c.innerX, c.innerZ };
-			if (mirroredConnections.count(key))
+			if (!mirroredConnections.count(key))
 			{
-				continue;
+
+				const auto type = static_cast<cISC4NeighborsSimulator::ConnectionType>(c.type);
+				logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: type %u inner=(%d,%d) -> our cell (%d,%d). HasConnection ...",
+					c.type, c.innerX, c.innerZ, bx, bz);
+				logger.Flush();
+				const bool has = ctx.pNeighborsSim->HasConnection(type, bx, bz);
+				logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: HasConnection=%d", has ? 1 : 0);
+				logger.Flush();
+				if (!has)
+				{
+					logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: CreateConnection(%u, %d, %d, 0) ...", c.type, bx, bz);
+					logger.Flush();
+					// The return value is not set by the game (connections-641.md); FindConnection confirms.
+					ctx.pNeighborsSim->CreateConnection(type, bx, bz, false);
+					logger.WriteLine(LogLevel::Info, "MirrorConnections: CreateConnection returned");
+					logger.Flush();
+				}
+				cISC4NeighborConnection* pFound = ctx.pNeighborsSim->FindConnection(type, bx, bz);
+				logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: FindConnection=%p", static_cast<void*>(pFound));
+				logger.Flush();
+				if (pFound && !has)
+				{
+					result.created++;
+				}
+				// A's record copy here may lack the connection even when we have ours.
+				// Our own count around it shows a feedback through the 0xCA63D517 path.
+				if (pFound)
+				{
+					logger.WriteLineFormatted(LogLevel::Info, "RecordConnection: own GetAllConnections count before=%zu", OwnConnectionCount(ctx.pNeighborsSim));
+					if (EnsureRecordConnection(ctx, a.regionX, a.regionZ, aCells, c, pFound, listState))
+					{
+						result.injected++;
+					}
+					logger.WriteLineFormatted(LogLevel::Info, "RecordConnection: own GetAllConnections count after=%zu", OwnConnectionCount(ctx.pNeighborsSim));
+				}
+				mirroredConnections.insert(key);
 			}
 
-			const auto type = static_cast<cISC4NeighborsSimulator::ConnectionType>(c.type);
-			logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: type %u inner=(%d,%d) -> our cell (%d,%d). HasConnection ...",
-				c.type, c.innerX, c.innerZ, bx, bz);
-			logger.Flush();
-			const bool has = ctx.pNeighborsSim->HasConnection(type, bx, bz);
-			logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: HasConnection=%d", has ? 1 : 0);
-			logger.Flush();
-			if (!has)
+			// Idempotent, so it runs for every connection, not only new ones.
+			if (ctx.layEdgeNetwork)
 			{
-				logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: CreateConnection(%u, %d, %d, 0) ...", c.type, bx, bz);
-				logger.Flush();
-				// The return value is not set by the game (connections-641.md); FindConnection confirms.
-				ctx.pNeighborsSim->CreateConnection(type, bx, bz, false);
-				logger.WriteLine(LogLevel::Info, "MirrorConnections: CreateConnection returned");
-				logger.Flush();
-			}
-			cISC4NeighborConnection* pFound = ctx.pNeighborsSim->FindConnection(type, bx, bz);
-			logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: FindConnection=%p", static_cast<void*>(pFound));
-			logger.Flush();
-			if (pFound && !has)
-			{
-				result.created++;
-			}
-			// A's record copy here may lack the connection even when we have ours.
-			// Our own count around it shows a feedback through the 0xCA63D517 path.
-			if (pFound)
-			{
-				logger.WriteLineFormatted(LogLevel::Info, "RecordConnection: own GetAllConnections count before=%zu", OwnConnectionCount(ctx.pNeighborsSim));
-				if (EnsureRecordConnection(ctx, a.regionX, a.regionZ, aCells, c, pFound, listState))
+				const auto type = static_cast<cISC4NeighborsSimulator::ConnectionType>(c.type);
+				cISC4NeighborConnection* pConn = ctx.pNeighborsSim->FindConnection(type, bx, bz);
+				logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: FindConnection(%u, %d, %d)=%p", c.type, bx, bz, static_cast<void*>(pConn));
+				if (pConn)
 				{
-					result.injected++;
+					const EdgeLayResult lay = LayEdgePiece(ctx, c.type, bx, bz, cells);
+					logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: type %u (%d,%d) laid=%d (%s)", c.type, bx, bz, lay.laid ? 1 : 0, lay.reason);
+					if (lay.laid) result.laid++;
 				}
-				logger.WriteLineFormatted(LogLevel::Info, "RecordConnection: own GetAllConnections count after=%zu", OwnConnectionCount(ctx.pNeighborsSim));
 			}
-			mirroredConnections.insert(key);
 		}
 		return result;
 	}

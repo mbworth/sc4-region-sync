@@ -193,6 +193,23 @@ int main(int argc, char** argv)
 	CHECK(IsValidExpiresIn(0) && IsValidExpiresIn(36500) && !IsValidExpiresIn(-1) && !IsValidExpiresIn(36501));
 	CHECK(MaskDealFlags(0xFFFFFFFF) == 0x37F && MaskDealFlags(0x81) == 0x1);
 
+	// Edge network: type map and stub geometry.
+	CHECK(ConnectionToNetworkType(1) == 1 && ConnectionToNetworkType(2) == 0 && ConnectionToNetworkType(4) == 5 && ConnectionToNetworkType(5) == 4);
+	CHECK(ConnectionToNetworkType(6) == 7 && ConnectionToNetworkType(7) == 8 && ConnectionToNetworkType(10) == 11 && ConnectionToNetworkType(11) == 9);
+	CHECK(ConnectionToNetworkType(0) == -1 && ConnectionToNetworkType(3) == -1 && ConnectionToNetworkType(8) == -1);
+	CHECK(ConnectionToNetworkType(9) == -1 && ConnectionToNetworkType(12) == -1 && ConnectionToNetworkType(0xFFFFFFFF) == -1);
+	const auto stubIs = [](std::optional<EdgeStub> s, int32_t sx, int32_t sz, int32_t ex, int32_t ez, uint32_t side) {
+		return s && s->sx == sx && s->sz == sz && s->ex == ex && s->ez == ez && s->side == side;
+	};
+	CHECK(stubIs(EdgeStubGeometry(-1, 17, 128), 0, 17, 2, 17, 0));       // west
+	CHECK(stubIs(EdgeStubGeometry(40, -1, 128), 40, 0, 40, 2, 1));       // north
+	CHECK(stubIs(EdgeStubGeometry(128, 5, 128), 127, 5, 125, 5, 2));    // east
+	CHECK(stubIs(EdgeStubGeometry(0, 64, 64), 0, 63, 0, 61, 3));         // south, small tile
+	CHECK(stubIs(EdgeStubGeometry(-1, 255, 256), 0, 255, 2, 255, 0));    // last cell on the edge
+	CHECK(!EdgeStubGeometry(-1, -1, 128) && !EdgeStubGeometry(128, 128, 128) && !EdgeStubGeometry(-1, 128, 128)); // corners
+	CHECK(!EdgeStubGeometry(5, 5, 128) && !EdgeStubGeometry(-2, 5, 128) && !EdgeStubGeometry(129, 5, 128));       // interior, too far
+	CHECK(!EdgeStubGeometry(-1, 5, 0) && !EdgeStubGeometry(-1, 0, 2));                                            // degenerate size
+
 	// Missing file reports an error.
 	NeighborSnapshot c;
 	CHECK(!ReadSnapshotFile(dir / "missing.snapshot", c, error));

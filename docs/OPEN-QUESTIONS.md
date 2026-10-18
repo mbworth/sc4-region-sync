@@ -200,3 +200,15 @@ Also confirm from the log: `SimNewDay` is `0x66956814` (first one is logged once
 - Edge tile not needed (2026-10-18): the player laid a pipe under the mirrored arrow in TuggersVille, with no link to the city's own water network, and it animated as carrying water and supplied buildings dragged from it. The mirrored connection is a live network endpoint for the water sim, so the deferred edge-tile replay (`0x4aa6d0`) is cosmetic only.
 - Earlier side finding, resolved: per-group "local share" values go negative and drift further each month (TuggersVille R$ in BumperVille's record -7391 -> -9658 for a 1,300-resident city). The supply-minus-regional scheme is wrong somewhere; research in progress. See Q2 correction.
 
+## Q10. Does PlaceNetworkOccupants from the plugin lay a usable edge stub under a mirrored connection?
+
+Slice 2b (`docs/PLAN-EDGE-TILE.md`, research `docs/research/edge-tile-641.md`). `LayEdgeNetwork` stays 0 in the shipped INI until this has an observation; `RegionSyncMirror` always lays. Every call logs under `EdgeTile:`.
+
+Run with `SyncConnections=1` as shipped; the lay decision is idempotent, so the cheat lays under arrows the timed path already created.
+
+1. Both instances, A builds a road to a bare stretch of the shared edge; B `RegionSyncMirror`. Expect `PlaceNetworkOccupants=1` twice, all 3 cells verified, a 3-cell road stub under the arrow, funds unchanged, and B can still drag a road afterwards. Then power (expect pole on the edge cell, no flag step), pipe and rail on bare cells.
+2. A house on B's edge cell: expect it demolished (`DemolishRegion=1`, no occupants left on that cell), then the stub laid. A road crossing the stub cells: that cell kept (`kept`), the stub joins it. Power over a zoned cell: `PlaceZone=1`, cell dezoned.
+3. Save B (A first, then B), reload both: stub persists, no second stub, the lay step logs `already laid`.
+4. Flip `LayEdgeNetwork=1`, repeat 1 with no cheats.
+
+**Observed.** (unknown)

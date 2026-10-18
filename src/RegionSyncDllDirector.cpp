@@ -285,14 +285,15 @@ public:
 
 		logger.WriteLineFormatted(
 			LogLevel::Info,
-			"Initialized. instanceId=%u enabled=%d publishEveryMonths=%d pullEveryMonths=%d autoSaveEveryMonths=%d syncConnections=%d syncDeals=%d",
+			"Initialized. instanceId=%u enabled=%d publishEveryMonths=%d pullEveryMonths=%d autoSaveEveryMonths=%d syncConnections=%d syncDeals=%d layEdgeNetwork=%d",
 			instanceId,
 			settings.enabled ? 1 : 0,
 			settings.publishEveryMonths,
 			settings.pullEveryMonths,
 			settings.autoSaveEveryMonths,
 			settings.syncConnections ? 1 : 0,
-			settings.syncDeals ? 1 : 0);
+			settings.syncDeals ? 1 : 0,
+			settings.layEdgeNetwork ? 1 : 0);
 
 		ownWriter = regionsync::writer::Current();
 		logger.WriteLineFormatted(LogLevel::Info, "Writer: host=%s pid=%u start=%llu checkWriterLiveness=%d",
@@ -816,7 +817,7 @@ private:
 			pending.swap(mirrorPending);
 			for (const regionsync::NeighborSnapshot& snapshot : pending)
 			{
-				MirrorSnapshot(snapshot, settings.syncConnections, settings.syncDeals, true);
+				MirrorSnapshot(snapshot, settings.syncConnections, settings.syncDeals, true, settings.layEdgeNetwork);
 			}
 		}
 	}
@@ -1005,10 +1006,11 @@ private:
 	};
 
 	// allowRecordInjection: add missing connections to the neighbor's record copy (Q9, 2026-10-18).
-	void MirrorSnapshot(const regionsync::NeighborSnapshot& snapshot, bool connections, bool deals, bool allowRecordInjection)
+	// layEdgeNetwork: lay the edge stub under each connection (Q10).
+	void MirrorSnapshot(const regionsync::NeighborSnapshot& snapshot, bool connections, bool deals, bool allowRecordInjection, bool layEdgeNetwork)
 	{
 		Logger& logger = Logger::GetInstance();
-		const regionsync::MirrorContext ctx{ pRegion, pOwnRegionalCity, pNeighborsSim, pSimulator, GZCOM(), allowRecordInjection, cityLoadedAt };
+		const regionsync::MirrorContext ctx{ pRegion, pOwnRegionalCity, pNeighborsSim, pSimulator, GZCOM(), allowRecordInjection, cityLoadedAt, pCity, layEdgeNetwork };
 		regionsync::ConnectionMirrorResult connectionResult;
 		regionsync::DealMirrorResult dealResult;
 		try
@@ -1030,8 +1032,8 @@ private:
 		{
 			logger.WriteLineFormatted(LogLevel::Error, "Mirror (%d,%d) threw a non-standard exception.", snapshot.regionX, snapshot.regionZ);
 		}
-		logger.WriteLineFormatted(LogLevel::Info, "Mirror (%d,%d): created connections=%d recordConnections=%d deals=%d updatedDeals=%d",
-			snapshot.regionX, snapshot.regionZ, connectionResult.created, connectionResult.injected, dealResult.created, dealResult.updated);
+		logger.WriteLineFormatted(LogLevel::Info, "Mirror (%d,%d): created connections=%d recordConnections=%d laid=%d deals=%d updatedDeals=%d",
+			snapshot.regionX, snapshot.regionZ, connectionResult.created, connectionResult.injected, connectionResult.laid, dealResult.created, dealResult.updated);
 	}
 
 	// Pull: read every snapshot in the store except our own and apply it to
@@ -1160,7 +1162,7 @@ private:
 		logger.Flush();
 		for (const regionsync::NeighborSnapshot& snapshot : snapshots)
 		{
-			MirrorSnapshot(snapshot, true, true, true);
+			MirrorSnapshot(snapshot, true, true, true, true);
 		}
 		logger.WriteLine(LogLevel::Info, "==== RegionSyncMirror end ====");
 	}

@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <array>
+#include <optional>
 #include <vector>
 
 namespace regionsync
@@ -209,6 +210,46 @@ namespace regionsync
 		const bool xIn = bx >= 0 && bx < bCells;
 		const bool zIn = bz >= 0 && bz < bCells;
 		return (xEdge && zIn) || (zEdge && xIn);
+	}
+
+	// Connection type to cISC4NetworkOccupant::eNetworkType; -1 when the edge
+	// piece is not laid for that type (duals, ferry, unknown).
+	constexpr int32_t ConnectionToNetworkType(uint32_t connType)
+	{
+		switch (connType)
+		{
+		case 1: return 1;    // rail
+		case 2: return 0;    // road
+		case 4: return 5;    // power
+		case 5: return 4;    // pipe
+		case 6: return 7;    // subway
+		case 7: return 8;    // light rail
+		case 10: return 11;  // dirt road
+		case 11: return 9;   // monorail
+		default: return -1;
+		}
+	}
+
+	// 3-cell stub from the edge cell (s) inward to (e). side: 0 west, 1 north,
+	// 2 east, 3 south (the edge flag byte).
+	struct EdgeStub
+	{
+		int32_t sx = 0, sz = 0, ex = 0, ez = 0;
+		uint32_t side = 0;
+	};
+
+	// (bx,bz) is the cell just outside the edge (ToSubscriberFrame). Exactly
+	// one axis must be -1 or cells, the other inside [0, cells-1].
+	constexpr std::optional<EdgeStub> EdgeStubGeometry(int32_t bx, int32_t bz, int32_t cells)
+	{
+		if (cells < 3) return std::nullopt;
+		const int32_t w = cells - 1;
+		const auto in = [cells](int32_t v) { return v >= 0 && v < cells; };
+		if (bx == -1 && in(bz)) return EdgeStub{ 0, bz, 2, bz, 0 };
+		if (bz == -1 && in(bx)) return EdgeStub{ bx, 0, bx, 2, 1 };
+		if (bx == cells && in(bz)) return EdgeStub{ w, bz, w - 2, bz, 2 };
+		if (bz == cells && in(bx)) return EdgeStub{ bx, w, bx, w - 2, 3 };
+		return std::nullopt;
 	}
 
 	// Simple line-oriented key=value text format. No external JSON dependency,
