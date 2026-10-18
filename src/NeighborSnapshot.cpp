@@ -9,6 +9,7 @@
  */
 
 #include "NeighborSnapshot.h"
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <map>
@@ -17,6 +18,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -348,5 +350,66 @@ namespace regionsync
 		}
 
 		return true;
+	}
+
+	namespace
+	{
+		// Publisher edge side (0 W, 1 N, 2 E, 3 S) and along-edge coordinate.
+		bool PublisherLaneSide(const ConnectionRecord& c, int32_t cellsA, uint32_t& side, int32_t& along)
+		{
+			if (cellsA <= 0) return false;
+			if (c.cellKnown)
+			{
+				if (!IsConnectionCellAdjacent(c.innerX, c.innerZ, c.cellX, c.cellZ, cellsA)) return false;
+				side = c.cellX == -1 ? 0 : c.cellZ == -1 ? 1 : c.cellX == cellsA ? 2 : 3;
+			}
+			else
+			{
+				const int32_t w = cellsA - 1;
+				const auto in = [w](int32_t v) { return v >= 0 && v <= w; };
+				if (!in(c.innerX) || !in(c.innerZ)) return false;
+				const bool edges[4] = { c.innerX == 0, c.innerZ == 0, c.innerX == w, c.innerZ == w };
+				if (std::count(std::begin(edges), std::end(edges), true) != 1) return false;   // corner or interior
+				side = static_cast<uint32_t>(std::find(std::begin(edges), std::end(edges), true) - std::begin(edges));
+			}
+			along = (side == 0 || side == 2) ? c.innerZ : c.innerX;
+			return true;
+		}
+	}
+
+	std::vector<std::pair<size_t, size_t>> PairDualLanes(const std::vector<ConnectionRecord>& lanes, int32_t cellsA)
+	{
+		struct Lane
+		{
+			uint32_t type, side;
+			int32_t along;
+			size_t index;
+		};
+		std::vector<Lane> v;
+		for (size_t i = 0; i < lanes.size(); i++)
+		{
+			Lane l{ lanes[i].type, 0, 0, i };
+			if (IsDualConnectionType(l.type) && PublisherLaneSide(lanes[i], cellsA, l.side, l.along)) v.push_back(l);
+		}
+		const auto key = [](const Lane& l) { return std::tuple(l.type, l.side, l.along); };
+		std::sort(v.begin(), v.end(), [&](const Lane& x, const Lane& y) { return std::tuple(x.type, x.side, x.along, x.index) < std::tuple(y.type, y.side, y.along, y.index); });
+		v.erase(std::unique(v.begin(), v.end(), [&](const Lane& x, const Lane& y) { return key(x) == key(y); }), v.end());
+
+		std::vector<std::pair<size_t, size_t>> pairs;
+		for (size_t i = 0; i + 1 < v.size();)
+		{
+			const Lane& lo = v[i];
+			const Lane& hi = v[i + 1];
+			if (lo.type == hi.type && lo.side == hi.side && hi.along == lo.along + 1)
+			{
+				pairs.emplace_back(lo.index, hi.index);
+				i += 2;
+			}
+			else
+			{
+				i++;
+			}
+		}
+		return pairs;
 	}
 }

@@ -206,7 +206,10 @@ int main(int argc, char** argv)
 	CHECK(!IsConnectionCellAdjacent(0, 55, 2, 55, 64) && !IsConnectionCellAdjacent(255, 0, 256, 0, 64) && !IsConnectionCellAdjacent(0, 64, -1, 64, 64));
 	CHECK(!IsConnectionCellAdjacent(0, 5, -1, 5, 0));
 	CHECK(IsMirrorableConnectionType(1) && IsMirrorableConnectionType(11) && IsMirrorableConnectionType(10));
-	CHECK(!IsMirrorableConnectionType(0) && !IsMirrorableConnectionType(3) && !IsMirrorableConnectionType(8) && !IsMirrorableConnectionType(9) && !IsMirrorableConnectionType(12));
+	CHECK(IsMirrorableConnectionType(3) && IsMirrorableConnectionType(8) && IsMirrorableConnectionType(12));
+	CHECK(!IsMirrorableConnectionType(0) && !IsMirrorableConnectionType(9) && !IsMirrorableConnectionType(13));
+	CHECK(IsDualConnectionType(3) && IsDualConnectionType(8) && IsDualConnectionType(12));
+	CHECK(!IsDualConnectionType(2) && !IsDualConnectionType(9) && !IsDualConnectionType(0));
 	CHECK(IsDealType(0x4773FFE0) && IsDealType(0x4773FFE5) && !IsDealType(0x4773FFE6) && !IsDealType(0x4773FFDF));
 	CHECK(OtherSideDealType(0x4773FFE4) == 0x4773FFE5 && OtherSideDealType(0x4773FFE1) == 0x4773FFE0);
 	CHECK(DealCommodity(0x4773FFE0) == 0 && DealCommodity(0x4773FFE3) == 1 && DealCommodity(0x4773FFE5) == 2);
@@ -217,8 +220,8 @@ int main(int argc, char** argv)
 	// Edge network: type map and stub geometry.
 	CHECK(ConnectionToNetworkType(1) == 1 && ConnectionToNetworkType(2) == 0 && ConnectionToNetworkType(4) == 5 && ConnectionToNetworkType(5) == 4);
 	CHECK(ConnectionToNetworkType(6) == 7 && ConnectionToNetworkType(7) == 8 && ConnectionToNetworkType(10) == 11 && ConnectionToNetworkType(11) == 9);
-	CHECK(ConnectionToNetworkType(0) == -1 && ConnectionToNetworkType(3) == -1 && ConnectionToNetworkType(8) == -1);
-	CHECK(ConnectionToNetworkType(9) == -1 && ConnectionToNetworkType(12) == -1 && ConnectionToNetworkType(0xFFFFFFFF) == -1);
+	CHECK(ConnectionToNetworkType(3) == 2 && ConnectionToNetworkType(8) == 6 && ConnectionToNetworkType(12) == 12);
+	CHECK(ConnectionToNetworkType(0) == -1 && ConnectionToNetworkType(9) == -1 && ConnectionToNetworkType(0xFFFFFFFF) == -1);
 	const auto stubIs = [](std::optional<EdgeStub> s, int32_t sx, int32_t sz, int32_t ex, int32_t ez, uint32_t side) {
 		return s && s->sx == sx && s->sz == sz && s->ex == ex && s->ez == ez && s->side == side;
 	};
@@ -230,6 +233,47 @@ int main(int argc, char** argv)
 	CHECK(!EdgeStubGeometry(-1, -1, 128) && !EdgeStubGeometry(128, 128, 128) && !EdgeStubGeometry(-1, 128, 128)); // corners
 	CHECK(!EdgeStubGeometry(5, 5, 128) && !EdgeStubGeometry(-2, 5, 128) && !EdgeStubGeometry(129, 5, 128));       // interior, too far
 	CHECK(!EdgeStubGeometry(-1, 5, 0) && !EdgeStubGeometry(-1, 0, 2));                                            // degenerate size
+
+	// Dual lanes. Publisher 128 cells; W/E lanes vary z, N/S lanes vary x.
+	{
+		using Pairs = std::vector<std::pair<size_t, size_t>>;
+		const auto W = [](uint32_t t, int32_t z) { return ConnectionRecord{ t, 0, z, -1, z, true, 0, 0 }; };
+		const auto E = [](uint32_t t, int32_t z) { return ConnectionRecord{ t, 127, z, 128, z, true, 0, 0 }; };
+		const auto N = [](uint32_t t, int32_t x) { return ConnectionRecord{ t, x, 0, x, -1, true, 0, 0 }; };
+		const auto S = [](uint32_t t, int32_t x) { return ConnectionRecord{ t, x, 127, x, 128, true, 0, 0 }; };
+		CHECK(PairDualLanes({ W(8, 11), W(8, 10) }, 128) == Pairs({ { 1, 0 } }));                        // hi listed first
+		CHECK(PairDualLanes({ W(8, 5), W(8, 6), N(3, 5), N(3, 6), E(12, 40), E(12, 41), S(8, 99), S(8, 100) }, 128)
+			== Pairs({ { 2, 3 }, { 0, 1 }, { 6, 7 }, { 4, 5 } }));                                          // all four edges
+		CHECK(PairDualLanes({ W(8, 10), W(8, 11), W(8, 12), W(8, 13) }, 128) == Pairs({ { 0, 1 }, { 2, 3 } }));
+		CHECK(PairDualLanes({ W(8, 10), W(8, 11), W(8, 12) }, 128) == Pairs({ { 0, 1 } }));             // third unpaired
+		CHECK(PairDualLanes({ W(8, 10), W(8, 12) }, 128).empty());                                        // gap
+		CHECK(PairDualLanes({ W(8, 10), W(3, 11) }, 128).empty());                                        // types differ
+		CHECK(PairDualLanes({ W(8, 10), W(8, 10), W(8, 11) }, 128) == Pairs({ { 0, 2 } }));             // duplicate
+		CHECK(PairDualLanes({ N(8, 0), W(8, 1) }, 128).empty());                                          // across the corner
+		ConnectionRecord c0 = W(8, 0), c1 = W(8, 1), d0 = W(8, 5), d1 = W(8, 6);
+		c0.cellKnown = c1.cellKnown = d0.cellKnown = d1.cellKnown = false;
+		CHECK(PairDualLanes({ c0, c1, d0, d1 }, 128) == Pairs({ { 2, 3 } }));                           // corner cell, side unknown
+		ConnectionRecord e0 = E(8, 20), e1 = E(8, 21), n0 = N(8, 30), n1 = N(8, 31), s0 = S(8, 40), s1 = S(8, 41);
+		for (ConnectionRecord* r : { &e0, &e1, &n0, &n1, &s0, &s1 }) r->cellKnown = false;
+		CHECK(PairDualLanes({ e1, e0, n0, n1, s1, s0 }, 128) == Pairs({ { 2, 3 }, { 1, 0 }, { 5, 4 } })); // side from the inner cell
+		CHECK(PairDualLanes({ E(8, 99), S(8, 100) }, 128).empty());                                       // different edges, adjacent coordinates
+		CHECK(PairDualLanes({ W(2, 10), W(2, 11), W(8, 12), W(2, 13) }, 128).empty());                   // singles ignored
+		CHECK(PairDualLanes({ W(8, 10), W(2, 10), W(8, 11) }, 128) == Pairs({ { 0, 2 } }));
+		ConnectionRecord s63 = E(8, 63), s64 = E(8, 64), s65 = E(8, 65);
+		s63.otherTileZ = 0; s64.otherTileZ = 1; s65.otherTileZ = 1;
+		CHECK(PairDualLanes({ s64, s65, s63 }, 128) == Pairs({ { 2, 0 } }));                             // straddler
+		CHECK(PairDualLanes({ W(8, 10), W(8, 11) }, 0).empty());                                          // publisher size unknown
+		CHECK(PairDualLanes({ ConnectionRecord{ 8, 0, 10, 1, 10, true, 0, 0 }, W(8, 11) }, 128).empty()); // bad cell
+
+		// Research table: drive right, lo is 1 on N/E and 0 on W/S, hi the inverse; drive left inverts both.
+		for (uint32_t side = 0; side < 4; side++)
+		{
+			const bool ne = side == 1 || side == 2;
+			CHECK(DualLaneDir(side, false, true) == ne && DualLaneDir(side, true, true) == !ne);
+			CHECK(DualLaneDir(side, false, false) == !ne && DualLaneDir(side, true, false) == ne);
+		}
+		CHECK(!DualLaneDir(0, false, true) && DualLaneDir(1, false, true) && DualLaneDir(2, false, true) && !DualLaneDir(3, false, true));
+	}
 
 	// Removal helpers.
 	CHECK(IsProposedOnlyDeal(0x1) && IsProposedOnlyDeal(0x81) && IsProposedOnlyDeal(0x101));

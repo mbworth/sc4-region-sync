@@ -223,7 +223,9 @@ namespace
 	}
 
 	// SetEdgeTypesFlag(net, update(f)) on each piece of net on the cell; returns the OR of the old flags.
-	uint32_t UpdateEdgeFlags(cISC4OccupantManager* occ, int32_t x, int32_t z, NetType netType, const std::function<uint32_t(uint32_t)>& update)
+	// skipUnchanged: no Set when update(f) == f.
+	uint32_t UpdateEdgeFlags(cISC4OccupantManager* occ, int32_t x, int32_t z, NetType netType, const std::function<uint32_t(uint32_t)>& update,
+		bool skipUnchanged = false)
 	{
 		uint32_t seen = 0;
 		ForEachOccupant(occ, x, z, kOccupantTypeNetwork, [&](cISC4Occupant* o) {
@@ -232,6 +234,12 @@ namespace
 			const uint32_t f = no->GetEdgeTypesFlag(netType);
 			const uint32_t nf = update(f);
 			seen |= f;
+			if (skipUnchanged && nf == f)
+			{
+				Log().WriteLineFormatted(LogLevel::Info, "EdgeTile: %p GetEdgeTypesFlag=0x%08X (0x04 bits 0x%08X), unchanged.",
+					static_cast<void*>(no), f, f & 0x04040404u);
+				return;
+			}
 			Log().WriteLineFormatted(LogLevel::Info, "EdgeTile: %p GetEdgeTypesFlag=0x%08X (0x04 bits 0x%08X). SetEdgeTypesFlag(0x%08X) ...",
 				static_cast<void*>(no), f, f & 0x04040404u, nf);
 			Log().Flush();
@@ -240,12 +248,66 @@ namespace
 		});
 		return seen;
 	}
-}
 
-namespace regionsync
-{
-	EdgeLayResult LayEdgePiece(const MirrorContext& ctx, uint32_t connType, int32_t bx, int32_t bz, int32_t cells)
+	// 0x04 in byte i: the piece continues one cell west, north, east, south.
+	constexpr int32_t kStepX[4] = { -1, 0, 1, 0 };
+	constexpr int32_t kStepZ[4] = { 0, -1, 0, 1 };
+
+	// One cell toward the higher coordinate along the edge: +z on a west or
+	// east edge, +x on a north or south edge.
+	struct Step
 	{
+		int32_t x, z;
+	};
+	constexpr Step AlongStep(uint32_t side) { return (side == 1 || side == 3) ? Step{ 1, 0 } : Step{ 0, 1 }; }
+	// Flag byte toward the lower along-edge neighbour (north or west); toward the higher one is +2.
+	constexpr uint32_t TowardLower(uint32_t side) { return AlongStep(side).x ? 0 : 1; }
+
+	// Side byte to 2 on hi's edge cell, and on lo's when the 0x04 bit links
+	// the two pieces. alreadyLaid: leave a piece whose flags already match,
+	// and one with no 0x04 inward (a network along the edge, not a stub).
+	void SetSideFlags(cISC4OccupantManager* occ, const regionsync::EdgeStub& hi, const regionsync::EdgeStub* lo, NetType netType, bool alreadyLaid)
+	{
+		const uint32_t clear = ~(0xFFu << (hi.side * 8));
+		const uint32_t set = 2u << (hi.side * 8);
+		const uint32_t inward = (hi.side + 2) & 3;
+		const auto mark = [&](uint32_t f) {
+			if (alreadyLaid && !((f >> (inward * 8)) & 0x04u))
+			{
+				Log().WriteLineFormatted(LogLevel::Info, "EdgeTile: flags 0x%08X have no 0x04 inward, not a stub, flag skipped.", f);
+				return f;
+			}
+			return (f & clear) | set;
+		};
+		uint32_t loFlags = 0;
+		if (lo)
+		{
+			ForEachOccupant(occ, lo->sx, lo->sz, kOccupantTypeNetwork, [&](cISC4Occupant* o) {
+				cRZAutoRefCount<cISC4NetworkOccupant> no;
+				if (IsNetworkOfType(o, netType) && o->QueryInterface(GZIID_cISC4NetworkOccupant, no.AsPPVoid()) && no) loFlags |= no->GetEdgeTypesFlag(netType);
+			});
+		}
+		const uint32_t hiFlags = UpdateEdgeFlags(occ, hi.sx, hi.sz, netType, mark, alreadyLaid);
+		if (!lo) return;
+		const uint32_t down = TowardLower(hi.side);
+		const bool linked = ((hiFlags >> (down * 8)) & 0x04u) || ((loFlags >> ((down + 2) * 8)) & 0x04u);
+		Log().WriteLineFormatted(LogLevel::Info, "EdgeTile: pair link hi (%d,%d) flags 0x%08X, lo (%d,%d) flags 0x%08X -> %s",
+			hi.sx, hi.sz, hiFlags, lo->sx, lo->sz, loFlags, linked ? "linked, lo flag set" : "not linked, lo flag skipped");
+		if (linked) UpdateEdgeFlags(occ, lo->sx, lo->sz, netType, mark, alreadyLaid);
+	}
+
+	// Pieces of net on an edge cell next to the stub block; -1 off the map.
+	int OutsideRow(cISC4OccupantManager* occ, int32_t x, int32_t z, int32_t cells, NetType netType, const char* prefix, const char* row, const char* when)
+	{
+		const int n = (x < 0 || z < 0 || x >= cells || z >= cells) ? -1 : CountPieces(occ, x, z, netType);
+		Log().WriteLineFormatted(LogLevel::Info, "%s: row %s edge cell (%d,%d) pieces=%d %s", prefix, row, x, z, n, when);
+		return n;
+	}
+
+	// One stub (lo null) or a dual pair laid from hi's line (docs/PLAN-DUAL-FERRY.md rule 8).
+	regionsync::EdgeLayResult LayEdge(const regionsync::MirrorContext& ctx, uint32_t connType, int32_t bx, int32_t bz, const SC4Point<int32_t>* loCell, int32_t cells)
+	{
+		using regionsync::EdgeStub;
 		Logger& logger = Log();
 		EdgeSetup e;
 		const char* reason = "";
@@ -263,33 +325,81 @@ namespace regionsync
 		const NetType netType = static_cast<NetType>(net);
 		const int32_t dx = (s.ex > s.sx) - (s.ex < s.sx);
 		const int32_t dz = (s.ez > s.sz) - (s.ez < s.sz);
+		const bool power = netType == NetType::PowerPole;
 		logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: type %u net %d connection (%d,%d) side %u stub (%d,%d) -> (%d,%d)",
 			connType, net, bx, bz, s.side, s.sx, s.sz, s.ex, s.ez);
+
+		// Pair: lo is one cell lower along the same edge (ax, az = along-edge step).
+		const bool pair = loCell != nullptr;
+		const Step along = AlongStep(s.side);
+		const int32_t ax = along.x, az = along.z;
+		EdgeStub lo{};
+		if (pair)
+		{
+			const std::optional<EdgeStub> loStub = regionsync::EdgeStubGeometry(loCell->x, loCell->y, e.cells);
+			if (loCell->x != bx - ax || loCell->y != bz - az || !loStub || loStub->side != s.side)
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: pair lo connection (%d,%d) is not one cell below hi (%d,%d) on the same edge, not laid.",
+					loCell->x, loCell->y, bx, bz);
+				return { false, "geometry" };
+			}
+			lo = *loStub;
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: pair lo connection (%d,%d) stub (%d,%d) -> (%d,%d)", loCell->x, loCell->y, lo.sx, lo.sz, lo.ex, lo.ez);
+		}
+		const int nLines = pair ? 2 : 1;
+		const EdgeStub lines[2] = { s, lo };
 
 		if (CountPieces(occ, s.sx, s.sz, netType) > 0)
 		{
 			logger.WriteLine(LogLevel::Info, "EdgeTile: already laid.");
+			if (!power) SetSideFlags(occ, s, pair ? &lo : nullptr, netType, true);
 			return { false, "already laid" };
 		}
-		// Region over the 3 cells; a cell that already holds a network (power:
-		// pole or wire) is left out of the demolition, as the game does.
-		const int32_t x1 = std::min(s.sx, s.ex), z1 = std::min(s.sz, s.ez);
-		SC4CellRegion<int32_t> region(x1, z1, std::max(s.sx, s.ex), std::max(s.sz, s.ez), true);
-		const bool power = netType == NetType::PowerPole;
-		for (int32_t i = 0; i < 3; i++)
+		if (pair && CountPieces(occ, lo.sx, lo.sz, netType) > 0)
 		{
-			const int32_t cx = s.sx + i * dx, cz = s.sz + i * dz;
-			const int count = LogOccupants(occ, cx, cz, "before");
-			// Power also keeps any network cell (a road crossing the stub line).
-			const bool network = HasOccupantOfType(occ, cx, cz, kOccupantTypeNetwork)
-				|| (power && (HasOccupantOfType(occ, cx, cz, kOccupantTypePowerPole) || HasOccupantOfType(occ, cx, cz, kOccupantTypePowerWire)));
-			if (network)
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: only lo's edge cell (%d,%d) holds a piece (half stub), not laid.", lo.sx, lo.sz);
+			return { false, "half stub" };
+		}
+		// Region over the 3 (pair: 6) cells; a cell that already holds a network
+		// (power: pole or wire) is left out of the demolition, as the game does.
+		int32_t x1 = s.sx, z1 = s.sz, x2 = s.sx, z2 = s.sz;
+		for (int l = 0; l < nLines; l++)
+		{
+			x1 = std::min({ x1, lines[l].sx, lines[l].ex });
+			z1 = std::min({ z1, lines[l].sz, lines[l].ez });
+			x2 = std::max({ x2, lines[l].sx, lines[l].ex });
+			z2 = std::max({ z2, lines[l].sz, lines[l].ez });
+		}
+		SC4CellRegion<int32_t> region(x1, z1, x2, z2, true);
+		for (int l = 0; l < nLines; l++)
+		{
+			for (int32_t i = 0; i < 3; i++)
 			{
-				region.cellMap.SetValue(static_cast<uint32_t>(cx - x1), static_cast<uint32_t>(cz - z1), false);
+				const int32_t cx = lines[l].sx + i * dx, cz = lines[l].sz + i * dz;
+				const int count = LogOccupants(occ, cx, cz, "before");
+				// Power also keeps any network cell (a road crossing the stub line).
+				const bool network = HasOccupantOfType(occ, cx, cz, kOccupantTypeNetwork)
+					|| (power && (HasOccupantOfType(occ, cx, cz, kOccupantTypePowerPole) || HasOccupantOfType(occ, cx, cz, kOccupantTypePowerWire)));
+				if (network)
+				{
+					region.cellMap.SetValue(static_cast<uint32_t>(cx - x1), static_cast<uint32_t>(cz - z1), false);
+				}
+				const auto zone = zones->GetZoneType(cx, cz);
+				logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: cell (%d,%d) occupants=%d network=%d zone=%d -> %s",
+					cx, cz, count, network ? 1 : 0, static_cast<int32_t>(zone), network ? "kept" : "demolish");
 			}
-			const auto zone = zones->GetZoneType(cx, cz);
-			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: cell (%d,%d) occupants=%d network=%d zone=%d -> %s",
-				cx, cz, count, network ? 1 : 0, static_cast<int32_t>(zone), network ? "kept" : "demolish");
+		}
+		// Rows lo-1 and hi+1 must not change: the width-2 tool could widen into them.
+		const int32_t loOutX = lo.sx - ax, loOutZ = lo.sz - az, hiOutX = s.sx + ax, hiOutZ = s.sz + az;
+		const auto outside = [&](bool low, const char* when) {
+			return low ? OutsideRow(occ, loOutX, loOutZ, e.cells, netType, "EdgeTile", "lo-1", when)
+				: OutsideRow(occ, hiOutX, hiOutZ, e.cells, netType, "EdgeTile", "hi+1", when);
+		};
+		int outLo = 0, outHi = 0;
+		if (pair)
+		{
+			outLo = outside(true, "before");
+			outHi = outside(false, "before");
 		}
 
 		logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: GetNetworkTool(%d, true) ...", net);
@@ -313,9 +423,12 @@ namespace regionsync
 			logger.Flush();
 			const bool demolished = demolition->DemolishRegion(true, region, 0, 1, false, filter, nullptr, 0, nullptr, 0, 0);
 			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: DemolishRegion=%d funds=%lld", demolished ? 1 : 0, Funds(pCity));
-			for (int32_t i = 0; i < 3; i++)
+			for (int l = 0; l < nLines; l++)
 			{
-				LogOccupants(occ, s.sx + i * dx, s.sz + i * dz, "after demolition");
+				for (int32_t i = 0; i < 3; i++)
+				{
+					LogOccupants(occ, lines[l].sx + i * dx, lines[l].sz + i * dz, "after demolition");
+				}
 			}
 		}
 		else
@@ -336,36 +449,81 @@ namespace regionsync
 			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: PlaceZone=%d", dezoned ? 1 : 0);
 		}
 
+		int pieces[2][3] = {};
+		const auto count = [&] {
+			for (int l = 0; l < nLines; l++)
+			{
+				for (int32_t i = 0; i < 3; i++)
+				{
+					pieces[l][i] = CountPieces(occ, lines[l].sx + i * dx, lines[l].sz + i * dz, netType);
+				}
+			}
+		};
 		Place(tool, s, "first");
-		int pieces[3] = {};
-		for (int32_t i = 0; i < 3; i++)
-		{
-			pieces[i] = CountPieces(occ, s.sx + i * dx, s.sz + i * dz, netType);
-		}
-		if (pieces[0] == 0)
+		count();
+		if (pieces[0][0] == 0)
 		{
 			logger.WriteLine(LogLevel::Info, "EdgeTile: no piece on the edge cell.");
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: funds after=%lld", Funds(pCity));
 			return { false, "no piece" };
+		}
+		if (pair)
+		{
+			const int outLoNow = outside(true, "after first placement");
+			const int outHiNow = outside(false, "after first placement");
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: pair first placement hi cells=%d,%d,%d lo cells=%d,%d,%d outside lo-1 %d -> %d, hi+1 %d -> %d",
+				pieces[0][0], pieces[0][1], pieces[0][2], pieces[1][0], pieces[1][1], pieces[1][2], outLo, outLoNow, outHi, outHiNow);
+			const char* stop = pieces[1][0] + pieces[1][1] + pieces[1][2] == 0 ? "lo row empty"
+				: pieces[1][0] == 0 ? "lo edge cell empty"
+				: (outLoNow != outLo || outHiNow != outHi) ? "outside row changed" : nullptr;
+			if (stop)
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: pair %s; flags and second placement skipped, both connections left.", stop);
+				logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: funds after=%lld", Funds(pCity));
+				return { false, stop };
+			}
 		}
 
 		if (!power)
 		{
-			const uint32_t clear = ~(0xFFu << (s.side * 8));
-			const uint32_t set = 2u << (s.side * 8);
-			UpdateEdgeFlags(occ, s.sx, s.sz, netType, [&](uint32_t f) { return (f & clear) | set; });
+			SetSideFlags(occ, s, pair ? &lo : nullptr, netType, false);
 		}
 
 		Place(tool, s, "second");
 		logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: funds after=%lld", Funds(pCity));
-		for (int32_t i = 0; i < 3; i++)
+		count();
+		if (!pair)
 		{
-			pieces[i] = CountPieces(occ, s.sx + i * dx, s.sz + i * dz, netType);
+			const bool edge = pieces[0][0] > 0;
+			const bool full = edge && pieces[0][1] > 0 && pieces[0][2] > 0;
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: result cells=%d,%d,%d -> %s", pieces[0][0], pieces[0][1], pieces[0][2],
+				full ? "laid" : edge ? "partial (inner cells missing)" : "edge piece gone after second placement");
+			return { edge, full ? "laid" : edge ? "partial" : "no piece" };
 		}
-		const bool edge = pieces[0] > 0;
-		const bool full = edge && pieces[1] > 0 && pieces[2] > 0;
-		logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: result cells=%d,%d,%d -> %s", pieces[0], pieces[1], pieces[2],
-			full ? "laid" : edge ? "partial (inner cells missing)" : "edge piece gone after second placement");
-		return { edge, full ? "laid" : edge ? "partial" : "no piece" };
+		const int outLoEnd = outside(true, "after second placement");
+		const int outHiEnd = outside(false, "after second placement");
+		const bool laid = pieces[0][0] > 0 && pieces[1][0] > 0;
+		const bool full = laid && pieces[0][1] > 0 && pieces[0][2] > 0 && pieces[1][1] > 0 && pieces[1][2] > 0;
+		const bool outsideChanged = outLoEnd != outLo || outHiEnd != outHi;
+		const char* result = !laid ? "edge piece missing" : !full ? "partial" : outsideChanged ? "laid, outside row changed" : "laid";
+		logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: pair result hi cells=%d,%d,%d lo cells=%d,%d,%d outside lo-1 %d -> %d, hi+1 %d -> %d -> %s",
+			pieces[0][0], pieces[0][1], pieces[0][2], pieces[1][0], pieces[1][1], pieces[1][2], outLo, outLoEnd, outHi, outHiEnd,
+			!laid ? "an edge piece is missing after second placement" : !full ? "partial (inner cells missing)" : result);
+		return { laid, result };
+	}
+}
+
+namespace regionsync
+{
+	EdgeLayResult LayEdgePiece(const MirrorContext& ctx, uint32_t connType, int32_t bx, int32_t bz, int32_t cells)
+	{
+		return LayEdge(ctx, connType, bx, bz, nullptr, cells);
+	}
+
+	EdgeLayResult LayEdgePair(const MirrorContext& ctx, uint32_t connType, int32_t loX, int32_t loZ, int32_t hiX, int32_t hiZ, int32_t cells)
+	{
+		const SC4Point<int32_t> lo(loX, loZ);
+		return LayEdge(ctx, connType, hiX, hiZ, &lo, cells);
 	}
 
 	bool ClearEdgePiece(const MirrorContext& ctx, uint32_t connType, int32_t bx, int32_t bz, int32_t cells)
@@ -388,12 +546,21 @@ namespace regionsync
 			logger.WriteLine(LogLevel::Info, "EdgeClear: no piece on the edge cell, nothing to re-solve.");
 			return false;
 		}
+		// Dual lane: the re-solve uses the width-2 tool, so log the edge cells
+		// two rows either side (covers lo-1..hi+1 whichever lane this is).
+		const bool dual = IsDualConnectionType(connType);
+		const Step along = AlongStep(s.side);
+		const auto logRows = [&](const char* when) {
+			constexpr const char* kRows[5] = { "-2", "-1", "+0", "+1", "+2" };
+			for (int32_t k = -2; k <= 2; k++)
+			{
+				OutsideRow(e.occ, s.sx + k * along.x, s.sz + k * along.z, e.cells, netType, "EdgeClear", kRows[k + 2], when);
+			}
+		};
+		if (dual) logRows("before");
 		const auto clearSide = [&](uint32_t f) { return f & clear; };
 		const uint32_t seen = UpdateEdgeFlags(e.occ, s.sx, s.sz, netType, clearSide);
 
-		// 0x04 in byte i: the piece continues one cell west, north, east, south.
-		constexpr int32_t kStepX[4] = { -1, 0, 1, 0 };
-		constexpr int32_t kStepZ[4] = { 0, -1, 0, 1 };
 		for (uint32_t i = 0; i < 4; i++)
 		{
 			if (!((seen >> (i * 8)) & 0x04u)) continue;
@@ -425,6 +592,7 @@ namespace regionsync
 		const bool placed = Place(guard.tool, one, "one-cell re-solve");
 		logger.WriteLineFormatted(LogLevel::Info, "EdgeClear: funds after=%lld", Funds(e.city));
 		CountPieces(e.occ, s.sx, s.sz, netType);
+		if (dual) logRows("after");
 		return placed;
 	}
 }

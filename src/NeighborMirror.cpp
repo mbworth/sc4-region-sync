@@ -9,6 +9,7 @@
 
 #include "NeighborMirror.h"
 #include "EdgeNetwork.h"
+#include "Game641.h"
 #include "NeighborsSim641.h"
 #include "RegionalCity641.h"
 #include "RegionalCityBridge.h"
@@ -24,6 +25,7 @@
 #include "SC4List.h"
 #include "SC4Vector.h"
 #include "Logger.h"
+#include <algorithm>
 
 namespace
 {
@@ -226,6 +228,23 @@ namespace
 		return injected;
 	}
 
+	// Per entry of the publisher's list (docs/PLAN-DUAL-FERRY.md rules 5 to 7).
+	enum class LaneRole { Single, Unpaired, Lo, Hi, Duplicate };
+	struct Lane
+	{
+		LaneRole role = LaneRole::Single;
+		bool dir = false;        // CreateConnection's marker direction
+		size_t partner = 0;      // Hi: its lo
+		bool onEdge = false;     // passed the create pass's checks
+		int32_t bx = 0, bz = 0;  // our frame
+	};
+
+	// gateLogged kind for a once-per-lane log line.
+	std::string LaneGate(const char* kind, uint32_t type, int32_t innerX, int32_t innerZ)
+	{
+		return std::string(kind) + " " + std::to_string(type) + " " + std::to_string(innerX) + " " + std::to_string(innerZ);
+	}
+
 	size_t OwnConnectionCount(cISC4NeighborsSimulator* pSim)
 	{
 		SC4List<cISC4NeighborConnection*> list;
@@ -319,18 +338,98 @@ namespace regionsync
 		// The snapshot carries GetCitySize, not the size enum; the location list does.
 		uint32_t aSizeEnum = 0;
 		const int32_t aCells = FindTileSize(ctx.pRegion, a.regionX, a.regionZ, aSizeEnum) ? CityCells(aSizeEnum) : 0;
-		logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: from (%d,%d) '%s', %zu connection(s). Own tile (%d,%d) GetCitySize=(%d,%d) sizeEnum=%u cells=%d",
-			a.regionX, a.regionZ, a.cityName.c_str(), a.connections.size(), ownX, ownZ, sizeX, sizeZ, sizeEnum, cells);
+		logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: from (%d,%d) '%s', %zu connection(s), cellsA=%d (0: dual lanes cannot pair). Own tile (%d,%d) GetCitySize=(%d,%d) sizeEnum=%u cells=%d",
+			a.regionX, a.regionZ, a.cityName.c_str(), a.connections.size(), aCells, ownX, ownZ, sizeX, sizeZ, sizeEnum, cells);
+
+		// Pair pass: pairs in the publisher's frame, kept when both lanes convert to one of our edges.
+		const auto keyOf = [&a](const ConnectionRecord& c) { return ConnectionKey{ a.regionX, a.regionZ, c.type, c.innerX, c.innerZ }; };
+		const auto onOurEdge = [&](const ConnectionRecord& c, int32_t& bx, int32_t& bz, uint32_t& side) {
+			if (c.otherTileX != ownX || c.otherTileZ != ownZ) return false;
+			if (!ToSubscriberFrame(a.regionX, a.regionZ, c.innerX, c.innerZ, ownX, ownZ, cells, bx, bz)) return false;
+			const std::optional<EdgeStub> stub = EdgeStubGeometry(bx, bz, cells);
+			side = stub ? stub->side : 0;
+			return stub.has_value();
+		};
+		std::vector<Lane> lanes(a.connections.size());
+		const bool anyDual = std::any_of(a.connections.begin(), a.connections.end(), [](const ConnectionRecord& c) { return IsDualConnectionType(c.type); });
+		const bool driveOnRight = anyDual ? game641::DriveOnRight() : true;
+		for (size_t i = 0; i < lanes.size(); i++)
+		{
+			int32_t bx = 0, bz = 0;
+			uint32_t side = 0;
+			if (!IsDualConnectionType(a.connections[i].type)) continue;
+			lanes[i].role = LaneRole::Unpaired;
+			// Vanilla gives an unpaired lane primary 0.
+			if (onOurEdge(a.connections[i], bx, bz, side)) lanes[i].dir = DualLaneDir(side, false, driveOnRight);
+		}
+		for (const auto& [loIndex, hiIndex] : PairDualLanes(a.connections, aCells))
+		{
+			const ConnectionRecord& lo = a.connections[loIndex];
+			const ConnectionRecord& hi = a.connections[hiIndex];
+			int32_t lx = 0, lz = 0, hx = 0, hz = 0;
+			uint32_t loSide = 0, hiSide = 0;
+			// Same publisher edge implies the same side here; the side test is defensive.
+			if (!onOurEdge(lo, lx, lz, loSide) || !onOurEdge(hi, hx, hz, hiSide) || loSide != hiSide) continue;
+			lanes[loIndex] = { LaneRole::Lo, DualLaneDir(loSide, false, driveOnRight) };
+			lanes[hiIndex] = { LaneRole::Hi, DualLaneDir(hiSide, true, driveOnRight), loIndex };
+			if (ctx.cheat || !mirroredConnections.count(keyOf(lo)) || !mirroredConnections.count(keyOf(hi)))
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: pair type %u lo inner=(%d,%d) -> (%d,%d) dir=%d, hi inner=(%d,%d) -> (%d,%d) dir=%d, side %u driveOnRight=%d",
+					lo.type, lo.innerX, lo.innerZ, lx, lz, lanes[loIndex].dir ? 1 : 0, hi.innerX, hi.innerZ, hx, hz, lanes[hiIndex].dir ? 1 : 0, hiSide, driveOnRight ? 1 : 0);
+			}
+		}
+		// A repeated entry of a paired lane follows that lane and is never laid on its own.
+		for (size_t i = 0; i < lanes.size(); i++)
+		{
+			if (lanes[i].role != LaneRole::Unpaired) continue;
+			for (size_t j = 0; j < lanes.size(); j++)
+			{
+				if ((lanes[j].role == LaneRole::Lo || lanes[j].role == LaneRole::Hi) && keyOf(a.connections[j]) == keyOf(a.connections[i]))
+				{
+					lanes[i] = { LaneRole::Duplicate };
+					break;
+				}
+			}
+		}
 
 		int listState = 0;
 		std::set<ConnectionKey> listed;
-		for (const ConnectionRecord& c : a.connections)
+		for (size_t index = 0; index < a.connections.size(); index++)
 		{
+			const ConnectionRecord& c = a.connections[index];
+			Lane& lane = lanes[index];
 			if (c.otherTileX != ownX || c.otherTileZ != ownZ)
 			{
 				continue;
 			}
-			listed.insert({ a.regionX, a.regionZ, c.type, c.innerX, c.innerZ });
+			listed.insert(keyOf(c));
+			if (c.type == static_cast<uint32_t>(cISC4NeighborsSimulator::ConnectionType::Ferry))
+			{
+				// Not mirrored (rule 12). First-time game call: cheat path only.
+				int32_t fx = 0, fz = 0;
+				if (!ctx.cheat) continue;
+				if (!ToSubscriberFrame(a.regionX, a.regionZ, c.innerX, c.innerZ, ownX, ownZ, cells, fx, fz))
+				{
+					logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: ferry inner=(%d,%d) converts to (%d,%d), not on our edge, not mirrored.", c.innerX, c.innerZ, fx, fz);
+					continue;
+				}
+				if (!gateLogged.insert({ a.regionX, a.regionZ, "ferry" }).second) continue;
+				cISC4RegionalCity* pA = FindRegionalCity(ctx.pRegion, a.regionX, a.regionZ);
+				if (!pA)
+				{
+					logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: ferry inner=(%d,%d) -> our cell (%d,%d), not mirrored; publisher record not found, not queried; logged once per publisher session",
+						c.innerX, c.innerZ, fx, fz);
+					continue;
+				}
+				logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: ferry inner=(%d,%d) -> our cell (%d,%d), not mirrored. GetConnectionsOfTypeToCity(9, %p) ...",
+					c.innerX, c.innerZ, fx, fz, static_cast<void*>(pA));
+				logger.Flush();
+				SC4List<cISC4NeighborConnection*> ferries;
+				ctx.pNeighborsSim->GetConnectionsOfTypeToCity(cISC4NeighborsSimulator::ConnectionType::Ferry, pA, ferries);
+				logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: GetConnectionsOfTypeToCity count=%zu: %s ferry to (%d,%d) here (any, coarse); logged once per publisher session",
+					ferries.size(), ferries.empty() ? "no" : "a", a.regionX, a.regionZ);
+				continue;
+			}
 			if (!IsMirrorableConnectionType(c.type))
 			{
 				logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: type %u not in the slice 1 whitelist, skipped.", c.type);
@@ -343,7 +442,10 @@ namespace regionsync
 					c.type, c.innerX, c.innerZ, bx, bz);
 				continue;
 			}
-			const ConnectionKey key{ a.regionX, a.regionZ, c.type, c.innerX, c.innerZ };
+			lane.onEdge = true;
+			lane.bx = bx;
+			lane.bz = bz;
+			const ConnectionKey key = keyOf(c);
 			const auto known = mirroredConnections.find(key);
 			if (known != mirroredConnections.end())
 			{
@@ -370,10 +472,10 @@ namespace regionsync
 				logger.Flush();
 				if (!has)
 				{
-					logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: CreateConnection(%u, %d, %d, 0) ...", c.type, bx, bz);
+					logger.WriteLineFormatted(LogLevel::Info, "MirrorConnections: CreateConnection(%u, %d, %d, %d) ...", c.type, bx, bz, lane.dir ? 1 : 0);
 					logger.Flush();
 					// The return value is not set by the game (connections-641.md); FindConnection confirms.
-					ctx.pNeighborsSim->CreateConnection(type, bx, bz, false);
+					ctx.pNeighborsSim->CreateConnection(type, bx, bz, lane.dir);
 					logger.WriteLine(LogLevel::Info, "MirrorConnections: CreateConnection returned");
 					logger.Flush();
 				}
@@ -398,23 +500,63 @@ namespace regionsync
 				}
 				mirroredConnections[key] = pFound;
 			}
+		}
 
-			// Idempotent, so it runs for every connection, not only new ones;
-			// once per key per session on the timed path, since a failed lay
-			// has already demolished the cells.
-			if (ctx.layEdgeNetwork && (ctx.cheat || !edgeLayTried.count(key)))
+		// Lay pass. Idempotent, so it runs for every connection, not only new
+		// ones; once per key per session on the timed path, since a failed lay
+		// has already demolished the cells.
+		for (size_t index = 0; ctx.layEdgeNetwork && index < a.connections.size(); index++)
+		{
+			const ConnectionRecord& c = a.connections[index];
+			const Lane& lane = lanes[index];
+			if (!lane.onEdge || lane.role == LaneRole::Lo || lane.role == LaneRole::Duplicate) continue;
+			const ConnectionKey key = keyOf(c);
+			const auto type = static_cast<cISC4NeighborsSimulator::ConnectionType>(c.type);
+			if (lane.role == LaneRole::Unpaired)
 			{
+				if (ctx.cheat || gateLogged.insert({ a.regionX, a.regionZ, LaneGate("unpaired", c.type, c.innerX, c.innerZ) }).second)
+				{
+					logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: type %u inner=(%d,%d) -> (%d,%d) is an unpaired dual lane, connection only; logged once per key",
+						c.type, c.innerX, c.innerZ, lane.bx, lane.bz);
+				}
+				continue;
+			}
+			if (lane.role == LaneRole::Single)
+			{
+				if (!ctx.cheat && edgeLayTried.count(key)) continue;
 				edgeLayTried.insert(key);
-				const auto type = static_cast<cISC4NeighborsSimulator::ConnectionType>(c.type);
-				cISC4NeighborConnection* pConn = ctx.pNeighborsSim->FindConnection(type, bx, bz);
-				logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: FindConnection(%u, %d, %d)=%p", c.type, bx, bz, static_cast<void*>(pConn));
+				cISC4NeighborConnection* pConn = ctx.pNeighborsSim->FindConnection(type, lane.bx, lane.bz);
+				logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: FindConnection(%u, %d, %d)=%p", c.type, lane.bx, lane.bz, static_cast<void*>(pConn));
 				if (pConn)
 				{
-					const EdgeLayResult lay = LayEdgePiece(ctx, c.type, bx, bz, cells);
-					logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: type %u (%d,%d) laid=%d (%s)", c.type, bx, bz, lay.laid ? 1 : 0, lay.reason);
+					const EdgeLayResult lay = LayEdgePiece(ctx, c.type, lane.bx, lane.bz, cells);
+					logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: type %u (%d,%d) laid=%d (%s)", c.type, lane.bx, lane.bz, lay.laid ? 1 : 0, lay.reason);
 					if (lay.laid) result.laid++;
 				}
+				continue;
 			}
+			// Hi: lays the pair once both lanes exist here; only then are both keys tried.
+			const Lane& lo = lanes[lane.partner];
+			const ConnectionKey loKey = keyOf(a.connections[lane.partner]);
+			if (!lo.onEdge || (!ctx.cheat && edgeLayTried.count(loKey) && edgeLayTried.count(key))) continue;
+			cISC4NeighborConnection* pLo = ctx.pNeighborsSim->FindConnection(type, lo.bx, lo.bz);
+			cISC4NeighborConnection* pHi = ctx.pNeighborsSim->FindConnection(type, lane.bx, lane.bz);
+			if (!pLo || !pHi)
+			{
+				if (ctx.cheat || gateLogged.insert({ a.regionX, a.regionZ, LaneGate("pair missing", c.type, c.innerX, c.innerZ) }).second)
+				{
+					logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: pair type %u FindConnection lo (%d,%d)=%p hi (%d,%d)=%p, a lane is missing here, not laid",
+						c.type, lo.bx, lo.bz, static_cast<void*>(pLo), lane.bx, lane.bz, static_cast<void*>(pHi));
+				}
+				continue;
+			}
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: pair type %u FindConnection lo (%d,%d)=%p hi (%d,%d)=%p",
+				c.type, lo.bx, lo.bz, static_cast<void*>(pLo), lane.bx, lane.bz, static_cast<void*>(pHi));
+			const EdgeLayResult lay = LayEdgePair(ctx, c.type, lo.bx, lo.bz, lane.bx, lane.bz, cells);
+			edgeLayTried.insert(loKey);
+			edgeLayTried.insert(key);
+			logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: pair type %u lo (%d,%d) hi (%d,%d) laid=%d (%s)", c.type, lo.bx, lo.bz, lane.bx, lane.bz, lay.laid ? 1 : 0, lay.reason);
+			if (lay.laid) result.laid++;
 		}
 		RemoveConnections(ctx, a, listed, ownX, ownZ, cells, aCells, result);
 		return result;
@@ -455,6 +597,15 @@ namespace regionsync
 		int32_t ownX, int32_t ownZ, int32_t cells, int32_t aCells, ConnectionMirrorResult& result)
 	{
 		Logger& logger = Logger::GetInstance();
+		const auto forget = [&](const ConnectionKey& key) {
+			const auto& [ax, az, connType, innerX, innerZ] = key;
+			mirroredConnections.erase(key);
+			injectedRecord.erase(key);
+			edgeLayTried.erase(key);
+			deleteFailed.erase(key);
+			gateLogged.erase({ ax, az, LaneGate("unpaired", connType, innerX, innerZ) });
+			gateLogged.erase({ ax, az, LaneGate("pair missing", connType, innerX, innerZ) });
+		};
 		std::vector<ConnectionKey> unlisted;
 		for (const auto& [key, pointer] : mirroredConnections)
 		{
@@ -471,13 +622,7 @@ namespace regionsync
 		}
 		if (!RemovalAllowed(ctx, a, "connection", unlisted.size()))
 		{
-			for (const ConnectionKey& key : unlisted)
-			{
-				mirroredConnections.erase(key);
-				injectedRecord.erase(key);
-				edgeLayTried.erase(key);
-				deleteFailed.erase(key);
-			}
+			for (const ConnectionKey& key : unlisted) forget(key);
 			return;
 		}
 
@@ -486,12 +631,7 @@ namespace regionsync
 		{
 			const auto& [ax, az, connType, innerX, innerZ] = key;
 			const auto type = static_cast<cISC4NeighborsSimulator::ConnectionType>(connType);
-			const auto dropKey = [&] {
-				mirroredConnections.erase(key);
-				injectedRecord.erase(key);
-				edgeLayTried.erase(key);
-				deleteFailed.erase(key);
-			};
+			const auto dropKey = [&] { forget(key); };
 			int32_t bx = 0, bz = 0;
 			if (!ToSubscriberFrame(ax, az, innerX, innerZ, ownX, ownZ, cells, bx, bz))
 			{

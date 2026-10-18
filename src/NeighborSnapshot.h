@@ -20,6 +20,7 @@
 #include <string_view>
 #include <array>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace regionsync
@@ -148,16 +149,18 @@ namespace regionsync
 		bool dealsComplete = false;
 	};
 
-	// Slice 1 mirrors single-cell networks only: rail, road, power, pipe,
-	// subway, light rail, dirt road, monorail.
+	// Everything but street, one-way road and ferry (docs/PLAN-DUAL-FERRY.md rule 11).
 	constexpr bool IsMirrorableConnectionType(uint32_t type)
 	{
 		switch (type)
 		{
-		case 1: case 2: case 4: case 5: case 6: case 7: case 10: case 11: return true;
+		case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8: case 10: case 11: case 12: return true;
 		default: return false;
 		}
 	}
+
+	// One connection per lane, two lanes per edge crossing.
+	constexpr bool IsDualConnectionType(uint32_t type) { return type == 3 || type == 8 || type == 12; }
 
 	constexpr uint32_t kDealTypeFirst = 0x4773FFE0;
 	constexpr uint32_t kDealTypeLast = 0x4773FFE5;
@@ -238,19 +241,22 @@ namespace regionsync
 	}
 
 	// Connection type to cISC4NetworkOccupant::eNetworkType; -1 when the edge
-	// piece is not laid for that type (duals, ferry, unknown).
+	// piece is not laid for that type (ferry, unknown).
 	constexpr int32_t ConnectionToNetworkType(uint32_t connType)
 	{
 		switch (connType)
 		{
 		case 1: return 1;    // rail
 		case 2: return 0;    // road
+		case 3: return 2;    // elevated highway
 		case 4: return 5;    // power
 		case 5: return 4;    // pipe
 		case 6: return 7;    // subway
 		case 7: return 8;    // light rail
+		case 8: return 6;    // avenue
 		case 10: return 11;  // dirt road
 		case 11: return 9;   // monorail
+		case 12: return 12;  // ground highway
 		default: return -1;
 		}
 	}
@@ -275,6 +281,21 @@ namespace regionsync
 		if (bx == cells && in(bz)) return EdgeStub{ w, bz, w - 2, bz, 2 };
 		if (bz == cells && in(bx)) return EdgeStub{ bx, w, bx, w - 2, 3 };
 		return std::nullopt;
+	}
+
+	// Dual lanes paired in the publisher's frame (docs/PLAN-DUAL-FERRY.md rule 2).
+	// lanes: the publisher's complete list, unfiltered; cellsA: its tile width.
+	// Per (type, publisher edge side), sorted along the edge and deduped, lanes
+	// pair greedily from the lowest when one cell apart. Returns (lo, hi)
+	// indices into lanes. A lane whose side is unknown (cell unknown and
+	// inner cell on a corner) never pairs.
+	std::vector<std::pair<size_t, size_t>> PairDualLanes(const std::vector<ConnectionRecord>& lanes, int32_t cellsA);
+
+	// Marker direction for a dual lane on our side (0 W, 1 N, 2 E, 3 S), as the
+	// game's load path computes it (dual-ferry-641.md section 2).
+	constexpr bool DualLaneDir(uint32_t side, bool hi, bool driveOnRight)
+	{
+		return hi ^ (side == 1 || side == 2) ^ !driveOnRight;
 	}
 
 	// Simple line-oriented key=value text format. No external JSON dependency,
