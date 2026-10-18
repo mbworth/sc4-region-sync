@@ -1,12 +1,15 @@
 /*
  * sc4-region-sync launcher
  *
- * main.cpp - the window: instance list, Launch and Refresh, resource line.
- * Discovery every 1 s, resource sampling every 5 s (docs/PLAN-LAUNCHER.md).
+ * main.cpp - the window: instance list or grid of DWM thumbnails, Launch and
+ * Refresh, resource line. Discovery every 1 s, resource sampling every 5 s
+ * (docs/PLAN-LAUNCHER.md).
  */
 
 #include "Launcher.h"
 #include <CommCtrl.h>
+#include <dwmapi.h>
+#include <windowsx.h>
 #include <algorithm>
 #include <set>
 
@@ -18,13 +21,35 @@ namespace
 	constexpr UINT_PTR kResourceTimer = 2;
 	constexpr int kCmdLaunch = 101;
 	constexpr int kCmdRefresh = 102;
+	constexpr int kCmdList = 103;
+	constexpr int kCmdGrid = 104;
+	constexpr size_t kMaxCells = 16;
 	constexpr ULONGLONG kPendingTimeoutMs = 60000;
 
 	struct Row
 	{
 		DWORD pid = 0;
 		HWND window = nullptr;
+		bool conflict = false;
 		std::wstring label, state, tile, pidText;
+	};
+
+	struct Thumb
+	{
+		HTHUMBNAIL handle = nullptr;
+		RECT dest{ -1, -1, -1, -1 };  // last applied
+		bool visible = false;
+		bool failed = false;          // register failed; retried only for a new HWND
+	};
+
+	enum class Strip { Normal, Conflict, Grey };
+
+	struct Cell
+	{
+		RECT cell{}, strip{}, area{};
+		HWND window = nullptr;
+		Strip kind = Strip::Normal;
+		std::wstring caption;
 	};
 
 	struct App
@@ -39,6 +64,13 @@ namespace
 		std::vector<std::wstring> liveUserDirs;  // normalised
 		std::map<std::wstring, InstanceStatus> lastGood;  // by file name
 		std::map<DWORD, HWND> windows;
+		std::map<HWND, Thumb> thumbs;  // Grid mode only
+		std::vector<Cell> cells;
+		bool grid = false;
+		RECT gridRect{};
+		int captionHeight = 0;
+		bool downInCell = false;
+		HWND downWindow = nullptr;
 	} app;
 
 	int Scale(int px) { return MulDiv(px, static_cast<int>(app.dpi), 96); }
@@ -54,6 +86,24 @@ namespace
 		return slash == std::wstring::npos ? d : d.substr(slash + 1);
 	}
 
+	// A minimised window reports its restored client size.
+	SIZE ClientSize(HWND hwnd)
+	{
+		RECT rc{};
+		if (!IsIconic(hwnd))
+		{
+			GetClientRect(hwnd, &rc);
+			return { rc.right - rc.left, rc.bottom - rc.top };
+		}
+		WINDOWPLACEMENT wp{};
+		wp.length = sizeof(wp);
+		GetWindowPlacement(hwnd, &wp);
+		AdjustWindowRectEx(&rc, static_cast<DWORD>(GetWindowLongW(hwnd, GWL_STYLE)), FALSE,
+			static_cast<DWORD>(GetWindowLongW(hwnd, GWL_EXSTYLE)));
+		const RECT& n = wp.rcNormalPosition;
+		return { (n.right - n.left) - (rc.right - rc.left), (n.bottom - n.top) - (rc.bottom - rc.top) };
+	}
+
 	bool WindowMatches(HWND hwnd, DWORD pid)
 	{
 		DWORD owner = 0;
@@ -64,7 +114,8 @@ namespace
 		}
 		if (app.settings.windowClass.empty())
 		{
-			return true;
+			const SIZE size = ClientSize(hwnd);
+			return size.cx >= 640 && size.cy >= 480;  // never bind a splash or dialog
 		}
 		wchar_t cls[256]{};
 		GetClassNameW(hwnd, cls, 256);
@@ -173,6 +224,256 @@ namespace
 		return s.state == L"region" ? s.region : L"";
 	}
 
+	size_t CellCount() { return std::min(app.rows.size(), kMaxCells); }
+
+	void UnregisterThumbs()
+	{
+		for (const auto& [hwnd, t] : app.thumbs)
+		{
+			if (t.handle)
+			{
+				DwmUnregisterThumbnail(t.handle);
+			}
+		}
+		app.thumbs.clear();
+	}
+
+	void ReconcileThumbs()
+	{
+		std::set<HWND> wanted;
+		for (size_t i = 0; i < CellCount(); ++i)
+		{
+			if (app.rows[i].window)
+			{
+				wanted.insert(app.rows[i].window);
+			}
+		}
+		for (auto it = app.thumbs.begin(); it != app.thumbs.end();)
+		{
+			if (wanted.count(it->first))
+			{
+				++it;
+				continue;
+			}
+			if (it->second.handle)
+			{
+				DwmUnregisterThumbnail(it->second.handle);  // erased whatever the HRESULT
+			}
+			it = app.thumbs.erase(it);
+		}
+		for (const HWND w : wanted)
+		{
+			if (app.thumbs.count(w))
+			{
+				continue;
+			}
+			Thumb t;
+			if (FAILED(DwmRegisterThumbnail(app.main, w, &t.handle)))
+			{
+				t.handle = nullptr;
+				t.failed = true;
+			}
+			app.thumbs[w] = t;
+		}
+	}
+
+	RECT Letterbox(const RECT& area, SIZE source)
+	{
+		const int w = area.right - area.left, h = area.bottom - area.top;
+		if (w <= 0 || h <= 0)
+		{
+			return area;
+		}
+		if (source.cx <= 0 || source.cy <= 0)
+		{
+			source = { 16, 9 };
+		}
+		int tw = w, th = MulDiv(w, source.cy, source.cx);
+		if (th > h)
+		{
+			th = h;
+			tw = MulDiv(h, source.cx, source.cy);
+		}
+		const int x = area.left + (w - tw) / 2, y = area.top + (h - th) / 2;
+		return { x, y, x + tw, y + th };
+	}
+
+	void ApplyThumb(Thumb& t, const RECT& dest, bool visible)
+	{
+		if (!t.handle || (EqualRect(&t.dest, &dest) && t.visible == visible))
+		{
+			return;
+		}
+		DWM_THUMBNAIL_PROPERTIES p{};
+		p.dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_VISIBLE | DWM_TNP_SOURCECLIENTAREAONLY | DWM_TNP_OPACITY;
+		p.rcDestination = dest;
+		p.fVisible = visible;
+		p.fSourceClientAreaOnly = TRUE;
+		p.opacity = 255;
+		if (SUCCEEDED(DwmUpdateThumbnailProperties(t.handle, &p)))
+		{
+			t.dest = dest;
+			t.visible = visible;
+		}
+	}
+
+	// Column count giving the largest letterboxed 16:9 thumbnail.
+	int BestColumns(int n, int w, int h, int gutter)
+	{
+		int best = 1;
+		long long bestArea = -1;
+		for (int c = 1; c <= n; ++c)
+		{
+			const int r = (n + c - 1) / c;
+			const int cw = (w - gutter * (c + 1)) / c;
+			const int th = (h - gutter * (r + 1)) / r - app.captionHeight;
+			const int tw = std::min(cw, th * 16 / 9);
+			const long long area = tw > 0 ? static_cast<long long>(tw) * tw * 9 / 16 : 0;
+			if (area > bestArea)
+			{
+				bestArea = area;
+				best = c;
+			}
+		}
+		return best;
+	}
+
+	// Rebuilds cells and thumbnail properties, then invalidates when forced or
+	// when a caption, strip or the cell count changed.
+	void LayoutGrid(bool force)
+	{
+		const RECT& g = app.gridRect;
+		const int n = static_cast<int>(CellCount());
+		const int gutter = Scale(8);
+		const int w = g.right - g.left, h = g.bottom - g.top;
+		const int cols = n ? BestColumns(n, w, h, gutter) : 1;
+		const int lines = (n + cols - 1) / cols;
+		const int cw = std::max(0, (w - gutter * (cols + 1)) / cols);
+		const int ch = lines ? std::max(0, (h - gutter * (lines + 1)) / lines) : 0;
+		const int stripH = std::min(app.captionHeight, ch);
+
+		std::vector<Cell> cells;
+		for (int i = 0; i < n; ++i)
+		{
+			const Row& r = app.rows[static_cast<size_t>(i)];
+			Cell c;
+			const int x = g.left + gutter + (i % cols) * (cw + gutter);
+			const int y = g.top + gutter + (i / cols) * (ch + gutter);
+			c.cell = { x, y, x + cw, y + ch };
+			c.strip = { x, y, x + cw, y + stripH };
+			c.area = { x, y + stripH, x + cw, y + ch };
+			c.window = r.window;
+			std::wstring detail = r.tile.empty() ? r.state : r.tile;
+			const std::wstring prefix = r.conflict ? L"CONFLICT, " : L"";
+			c.kind = r.conflict ? Strip::Conflict : Strip::Normal;
+			const auto t = r.window ? app.thumbs.find(r.window) : app.thumbs.end();
+			if (!r.window || t == app.thumbs.end() || t->second.failed)
+			{
+				c.kind = r.conflict ? Strip::Conflict : Strip::Grey;
+				detail = prefix + (r.window ? L"no preview" : L"starting (no window)");
+			}
+			else
+			{
+				const bool iconic = IsIconic(r.window) != FALSE;
+				ApplyThumb(t->second, Letterbox(c.area, ClientSize(r.window)), !iconic);
+				if (iconic)
+				{
+					detail = prefix + L"minimised, click to restore";
+				}
+			}
+			c.caption = r.label + L"  " + detail;
+			if (i == n - 1 && app.rows.size() > kMaxCells)
+			{
+				c.caption += L"   +" + std::to_wstring(app.rows.size() - kMaxCells) + L" more, see List";
+			}
+			cells.push_back(std::move(c));
+		}
+
+		bool changed = force || cells.size() != app.cells.size();
+		for (size_t i = 0; !changed && i < cells.size(); ++i)
+		{
+			changed = cells[i].caption != app.cells[i].caption || cells[i].kind != app.cells[i].kind;
+		}
+		app.cells = std::move(cells);
+		if (changed)
+		{
+			InvalidateRect(app.main, &app.gridRect, FALSE);
+		}
+	}
+
+	void PaintGrid()
+	{
+		PAINTSTRUCT ps{};
+		const HDC dc = BeginPaint(app.main, &ps);
+		const HGDIOBJ oldFont = SelectObject(dc, app.font);
+		SetBkMode(dc, TRANSPARENT);
+		for (const Cell& c : app.cells)
+		{
+			COLORREF fill = GetSysColor(COLOR_WINDOW), text = GetSysColor(COLOR_WINDOWTEXT);
+			if (c.kind == Strip::Conflict)
+			{
+				fill = RGB(192, 0, 0);
+				text = RGB(255, 255, 255);
+			}
+			else if (c.kind == Strip::Grey)
+			{
+				fill = RGB(128, 128, 128);
+				text = RGB(255, 255, 255);
+			}
+			const HBRUSH brush = CreateSolidBrush(fill);
+			FillRect(dc, &c.strip, brush);
+			DeleteObject(brush);
+			RECT tr = c.strip;
+			tr.left += Scale(4);
+			tr.right -= Scale(4);
+			SetTextColor(dc, text);
+			DrawTextW(dc, c.caption.c_str(), -1, &tr, DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+			// Letterbox bands; the compositor draws the thumbnail over the rest.
+			FillRect(dc, &c.area, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+			ExcludeClipRect(dc, c.cell.left, c.cell.top, c.cell.right, c.cell.bottom);
+		}
+		FillRect(dc, &app.gridRect, GetSysColorBrush(COLOR_APPWORKSPACE));  // gutters
+		SelectObject(dc, oldFont);
+		EndPaint(app.main, &ps);
+	}
+
+	const Cell* CellAt(LPARAM lParam)
+	{
+		const POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+		for (const Cell& c : app.cells)
+		{
+			if (PtInRect(&c.cell, pt))
+			{
+				return &c;
+			}
+		}
+		return nullptr;
+	}
+
+	void SetView(bool grid)
+	{
+		SendMessageW(app.toolbar, TB_CHECKBUTTON, kCmdList, MAKELONG(!grid, 0));
+		SendMessageW(app.toolbar, TB_CHECKBUTTON, kCmdGrid, MAKELONG(grid, 0));
+		if (grid == app.grid)
+		{
+			return;
+		}
+		app.grid = grid;
+		if (grid)
+		{
+			ShowWindow(app.list, SW_HIDE);
+			SetFocus(app.main);
+			ReconcileThumbs();
+			LayoutGrid(true);
+		}
+		else
+		{
+			UnregisterThumbs();
+			app.cells.clear();
+			ShowWindow(app.list, SW_SHOW);
+		}
+	}
+
 	void UpdateLaunchButton()
 	{
 		SendMessageW(app.toolbar, TB_ENABLEBUTTON, kCmdLaunch, MAKELONG(!LaunchInFlight(app.pending), 0));
@@ -232,6 +533,7 @@ namespace
 			r.window = w == app.windows.end() ? nullptr : w->second;
 			r.state = r.window ? s.state : L"starting (no window)";
 			r.tile = TileText(s, statuses);
+			r.conflict = s.state == L"city" && s.conflict;
 			rows.push_back(std::move(r));
 			if (!s.userDir.empty())
 			{
@@ -258,7 +560,13 @@ namespace
 		ListView_SetItemCountEx(app.list, static_cast<int>(app.rows.size()), LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL);
 		InvalidateRect(app.list, nullptr, FALSE);
 		UpdateLaunchButton();
+		if (app.grid)
+		{
+			ReconcileThumbs();
+			LayoutGrid(false);
+		}
 
+		// After the thumbs map is consistent: MessageBoxW pumps the timer.
 		for (const std::wstring& m : messages)
 		{
 			ShowMessage(app.main, m);
@@ -282,6 +590,17 @@ namespace
 			app.resources.tooltip += cls;
 			break;
 		}
+		const auto thumbs = std::count_if(app.thumbs.begin(), app.thumbs.end(), [](const auto& t) { return t.second.handle != nullptr; });
+		app.resources.tooltip += L"\r\nthumbs=" + std::to_wstring(thumbs);
+		const auto first = std::find_if(app.thumbs.begin(), app.thumbs.end(), [](const auto& t) { return t.second.handle != nullptr; });
+		if (first != app.thumbs.end())
+		{
+			SIZE source{};
+			DwmQueryThumbnailSourceSize(first->second.handle, &source);
+			const SIZE client = ClientSize(first->first);
+			app.resources.tooltip += L" source=" + std::to_wstring(source.cx) + L"x" + std::to_wstring(source.cy)
+				+ L" client=" + std::to_wstring(client.cx) + L"x" + std::to_wstring(client.cy);
+		}
 		SendMessageW(app.status, SB_SETTEXTW, SBT_OWNERDRAW, 0);
 		InvalidateRect(app.status, nullptr, TRUE);
 
@@ -293,13 +612,8 @@ namespace
 		SendMessageW(app.tooltip, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&ti));
 	}
 
-	void Raise(int index)
+	void RaiseWindow(HWND hwnd)
 	{
-		if (index < 0 || index >= static_cast<int>(app.rows.size()))
-		{
-			return;
-		}
-		const HWND hwnd = app.rows[static_cast<size_t>(index)].window;
 		if (!hwnd || !IsWindow(hwnd))
 		{
 			return;
@@ -309,6 +623,14 @@ namespace
 			ShowWindowAsync(hwnd, SW_RESTORE);
 		}
 		SetForegroundWindow(hwnd);
+	}
+
+	void Raise(int index)
+	{
+		if (index >= 0 && index < static_cast<int>(app.rows.size()))
+		{
+			RaiseWindow(app.rows[static_cast<size_t>(index)].window);
+		}
 	}
 
 	void ApplyDpi()
@@ -326,6 +648,13 @@ namespace
 			DeleteObject(app.font);
 		}
 		app.font = font;
+		const HDC dc = GetDC(app.main);
+		const HGDIOBJ old = SelectObject(dc, font);
+		TEXTMETRICW tm{};
+		GetTextMetricsW(dc, &tm);
+		SelectObject(dc, old);
+		ReleaseDC(app.main, dc);
+		app.captionHeight = tm.tmHeight + Scale(6);
 		const int widths[] = { 110, 150, 260, 70 };
 		for (int i = 0; i < 4; ++i)
 		{
@@ -347,6 +676,11 @@ namespace
 		const int top = tb.bottom - tb.top;
 		const int bottom = client.bottom - (sb.bottom - sb.top);
 		MoveWindow(app.list, 0, top, client.right, std::max(0, bottom - top), TRUE);
+		app.gridRect = { 0, top, client.right, std::max(top, bottom) };
+		if (app.grid)
+		{
+			LayoutGrid(true);
+		}
 	}
 
 	void CreateControls(HWND hwnd, HINSTANCE inst)
@@ -359,18 +693,24 @@ namespace
 			0, 0, 0, 0, hwnd, nullptr, inst, nullptr);
 		SendMessageW(app.toolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
 		SendMessageW(app.toolbar, TB_SETBITMAPSIZE, 0, MAKELONG(0, 0));
-		TBBUTTON buttons[2]{};
-		const wchar_t* labels[] = { L"Launch", L"Refresh" };
-		const int ids[] = { kCmdLaunch, kCmdRefresh };
-		for (int i = 0; i < 2; ++i)
+		TBBUTTON buttons[5]{};
+		const wchar_t* labels[] = { L"Launch", L"Refresh", nullptr, L"List", L"Grid" };
+		const int ids[] = { kCmdLaunch, kCmdRefresh, 0, kCmdList, kCmdGrid };
+		for (int i = 0; i < 5; ++i)
 		{
+			if (!labels[i])
+			{
+				buttons[i].fsStyle = BTNS_SEP;
+				continue;
+			}
 			buttons[i].iBitmap = I_IMAGENONE;
 			buttons[i].idCommand = ids[i];
 			buttons[i].fsState = TBSTATE_ENABLED;
-			buttons[i].fsStyle = BTNS_BUTTON | BTNS_AUTOSIZE | BTNS_SHOWTEXT;
+			buttons[i].fsStyle = (i >= 3 ? BTNS_CHECKGROUP : BTNS_BUTTON) | BTNS_AUTOSIZE | BTNS_SHOWTEXT;
 			buttons[i].iString = reinterpret_cast<INT_PTR>(labels[i]);
 		}
-		SendMessageW(app.toolbar, TB_ADDBUTTONSW, 2, reinterpret_cast<LPARAM>(buttons));
+		buttons[3].fsState |= TBSTATE_CHECKED;  // always starts in List
+		SendMessageW(app.toolbar, TB_ADDBUTTONSW, 5, reinterpret_cast<LPARAM>(buttons));
 
 		app.list = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, nullptr,
 			WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_OWNERDATA | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
@@ -473,30 +813,83 @@ namespace
 			return 0;
 		}
 		case WM_TIMER:
-			if (wParam == kDiscoveryTimer)
-			{
-				Discover();
-			}
-			else if (wParam == kResourceTimer)
-			{
-				Sample();
-			}
-			return 0;
 		case WM_COMMAND:
-			if (LOWORD(wParam) == kCmdLaunch)
+			try  // keep the window alive; there is no log to report to
 			{
-				if (Launch(hwnd, app.settings, app.resources, static_cast<int>(app.rows.size()), app.liveUserDirs, app.pending))
+				if (msg == WM_TIMER)
 				{
+					if (wParam == kDiscoveryTimer)
+					{
+						Discover();
+					}
+					else if (wParam == kResourceTimer)
+					{
+						Sample();
+					}
+				}
+				else if (LOWORD(wParam) == kCmdLaunch)
+				{
+					if (Launch(hwnd, app.settings, app.resources, static_cast<int>(app.rows.size()), app.liveUserDirs, app.pending))
+					{
+						Discover();
+					}
+				}
+				else if (LOWORD(wParam) == kCmdRefresh)
+				{
+					app.settings = LoadSettings();
 					Discover();
+					Sample();
+				}
+				else if (LOWORD(wParam) == kCmdList || LOWORD(wParam) == kCmdGrid)
+				{
+					SetView(LOWORD(wParam) == kCmdGrid);
 				}
 			}
-			else if (LOWORD(wParam) == kCmdRefresh)
+			catch (...)
 			{
-				app.settings = LoadSettings();
-				Discover();
-				Sample();
 			}
 			return 0;
+		case WM_ERASEBKGND:
+			if (app.grid)
+			{
+				return 1;  // WM_PAINT fills everything
+			}
+			break;
+		case WM_PAINT:
+			if (app.grid)
+			{
+				PaintGrid();
+				return 0;
+			}
+			break;
+		case WM_LBUTTONDOWN:
+		{
+			const Cell* c = app.grid ? CellAt(lParam) : nullptr;
+			app.downInCell = c != nullptr;
+			app.downWindow = c ? c->window : nullptr;
+			if (c)
+			{
+				SetCapture(hwnd);
+			}
+			return 0;
+		}
+		case WM_CAPTURECHANGED:
+			app.downInCell = false;
+			return 0;
+		case WM_LBUTTONUP:
+		{
+			const Cell* c = app.grid && app.downInCell ? CellAt(lParam) : nullptr;
+			app.downInCell = false;
+			if (GetCapture() == hwnd)
+			{
+				ReleaseCapture();
+			}
+			if (c && c->window == app.downWindow)
+			{
+				RaiseWindow(c->window);
+			}
+			return 0;
+		}
 		case WM_NOTIFY:
 			return OnNotify(*reinterpret_cast<const NMHDR*>(lParam));
 		case WM_DRAWITEM:
@@ -515,6 +908,7 @@ namespace
 				CloseHandle(p.process);
 			}
 			app.pending.clear();
+			UnregisterThumbs();
 			if (app.font)
 			{
 				DeleteObject(app.font);
