@@ -69,6 +69,7 @@ namespace regionsync
 		using DealKey = std::tuple<uint32_t, int32_t, int32_t>;
 
 		std::set<ConnectionKey> mirroredConnections;
+		std::set<ConnectionKey> edgeLayTried;   // timed path lays once per session
 		// Last amount seen from the publisher. Present = seen this session.
 		std::map<DealKey, int32_t> seenDeals;
 	};

@@ -239,6 +239,7 @@ namespace regionsync
 	void NeighborMirror::Reset()
 	{
 		mirroredConnections.clear();
+		edgeLayTried.clear();
 		seenDeals.clear();
 	}
 
@@ -333,9 +334,12 @@ namespace regionsync
 				mirroredConnections.insert(key);
 			}
 
-			// Idempotent, so it runs for every connection, not only new ones.
-			if (ctx.layEdgeNetwork)
+			// Idempotent, so it runs for every connection, not only new ones;
+			// once per key per session on the timed path, since a failed lay
+			// has already demolished the cells.
+			if (ctx.layEdgeNetwork && (ctx.allowRecordInjection || !edgeLayTried.count(key)))
 			{
+				edgeLayTried.insert(key);
 				const auto type = static_cast<cISC4NeighborsSimulator::ConnectionType>(c.type);
 				cISC4NeighborConnection* pConn = ctx.pNeighborsSim->FindConnection(type, bx, bz);
 				logger.WriteLineFormatted(LogLevel::Info, "EdgeTile: FindConnection(%u, %d, %d)=%p", c.type, bx, bz, static_cast<void*>(pConn));
