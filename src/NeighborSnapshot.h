@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <array>
 #include <vector>
 
@@ -78,6 +79,29 @@ namespace regionsync
 	// Upper bound on list lengths read from a file (untrusted input).
 	constexpr size_t kMaxListEntries = 4096;
 
+	// Schema 3. The process that wrote a snapshot. Empty host, pid 0 or
+	// start 0 means unknown (older snapshot or a bad value).
+	struct WriterIdentity
+	{
+		std::string host;      // computer name, UTF-8
+		uint32_t pid = 0;
+		uint64_t start = 0;    // process creation time, FILETIME as 64 bits
+		bool Known() const { return !host.empty() && pid != 0 && start != 0; }
+	};
+
+	constexpr size_t kMaxWriterHostLength = 255;
+
+	// Non-empty, bounded, no control characters (keeps the line format intact).
+	constexpr bool IsValidWriterHost(std::string_view host)
+	{
+		if (host.empty() || host.size() > kMaxWriterHostLength) return false;
+		for (char c : host)
+		{
+			if (static_cast<unsigned char>(c) < 0x20 || c == 0x7F) return false;
+		}
+		return true;
+	}
+
 	struct NeighborSnapshot
 	{
 		// Identity
@@ -90,12 +114,13 @@ namespace regionsync
 		bool established = false;
 
 		// Provenance
-		uint32_t schemaVersion = 2;
+		uint32_t schemaVersion = 3;
 		int64_t writtenUnixTime = 0;   // wall clock on the writing machine
 		int32_t simDateNumber = 0;     // cISC4Simulator::GetSimDateNumber of the writer
 		uint32_t simYear = 0;
 		uint32_t simMonth = 0;
 		uint32_t simDay = 0;
+		WriterIdentity writer;
 
 		// Summary the demand/neighbor simulators consume
 		int32_t population = 0;

@@ -17,6 +17,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <type_traits>
 #include <utility>
 
 namespace
@@ -39,7 +40,7 @@ namespace
 		{
 			const char* first = text.data();
 			const char* last = first + text.size();
-			long long value = 0;
+			std::conditional_t<std::is_unsigned_v<T>, unsigned long long, long long> value = 0;
 			auto result = std::from_chars(first, last, value);
 			if (result.ec != std::errc() || !std::in_range<T>(value))
 			{
@@ -129,6 +130,12 @@ namespace regionsync
 		out << "simYear=" << s.simYear << '\n';
 		out << "simMonth=" << s.simMonth << '\n';
 		out << "simDay=" << s.simDay << '\n';
+		if (s.writer.Known() && IsValidWriterHost(s.writer.host))
+		{
+			out << "writerHost=" << s.writer.host << '\n';
+			out << "writerPid=" << s.writer.pid << '\n';
+			out << "writerStart=" << s.writer.start << '\n';
+		}
 		out << "population=" << s.population << '\n';
 		out << "commercialJobs=" << s.commercialJobs << '\n';
 		out << "industrialJobs=" << s.industrialJobs << '\n';
@@ -241,6 +248,17 @@ namespace regionsync
 		Read(kv, "simYear", s.simYear);
 		Read(kv, "simMonth", s.simMonth);
 		Read(kv, "simDay", s.simDay);
+		// All three or none: a partial identity is unknown.
+		s.writer = {};
+		if (auto it = kv.find("writerHost"); it != kv.end() && IsValidWriterHost(it->second))
+		{
+			WriterIdentity w;
+			w.host = it->second;
+			if (Read(kv, "writerPid", w.pid) && Read(kv, "writerStart", w.start) && w.Known())
+			{
+				s.writer = std::move(w);
+			}
+		}
 		Read(kv, "population", s.population);
 		Read(kv, "commercialJobs", s.commercialJobs);
 		Read(kv, "industrialJobs", s.industrialJobs);

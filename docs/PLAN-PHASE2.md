@@ -119,6 +119,7 @@ Before any of them: back up the region folder on the Windows box, `AutoSaveEvery
 
 - Amount follow: done 2026-10-18 (slice 2a). Per publisher deal the mirror keeps the last published amount and follows only when it changes; first sighting records only; a deal gone locally after being seen is not re-created; keys are dropped when the publisher stops listing the deal. Known limit: concurrent edits of one deal within a month.
 - Removal of deals and connections: the review found ways it cancels or re-creates the player's own work (missing snapshot read as empty, resurrection races). Needs tombstones plus a writer liveness check (Q9 step 3: the Exit button leaves a snapshot behind); separate plan.
+- Writer liveness: done 2026-10-18 (schema 3). Snapshots carry host, pid and process start; a pull deletes one whose writer on this machine is gone. Not yet observed in-game. Removal above still needs tombstones.
 - Raw replay of `0x4aa6d0` for the edge tile: cosmetic only (Q9: a pipe laid under the mirrored arrow carries water).
 - Dual-cell networks and ferry: `dir` must be derived from the pair.
 - Third-city deals (A with C) on B's copy of A's record: nothing public writes that list.

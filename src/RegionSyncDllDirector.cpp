@@ -31,6 +31,7 @@
 #include "InstanceMutex.h"
 #include "RegionalCity641.h"
 #include "NeighborsSim641.h"
+#include "WriterIdentity.h"
 
 #include "cIGZCheatCodeManager.h"
 #include "cIGZCOM.h"
@@ -292,6 +293,10 @@ public:
 			settings.autoSaveEveryMonths,
 			settings.syncConnections ? 1 : 0,
 			settings.syncDeals ? 1 : 0);
+
+		ownWriter = regionsync::writer::Current();
+		logger.WriteLineFormatted(LogLevel::Info, "Writer: host=%s pid=%u start=%llu checkWriterLiveness=%d",
+			ownWriter.host.c_str(), ownWriter.pid, static_cast<unsigned long long>(ownWriter.start), settings.checkWriterLiveness ? 1 : 0);
 
 		logger.Flush();
 
@@ -857,6 +862,7 @@ private:
 			logger.WriteLineFormatted(LogLevel::Error, "Publish (%s): capture threw a non-standard exception.", reason);
 			return;
 		}
+		snapshot.writer = ownWriter;
 
 		const std::filesystem::path path =
 			storeDirectory / regionsync::SnapshotFileName(snapshot.regionX, snapshot.regionZ);
@@ -882,12 +888,33 @@ private:
 		}
 	}
 
-	// Every snapshot in the store except our own tile and a held fake neighbor.
-	std::vector<regionsync::NeighborSnapshot> ReadOtherSnapshots(const char* who, int& filesSeen)
+	// Exceptions read as Unknown: a liveness failure must not drop a snapshot.
+	regionsync::writer::Liveness WriterLiveness(const regionsync::NeighborSnapshot& snapshot) const
+	{
+		if (!settings.checkWriterLiveness)
+		{
+			return regionsync::writer::Liveness::Unknown;
+		}
+		try
+		{
+			return regionsync::writer::IsAlive(snapshot.writer);
+		}
+		catch (...)
+		{
+			return regionsync::writer::Liveness::Unknown;
+		}
+	}
+
+	// Every snapshot in the store except our own tile, a held fake neighbor,
+	// and snapshots whose writer process is gone (removed from the store).
+	std::vector<regionsync::NeighborSnapshot> ReadOtherSnapshots(const char* who, int& filesSeen, int& dead)
 	{
 		Logger& logger = Logger::GetInstance();
 		std::vector<regionsync::NeighborSnapshot> result;
+		struct Gone { std::filesystem::path path; std::filesystem::file_time_type seenAt; regionsync::NeighborSnapshot snapshot; };
+		std::vector<Gone> gone;
 		filesSeen = 0;
+		dead = 0;
 
 		int32_t ownX = -1, ownZ = -1;
 		pOwnRegionalCity->GetPosition(ownX, ownZ);
@@ -929,7 +956,37 @@ private:
 				logger.WriteLineFormatted(LogLevel::Info, "%s: (%d,%d) held by RegionSyncFakeNeighbor, skipped.", who, snapshot.regionX, snapshot.regionZ);
 				continue;
 			}
+			if (WriterLiveness(snapshot) == regionsync::writer::Liveness::Dead)
+			{
+				std::error_code timeEc;
+				gone.push_back({ entry.path(), entry.last_write_time(timeEc), std::move(snapshot) });
+				continue;
+			}
 			result.push_back(std::move(snapshot));
+		}
+
+		// Removed after the scan, not while iterating the directory.
+		for (const auto& [path, seenAt, snapshot] : gone)
+		{
+			dead++;
+			// A relaunched instance may have replaced the file since the scan.
+			std::error_code removeEc;
+			if (std::filesystem::last_write_time(path, removeEc) != seenAt || removeEc)
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "%s: snapshot (%d,%d) rewritten since the scan, kept.", who, snapshot.regionX, snapshot.regionZ);
+				continue;
+			}
+			const bool removed = std::filesystem::remove(path, removeEc);
+			if (removeEc || !removed)
+			{
+				logger.WriteLineFormatted(LogLevel::Error, "%s: snapshot (%d,%d) '%s' writer pid %u on host %s is gone, remove failed: %s",
+					who, snapshot.regionX, snapshot.regionZ, snapshot.cityName.c_str(), snapshot.writer.pid, snapshot.writer.host.c_str(), removeEc.message().c_str());
+			}
+			else
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "%s: snapshot (%d,%d) '%s' writer pid %u on host %s is gone, removed",
+					who, snapshot.regionX, snapshot.regionZ, snapshot.cityName.c_str(), snapshot.writer.pid, snapshot.writer.host.c_str());
+			}
 		}
 		return result;
 	}
@@ -988,13 +1045,14 @@ private:
 		InPullScope scope(inPull);
 
 		int filesSeen = 0;
+		int dead = 0;
 		int applied = 0;
 		int totalChanged = 0;
 		std::vector<regionsync::NeighborSnapshot> pulled;
 		const bool feed = FeedsRegionalDemand();
 		const RegionalSums sumsBefore = feed ? SumRegional() : RegionalSums{};
 
-		for (regionsync::NeighborSnapshot& snapshot : ReadOtherSnapshots("Pull", filesSeen))
+		for (regionsync::NeighborSnapshot& snapshot : ReadOtherSnapshots("Pull", filesSeen, dead))
 		{
 			cISC4RegionalCity* pTarget = regionsync::FindRegionalCity(pRegion, snapshot.regionX, snapshot.regionZ);
 			if (!pTarget)
@@ -1075,8 +1133,8 @@ private:
 		pullCount++;
 		logger.WriteLineFormatted(
 			LogLevel::Info,
-			"Pull (%s): files=%d applied=%d changedFields=%d mirrorPending=%zu",
-			reason, filesSeen, applied, totalChanged, mirrorPending.size());
+			"Pull (%s): files=%d dead=%d applied=%d changedFields=%d mirrorPending=%zu",
+			reason, filesSeen, dead, applied, totalChanged, mirrorPending.size());
 	}
 
 	// Mirror cheat: the subscriber steps for every snapshot in the store,
@@ -1092,8 +1150,9 @@ private:
 
 		InPullScope scope(inPull);
 		int filesSeen = 0;
-		const std::vector<regionsync::NeighborSnapshot> snapshots = ReadOtherSnapshots("Mirror", filesSeen);
-		logger.WriteLineFormatted(LogLevel::Info, "==== RegionSyncMirror begin: files=%d others=%zu ====", filesSeen, snapshots.size());
+		int dead = 0;
+		const std::vector<regionsync::NeighborSnapshot> snapshots = ReadOtherSnapshots("Mirror", filesSeen, dead);
+		logger.WriteLineFormatted(LogLevel::Info, "==== RegionSyncMirror begin: files=%d dead=%d others=%zu ====", filesSeen, dead, snapshots.size());
 		logger.Flush();
 		for (const regionsync::NeighborSnapshot& snapshot : snapshots)
 		{
@@ -1676,6 +1735,7 @@ private:
 	int publishCount;
 	int pullCount;
 	uint32_t instanceId;
+	regionsync::WriterIdentity ownWriter;
 
 	std::vector<RegionalDemandEntry> regionalDemand;
 	bool fakeNeighborHeld = false;

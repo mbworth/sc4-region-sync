@@ -36,6 +36,7 @@ SRCS = \
 	src/NeighborMirror.cpp \
 	src/SyncSettings.cpp \
 	src/InstanceMutex.cpp \
+	src/WriterIdentity.cpp \
 	src/RegionSyncDllDirector.cpp \
 	$(GZCOM)/src/cRZBaseString.cpp \
 	$(GZCOM)/src/cRZCOMDllDirector.cpp \

@@ -68,6 +68,10 @@ namespace regionsync
 		bool syncConnections = true;
 		bool syncDeals = true;
 
+		// Drop another instance's snapshot when its writer process has exited
+		// (the Exit button sends no shutdown). Same machine only.
+		bool checkWriterLiveness = true;
+
 		// Where snapshots live. Empty means "<DLL folder>\RegionSync\<region dir>".
 		// Both game instances share the install, so the default is already a
 		// shared location. Set it explicitly if the instances use separate

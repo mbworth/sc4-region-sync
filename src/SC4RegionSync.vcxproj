@@ -16,6 +16,7 @@
     <ClInclude Include="NeighborSnapshot.h" />
     <ClInclude Include="RegionalCityBridge.h" />
     <ClInclude Include="SyncSettings.h" />
+    <ClInclude Include="WriterIdentity.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="version.h" />
   </ItemGroup>
@@ -36,6 +37,7 @@
     <ClCompile Include="RegionalCityBridge.cpp" />
     <ClCompile Include="RegionSyncDllDirector.cpp" />
     <ClCompile Include="SyncSettings.cpp" />
+    <ClCompile Include="WriterIdentity.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="version.rc" />

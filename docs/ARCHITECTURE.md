@@ -64,9 +64,11 @@ The install's `Plugins` folder is shared by construction, which is why the snaps
 2. `CaptureRegionalCity(pOwnRegionalCity, pSimulator, snapshot)` reads the record into a `NeighborSnapshot`: position, size, serial, name, established flag, population, jobs, workforce %, mayor rating, budget, income, per-commodity exported/imported/produced/demanded/costPerUnit for 8 slots, per-RCI-group population for 12 groups, plus the writer's sim date and wall-clock time.
 3. `WriteSnapshotFile` serializes to `key=value` text, writes to `<x>_<z>.snapshot.tmp`, renames over `<x>_<z>.snapshot`. Rename is atomic on NTFS so the other instance never reads a torn file.
 
+Schema 3 adds the writer's identity: `writerHost` (computer name), `writerPid`, `writerStart` (process creation time as a 64-bit FILETIME). All three or none; older snapshots read as unknown. The pull checks it before applying (`CheckWriterLiveness=1`, `src/WriterIdentity.cpp`): same host and the pid either missing, exited, or reused by a process with a different creation time means dead, and the file is deleted and skipped (`dead=N` in the `Pull (...)` line). Another host, an incomplete identity, or any failed query is unknown and applies as before. This covers the Exit button, which sends no `PostCityShutdown` (Q9 step 3); it only covers instances on the same machine, and two machines with the same computer name sharing one store would misread each other.
+
 ### Pull (every N sim months, on city load, or `RegionSyncPull`)
 
-1. Enumerate `*.snapshot` in the store. Skip our own tile.
+1. Enumerate `*.snapshot` in the store. Skip our own tile. Delete and skip snapshots whose writer is dead (see Publish above).
 2. For each, `FindRegionalCity(pRegion, x, z)` resolves the regional record for that tile in **this** process.
 3. `ApplySnapshotToRegionalCity` writes every field that has a declared setter and differs: established, budget, income, commodity stats. It counts changed fields and returns the count. Population and jobs are read-only on the interface (open question Q2), so they are logged but not written.
 4. If anything changed, `pNeighborsSim->MarkDealsDirty()` so deal amounts, costs and availability are recomputed from the updated records.
@@ -118,6 +120,8 @@ src/
   NeighborSnapshot.{h,cpp}    The plain struct that crosses between instances, and its
                               key=value reader/writer with atomic rename. No game headers,
                               no Windows headers. Compiles and tests anywhere.
+  WriterIdentity.{h,cpp}      This process's host/pid/start, and whether a snapshot's writer still
+                              runs (OpenProcess, creation time, exit code). Windows only, no game headers.
   SyncSettings.{h,cpp}        INI parsing with safe defaults; resolves the store directory.
   SC4RegionSync.ini           Shipped defaults; lives next to the DLL in Plugins.
   version.h / version.rc      Plugin version and the Win32 VERSIONINFO resource (rc is UTF-16 LE).

@@ -108,6 +108,7 @@ namespace regionsync
 				}
 				syncConnections = ParseBool(sync->get_value("SyncConnections", ""), syncConnections);
 				syncDeals = ParseBool(sync->get_value("SyncDeals", ""), syncDeals);
+				checkWriterLiveness = ParseBool(sync->get_value("CheckWriterLiveness", ""), checkWriterLiveness);
 			}
 
 			auto logging = reader.get_section_optional("Logging");

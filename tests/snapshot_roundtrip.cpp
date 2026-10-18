@@ -18,6 +18,7 @@ int main(int argc, char** argv)
 	a.citySerial = 0xDEADBEEF; a.cityName = "New Worth = Town"; a.established = true;
 	a.writtenUnixTime = 1760000000123LL; a.simDateNumber = -42;
 	a.simYear = 2031; a.simMonth = 11; a.simDay = 30;
+	a.writer = { "GAMEBOX-01", 0xFFFFFFF0u, 134000000000000000ULL };
 	a.population = 123456; a.commercialJobs = 2345; a.industrialJobs = 678;
 	a.workforcePercentage = 0.625f; a.mayorRating = -17; a.budget = -12345.5f; a.income = 987.25f;
 	for (size_t i = 0; i < kCommoditySlots; i++)
@@ -69,7 +70,8 @@ int main(int argc, char** argv)
 		CHECK(b.rciGroups[i].population == a.rciGroups[i].population);
 	}
 
-	CHECK(b.schemaVersion == 2);
+	CHECK(b.schemaVersion == 3);
+	CHECK(b.writer.host == a.writer.host && b.writer.pid == a.writer.pid && b.writer.start == a.writer.start);
 	CHECK(b.connectionsKnown && b.connections.size() == a.connections.size());
 	for (size_t i = 0; i < a.connections.size() && i < b.connections.size(); i++)
 	{
@@ -96,6 +98,51 @@ int main(int argc, char** argv)
 	CHECK(ReadSnapshotFile(path, e2, error));
 	CHECK(e2.connectionsKnown && e2.connections.empty());
 	CHECK(!e2.dealsKnown && e2.deals.empty());
+	CHECK(!e2.writer.Known());
+
+	// Writer identity: missing or bad values read as unknown, and an invalid
+	// host is not written.
+	{
+		std::ofstream f(path, std::ios::trunc);
+		f << "schemaVersion=2\nregionX=1\n";
+	}
+	NeighborSnapshot w;
+	w.writer = { "STALE", 1, 1 };  // must be cleared
+	CHECK(ReadSnapshotFile(path, w, error) && w.schemaVersion == 2 && !w.writer.Known() && w.writer.host.empty());
+	const char* badWriters[] = {
+		"writerHost=H\nwriterPid=1\n",                                   // start missing
+		"writerPid=1\nwriterStart=5\n",                                  // host missing
+		"writerHost=\nwriterPid=1\nwriterStart=5\n",                     // host empty
+		"writerHost=H\nwriterPid=-1\nwriterStart=5\n",                   // pid negative
+		"writerHost=H\nwriterPid=4294967296\nwriterStart=5\n",           // pid over u32
+		"writerHost=H\nwriterPid=0\nwriterStart=5\n",                    // pid zero
+		"writerHost=H\nwriterPid=1\nwriterStart=-5\n",                   // start negative
+		"writerHost=H\nwriterPid=1\nwriterStart=18446744073709551616\n", // start over u64
+		"writerHost=H\nwriterPid=1\nwriterStart=x\n",                    // start not a number
+		"writerHost=H\twith tab\nwriterPid=1\nwriterStart=5\n",         // control character
+	};
+	for (const char* text : badWriters)
+	{
+		{
+			std::ofstream f(path, std::ios::trunc);
+			f << text;
+		}
+		NeighborSnapshot bw;
+		CHECK(ReadSnapshotFile(path, bw, error) && !bw.writer.Known());
+	}
+	{
+		std::ofstream f(path, std::ios::trunc);
+		f << "writerHost=H\nwriterPid=4294967295\nwriterStart=18446744073709551615\n";
+	}
+	NeighborSnapshot mx;
+	CHECK(ReadSnapshotFile(path, mx, error) && mx.writer.Known() && mx.writer.pid == 0xFFFFFFFFu && mx.writer.start == 0xFFFFFFFFFFFFFFFFULL);
+	CHECK(!IsValidWriterHost(std::string(kMaxWriterHostLength + 1, 'A')) && IsValidWriterHost(std::string(kMaxWriterHostLength, 'A')));
+	CHECK(!IsValidWriterHost("a\nb") && !IsValidWriterHost("a\rb") && IsValidWriterHost("PC-\xC3\xA9"));
+	NeighborSnapshot badHost = a;
+	badHost.writer.host = "evil\ncityName=x";
+	CHECK(WriteSnapshotFile(path, badHost, error));
+	NeighborSnapshot bh;
+	CHECK(ReadSnapshotFile(path, bh, error) && !bh.writer.Known() && bh.cityName == a.cityName);
 
 	// Frame conversion. A at region (2,0), B at (0,0), both medium (128 cells).
 	int32_t bx = 0, bz = 0;
