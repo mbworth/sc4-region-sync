@@ -114,3 +114,29 @@ The launcher reads status files, the plugin INI is not read; it writes `launcher
 ## Docs and build to amend
 
 `README.md` (launcher section, status file, conflict rule), `ARCHITECTURE.md` (source map, store layout with `_instances`, lifecycle rows, the tile mutex next to the save mutex), `PHASES.md` (Phase 3 coordinator split into slice 1 and grid), `OPEN-QUESTIONS.md` Q14, `Makefile` (`launcher` target, `test` adds `InstanceStatus.cpp`, deploy copies the exe), `src/SC4RegionSync.vcxproj` (new sources), `CLAUDE.md` status line and source map mention.
+
+## Slice 2: grid of live thumbnails (same window)
+
+Reviewed 2026-10-18. Scope: a second view of the same row list, nothing new in the plugin.
+
+### Mechanism
+
+DWM thumbnails: `DwmRegisterThumbnail(launcher, gameHwnd)` once per discovered window, `DwmUpdateThumbnailProperties` with `rcDestination`, `fVisible`, `fSourceClientAreaOnly=TRUE`, `opacity=255`, `DwmUnregisterThumbnail` when the window goes away or the view switches to the list. The compositor draws the live client area of every instance onto the launcher's surface, including instances hidden behind other windows, at no cost to the game. A minimised window keeps its last frame or goes blank; a raise restores it. Aspect ratio from `DwmQueryThumbnailSourceSize`, letterboxed inside the cell.
+
+### View
+
+Toolbar gains **List** and **Grid** (two buttons, the active one checked); `View=list|grid` in `launcher.ini` remembers the choice, default list. Grid mode hides the ListView (thumbnails are composited over the launcher's client area, so no child control may cover it) and paints cells in `WM_PAINT`: a caption strip (`Instance1  New York (4,6) BumperVille`, red strip with `CONFLICT` for a conflict row, grey strip and `starting (no window)` when no window is known) and the thumbnail below it. Columns = `GridColumns` from the ini when > 0, else `ceil(sqrt(n))`; rows = `ceil(n / columns)`; cells fill the client area above the status bar with an 8 px gutter, re-laid on `WM_SIZE`, DPI change and whenever the row set changes. Hard cap 16 cells (`MaxInstances`), 4 by 4.
+
+Click on a cell = `Raise` for that row (same function as the list; the thumbnails are not windows, so hit-testing is by cell rectangle on `WM_LBUTTONUP`). No selection state, no keyboard navigation in this slice. Launch, Refresh and the status bar work as in list mode.
+
+### Bookkeeping
+
+`Row` gains `HTHUMBNAIL thumb`. On every discovery tick: register for rows that have a window and no thumb, unregister when a row vanishes or its window handle changes, then relayout. All thumbs unregistered on view switch and in `WM_DESTROY`. `DwmIsCompositionEnabled` false (never on Windows 8 and later, checked once) shows a one-line message in the grid area instead of cells.
+
+### What must not break
+
+List mode is byte-for-byte the slice 1 behaviour. No plugin change, no new files read. `make launcher` zero warnings; `dwmapi.lib` is already linked.
+
+### Experiment (Q14, step 6)
+
+With three instances: switch to Grid, see three live cells updating while the games run behind the launcher; click a cell raises it; kill one, its cell disappears on the next tick; minimise one and note what its cell shows; resize the launcher and check the relayout; switch back to List and confirm nothing lingers on the surface; read the window class from the tooltip (step 4 leftover) and set `WindowClass`.
