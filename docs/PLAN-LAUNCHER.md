@@ -117,26 +117,30 @@ The launcher reads status files, the plugin INI is not read; it writes `launcher
 
 ## Slice 2: grid of live thumbnails (same window)
 
-Reviewed 2026-10-18. Scope: a second view of the same row list, nothing new in the plugin.
+Reviewed 2026-10-18 (DWM mechanics lens): v1's per-row handle, `View` and `GridColumns` keys and the composition check were dropped on its findings. Scope: a second view of the same row list, nothing new in the plugin.
 
 ### Mechanism
 
-DWM thumbnails: `DwmRegisterThumbnail(launcher, gameHwnd)` once per discovered window, `DwmUpdateThumbnailProperties` with `rcDestination`, `fVisible`, `fSourceClientAreaOnly=TRUE`, `opacity=255`, `DwmUnregisterThumbnail` when the window goes away or the view switches to the list. The compositor draws the live client area of every instance onto the launcher's surface, including instances hidden behind other windows, at no cost to the game. A minimised window keeps its last frame or goes blank; a raise restores it. Aspect ratio from `DwmQueryThumbnailSourceSize`, letterboxed inside the cell.
-
-### View
-
-Toolbar gains **List** and **Grid** (two buttons, the active one checked); `View=list|grid` in `launcher.ini` remembers the choice, default list. Grid mode hides the ListView (thumbnails are composited over the launcher's client area, so no child control may cover it) and paints cells in `WM_PAINT`: a caption strip (`Instance1  New York (4,6) BumperVille`, red strip with `CONFLICT` for a conflict row, grey strip and `starting (no window)` when no window is known) and the thumbnail below it. Columns = `GridColumns` from the ini when > 0, else `ceil(sqrt(n))`; rows = `ceil(n / columns)`; cells fill the client area above the status bar with an 8 px gutter, re-laid on `WM_SIZE`, DPI change and whenever the row set changes. Hard cap 16 cells (`MaxInstances`), 4 by 4.
-
-Click on a cell = `Raise` for that row (same function as the list; the thumbnails are not windows, so hit-testing is by cell rectangle on `WM_LBUTTONUP`). No selection state, no keyboard navigation in this slice. Launch, Refresh and the status bar work as in list mode.
+DWM thumbnails: `DwmRegisterThumbnail(launcher, gameHwnd)`, `DwmUpdateThumbnailProperties` with `dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_VISIBLE | DWM_TNP_SOURCECLIENTAREAONLY | DWM_TNP_OPACITY` set explicitly, `opacity=255`, `DwmUnregisterThumbnail` on removal. The compositor draws the live client area of every instance onto the launcher's own surface, above everything the launcher paints and above its child windows. Expectations to confirm in step 6, not facts: a windowed (`-w`) DirectDraw game renders through a redirection surface so its thumbnail is live even when covered or unfocused; an instance without `-w` is black; the cost to the game is nil (Task Manager GPU and dwm.exe with three cells against none).
 
 ### Bookkeeping
 
-`Row` gains `HTHUMBNAIL thumb`. On every discovery tick: register for rows that have a window and no thumb, unregister when a row vanishes or its window handle changes, then relayout. All thumbs unregistered on view switch and in `WM_DESTROY`. `DwmIsCompositionEnabled` false (never on Windows 8 and later, checked once) shows a one-line message in the grid area instead of cells.
+`App` gains `std::map<HWND, Thumb> thumbs` (handle, last source size, last destination rect, failed flag) next to `app.windows`. After every `UpdateWindows`: unregister and erase entries whose HWND is no longer a row's window (erase whatever the HRESULT), register new HWNDs (a failed register marks the entry `failed`, shown as "no preview", retried only when the HWND changes), then relayout, then show any queued messages (a `MessageBoxW` pumps the timer, so the map is consistent before any modal loop). `DwmUpdateThumbnailProperties` only when the destination rect or visibility changed. All entries unregistered on the switch to List and in `WM_DESTROY` before `PostQuitMessage`.
+
+### View
+
+Toolbar gains **List** and **Grid** (`BTNS_CHECKGROUP`, `TB_CHECKBUTTON` on switch). Always starts in List; no ini key. Grid mode hides the ListView (`SW_HIDE`, so it neither paints nor takes clicks) and uses the rect `Layout()` already computes between the toolbar and the status bar. Cells = `min(rows, 16)`; further rows are named in the last cell's caption as `+N more, see List`. Column count: try `c = 1..n` and keep the one giving the largest letterboxed 16:9 cell in that rect. Gutter and caption height scaled through `Scale()` and the font metrics; relayout runs inside `Layout()` so `WM_SIZE` and `WM_DPICHANGED` both reach it. `rcDestination` is in the launcher's physical client pixels (`PerMonitorV2`).
+
+Each cell: a caption strip (`Instance1  New York (4,6) BumperVille`; red strip with `CONFLICT` for a conflict row; grey strip for `starting (no window)` and `no preview`) and the thumbnail rect, letterboxed from `DwmQueryThumbnailSourceSize`. `IsIconic` source: `fVisible=FALSE`, caption `minimised, click to restore`, last non-iconic source size kept. `WM_PAINT` fills gutters, strips and letterbox bands in one pass; ticks invalidate with `bErase=FALSE` and only when a caption or the cell count changed; on a size or row-set change the thumbnail properties are updated before the invalidate.
+
+Click anywhere in a cell (`WM_LBUTTONUP`, hit-tested against the current cell rects; ignored when the HWND under that cell changed since `WM_LBUTTONDOWN`) = `Raise` for that row. No selection state, no keyboard navigation. Launch, Refresh and the status bar work as in List mode; the status tooltip gains `thumbs=N` for the leak check.
+
+`WindowClass`: once step 6 reads the game's class it becomes the shipped default in `Settings.cpp`. Until then the first visible unowned window of the pid is accepted only when its client area is at least 640 by 480, so a splash or dialog never binds a thumbnail.
 
 ### What must not break
 
-List mode is byte-for-byte the slice 1 behaviour. No plugin change, no new files read. `make launcher` zero warnings; `dwmapi.lib` is already linked.
+List mode is the slice 1 behaviour. No plugin change, no new files read. `make launcher` zero warnings.
 
 ### Experiment (Q14, step 6)
 
-With three instances: switch to Grid, see three live cells updating while the games run behind the launcher; click a cell raises it; kill one, its cell disappears on the next tick; minimise one and note what its cell shows; resize the launcher and check the relayout; switch back to List and confirm nothing lingers on the surface; read the window class from the tooltip (step 4 leftover) and set `WindowClass`.
+With three instances: switch to Grid, three live cells updating while the games run covered and unfocused (note the rate); click a cell raises it; the window class from the tooltip, then `WindowClass` set and all three still found; `DwmQueryThumbnailSourceSize` for a `-r1600x900` instance (tooltip); minimise one and restore it; a task-started instance without `-w` if one is handy; resize the launcher to small and large, and move it to the other-DPI monitor if there is one: nothing drawn over the toolbar or status bar; Exit in game, the cell goes; an instance at the main menu shows the grey cell; toggle List, Grid, List several times with `thumbs=` staying at the cell count and 0 in List; Task Manager GPU and dwm.exe with three cells against none.
