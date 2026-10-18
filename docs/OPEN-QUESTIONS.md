@@ -12,6 +12,8 @@ The game calls it on save. We call it before every publish. If it also writes to
 
 **Observed (partial, 2026-10-17, single instance).** The in-memory refresh works: the monthly publish shows live values moving (`pop=11328` at load, `11942` ten sim-months later, no save in between), and the dump's own-tile row matched the latest publish. No dialog or UI change. Whether the save file or region folder changed was not checked; still open.
 
+**Observed (2026-10-18, disk): no writes.** Both instances ran nine minutes with monthly `UpdateCityCache` calls and no saves; no file under `Regions\New York` has a timestamp after the instances started (`instances started 11:45:38`, newest file `region.ini 11:44:32`, from the saves made just before). `UpdateCityCache` is in-memory only. Q1 closed.
+
 ```
 Publish (city load): (4,6) 'BumperVille' pop=11328 com=768 ind=3817 simDate=2055-01-20
 Publish (month tick): (4,6) 'BumperVille' pop=11942 com=937 ind=3878 simDate=2055-10-01
@@ -82,6 +84,7 @@ Needed before autosave can be turned on with two instances. Expected: deal recor
 **Partial answer from Ghidra (2026-10-17, not yet observed on disk).** The App save routine (`0x455e20`) writes the own record, then calls `GetAdjacentCities(list, true)` and for every neighbor with a save path opens that neighbor's `.sc4` read-write (`0x5dc2e0`) and writes the in-memory copy of that neighbor's regional record into it. That is how vanilla delivers symmetric connections and deals. Consequences for two instances: (a) a save in B overwrites A's record in `A.sc4` with B's view of A, which is at most one pull old, until A saves again; (b) anything the plugin writes into a neighbor's record copy (pulled values, injected connections) persists, so injected entries must be exact and deduped; (c) two saves at the same moment can collide on the same file, which is the save-lock case. The disk experiment above is still worth one run to confirm. B's save writes connections injected by `RegionSyncMirror` into `A.sc4` while A may still be running. See `docs/research/record-connections-641.md`.
 
 **Observed (partial, 2026-10-18).** Two instances, saves done one after the other, no collision and no corruption. Both reloaded cities carried the neighbor's saved copy of the shared deal (amounts swapped, see Q9 step 4), which confirms the write into the neighbor's `.sc4` and the load-time clone. Timestamps and DBPF diff not checked. Concurrent saves still untested; sequential saving is the rule until the save lock exists.
+**Timestamps (2026-10-18):** saving TuggersVille then BumperVille before a relaunch wrote `City - TuggersVille.sc4` plus its neighbors at 11:44:15 and then `City - BumperVille.sc4`, `City - TuggersVille.sc4`, `City - DumpsVille.sc4`, `City - New City (12).sc4`, `City - New City (24).sc4` all at 11:44:29, then `region.ini` at 11:44:32: one save rewrites every adjacent neighbor's file, as the disassembly said.
 
 ## Q5. Does version 641 allow two instances at once, and does `-UserDir` work as documented?
 

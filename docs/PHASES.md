@@ -12,7 +12,7 @@ Exit criterion: the plugin loads, the cheats work, and the log tells us what the
 ## Phase 1: file-backed sync, single install, two instances
 
 - [x] Answer Q5 (two instances). Done 2026-10-17: mutex closed by the plugin plus steam_appid.txt for the Steam build.
-- [ ] Answer Q1 (UpdateCityCache side effects).
+- [x] Answer Q1 (UpdateCityCache side effects). In-memory only; no region file changes over a nine-minute session with no saves (2026-10-18).
 - [x] With `Enabled=1`, run two adjacent tiles. Confirm each instance's log shows monthly publishes and pulls, and that pull reports `changedFields > 0` after the other instance grows. Done 2026-10-17.
 - [x] Answer Q2 (does demand move). No: records update live, demand does not (2026-10-17). Phase 1b.
 
