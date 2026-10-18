@@ -881,3 +881,92 @@ MirrorDeals: from (4,6) 'BumperVille', 1 deal(s).
 MirrorDeals: FindDeals(0x4773FFE2, 1C64C214) ...
 MirrorDeals: FindDeals count=1
 Mirror (4,6): created connections=0 recordConnections=0 laid=0 removed=0 deals=0 updatedDeals=0 cancelledDeals=0 alive=1
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+==== RegionSyncMirror begin: files=2 dead=0 others=1 ====
+MirrorConnections: from (4,6) 'BumperVille', 9 connection(s). Own tile (6,6) GetCitySize=(2,2) sizeEnum=1 cells=128
+EdgeTile: FindConnection(2, -1, 30)=158C1B94
+EdgeTile: type 2 net 0 connection (-1,30) side 0 stub (0,30) -> (2,30)
+EdgeTile: GetOccupantsByStandardCityCells((0,30), 0xC772BF98) ...
+EdgeTile: GetOccupantsByStandardCityCells=1 count=1
+EdgeTile: ReleaseOccupantList returned
+EdgeTile: cell (0,30) pieces of network 0 = 1
+EdgeTile: already laid.
+EdgeTile: type 2 (-1,30) laid=0 (already laid)
+EdgeTile: FindConnection(2, -1, 38)=158C1B14
+EdgeTile: type 2 net 0 connection (-1,38) side 0 stub (0,38) -> (2,38)
+EdgeTile: GetOccupantsByStandardCityCells((0,38), 0xC772BF98) ...
+EdgeTile: GetOccupantsByStandardCityCells=1 count=1
+EdgeTile: ReleaseOccupantList returned
+EdgeTile: cell (0,38) pieces of network 0 = 1
+EdgeTile: already laid.
+EdgeTile: type 2 (-1,38) laid=0 (already laid)
+EdgeTile: FindConnection(5, -1, 57)=158C1C14
+EdgeTile: type 5 net 4 connection (-1,57) side 0 stub (0,57) -> (2,57)
+EdgeTile: GetOccupantsByStandardCityCells((0,57), 0xC772BF98) ...
+EdgeTile: GetOccupantsByStandardCityCells=1 count=1
+EdgeTile: ReleaseOccupantList returned
+EdgeTile: cell (0,57) pieces of network 4 = 1
+EdgeTile: already laid.
+EdgeTile: type 5 (-1,57) laid=0 (already laid)
+MirrorDeals: from (4,6) 'BumperVille', 0 deal(s).
+Removal: deal 0x4773FFE2 no longer listed by (4,6). FindDeals ...
+Removal: deal 0x4773FFE2 1F4E3014 flags before=0x2 amount=3000. Cancel() ...
+Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
+Removal: deal 0x4773FFE2 Cancel() returned, flags after=0x4
+Mirror (4,6): created connections=0 recordConnections=0 laid=0 removed=0 deals=0 updatedDeals=0 cancelledDeals=1 alive=1
+==== RegionSyncMirror end ====
+Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=2 data2=0 data3=0 dirty=1
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Capture: connection type=2 inner=(0,30) cell=(-1,30) otherTile=(4,6) active=1
+Capture: connection type=2 inner=(0,38) cell=(-1,38) otherTile=(4,6) active=1
+Capture: connection type=5 inner=(0,57) cell=(-1,57) otherTile=(4,6) active=1
+Publish (event): (6,6) 'TuggersVille' pop=1282 com=1294 ind=2696 connections=3 deals=0 simDate=2009-10-30 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Capture: connection type=2 inner=(0,30) cell=(-1,30) otherTile=(4,6) active=1
+Capture: connection type=2 inner=(0,38) cell=(-1,38) otherTile=(4,6) active=1
+Capture: connection type=5 inner=(0,57) cell=(-1,57) otherTile=(4,6) active=1
+Publish (month tick): (6,6) 'TuggersVille' pop=1282 com=1294 ind=2696 connections=3 deals=0 simDate=2009-11-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=12992, snapshot pop=12980). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
+Apply: population 12992 -> 12980
+Apply: rci 0x1010 9609 (extrapolated 10323) -> 9712 (snapshot 9712)
+Apply: rci 0x1020 3214 (extrapolated 3513) -> 3167 (snapshot 3167)
+Apply: rci 0x1030 433 (extrapolated 1000) -> 461 (snapshot 461)
+Apply: rci 0x3110 672 (extrapolated 1000) -> 672 (snapshot 672)
+Apply: rci 0x4200 3827 (extrapolated 4204) -> 3827 (snapshot 3827)
+Apply: SetBudget(1152920)
+Apply: SetIncome(7465)
+Apply: SetProduced(1, 7422.00) was 7423.00
+Apply: SetDemanded(1, 5548.00) was 5545.00
+Apply: SetProduced(2, 28748.00) was 28749.00
+Apply: SetDemanded(2, 13576.00) was 13555.00
+Apply: SetDemanded(3, 21996.00) was 22744.00
+Apply: SetCostPerUnit(3, 0.02) was 0.03
+Apply: done, changed=14
+Pull: applied (4,6) changedFields=14
+RegionalDemand (pull): 0x1010 regional 11659 -> 11048, AddToSupplyValue(-611); target before demand=0.0 supply=10945.0
+RegionalDemand (pull): 0x1010 target after demand=0.0 supply=10945.0
+RegionalDemand (pull): 0x1020 regional 3513 -> 3167, AddToSupplyValue(-346); target before demand=0.0 supply=3214.0
+RegionalDemand (pull): 0x1020 target after demand=0.0 supply=3214.0
+RegionalDemand (pull): 0x1030 regional 1000 -> 461, AddToSupplyValue(-539); target before demand=0.0 supply=433.0
+RegionalDemand (pull): 0x1030 target after demand=0.0 supply=433.0
+RegionalDemand (pull): 0x3110 regional 2000 -> 1672, AddToSupplyValue(-328); target before demand=0.0 supply=1672.0
+RegionalDemand (pull): 0x3110 target after demand=0.0 supply=1672.0
+RegionalDemand (pull): 0x4200 regional 5204 -> 4827, AddToSupplyValue(-377); target before demand=0.0 supply=4827.0
+RegionalDemand (pull): 0x4200 target after demand=0.0 supply=4827.0
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 dead=0 applied=1 changedFields=14 mirrorPending=1
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+MirrorConnections: from (4,6) 'BumperVille', 9 connection(s). Own tile (6,6) GetCitySize=(2,2) sizeEnum=1 cells=128
+MirrorDeals: from (4,6) 'BumperVille', 0 deal(s).
+Mirror (4,6): created connections=0 recordConnections=0 laid=0 removed=0 deals=0 updatedDeals=0 cancelledDeals=0 alive=1
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
