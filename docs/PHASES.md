@@ -29,7 +29,7 @@ Exit criterion: growth in instance B visibly changes regional demand in instance
 
 - [x] Population and RCI-group setters on the regional record. Direct field writes at +0x24/0x28/0x2c and the type map at +0x3c (Ghidra, 2026-10-17).
 - [x] Save lock (Q4): kernel mutex across the SaveCity slot, observed 2026-10-18 (wait, timeout, abandoned, neighbor writes inside the lock).
-- [ ] Turn on autosave: needs the Q4 step 8 soak and stale-copy check.
+- [ ] Turn on autosave: the Q4 step 8 soak passed (contended autosaves wait and acquire); the stale-copy check (peer autosave while this city sits in the region view) is still unrun.
 - [ ] Connections and deals between running instances: see `docs/PLAN-PHASE2.md`. Slice 1 (mirror single-cell connections and deals, create only) done 2026-10-18: Q9 steps 1 to 4 observed, on by default, save and reload produce no duplicates.
 - [x] Amount follow (slice 2a): done 2026-10-18, observed both ways.
 - [x] Removal of connections and deals (slice 2c) and edge network stubs (slice 2b): observed with the cheat 2026-10-18 (Q10, Q11), on by default, no-cheat run observed the same day.
