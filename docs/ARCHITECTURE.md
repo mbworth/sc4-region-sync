@@ -157,7 +157,8 @@ scripts/
   setup-toolchain.sh          Fetch xwin and the MSVC/SDK splat (Linux build prerequisite).
   Setup-MultiInstance.ps1     Per-instance user dirs + Regions junction + launcher (Windows).
 
-launcher/                     Win32 instance launcher (list, raise, launch, resource estimate). Built
+launcher/                     Win32 instance launcher (list, live thumbnail grid, raise, gated launch,
+                              Settings dialog, resource estimate, orphan End Task). Built
                               with the same toolchain, shares WriterIdentity.cpp, reads _instances only.
 
 docs/

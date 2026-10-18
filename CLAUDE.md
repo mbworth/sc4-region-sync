@@ -6,13 +6,13 @@ Agent onboarding for sc4-region-sync. Read this top to bottom before doing anyth
 
 A SimCity 4 DLL plugin (x86 Windows, C++20) that syncs the per-tile regional summary records between several running game instances, so the player can play multiple cities in one region at once and each city sees the others' growth without reloading. The host game is closed source and version-locked to 1.1.641.
 
-Status (2026-10-17): builds on Linux, runs in two instances, Phase 1 and 1b done (records sync both ways and move the demand simulator). Phase 2 connections and deals done 2026-10-18: live mirroring of single-network connections with edge stubs, deals with amount follow, removals, writer liveness. Save lock (Q4, mutex plus SaveCity slot wrapper) and dual-lane mirroring (Q12) observed in game 2026-10-18; ferry is logged, not mirrored. Autosave verified safe with two instances (Q4 step 8). Three instances verified (Q13) and the ferry log line observed, same day. Q1 closed. Coordinator slices 1 and 2 (status file, tile guard, `launcher/` with list and live thumbnail grid) observed in game 2026-10-18 (Q14). `docs/PHASES.md` has the checkboxes.
+Status (2026-10-17): builds on Linux, runs in two instances, Phase 1 and 1b done (records sync both ways and move the demand simulator). Phase 2 connections and deals done 2026-10-18: live mirroring of single-network connections with edge stubs, deals with amount follow, removals, writer liveness. Save lock (Q4, mutex plus SaveCity slot wrapper) and dual-lane mirroring (Q12) observed in game 2026-10-18; ferry is logged, not mirrored. Autosave verified safe with two instances (Q4 step 8). Three instances verified (Q13) and the ferry log line observed, same day. Q1 closed. Coordinator done 2026-10-18 (Q14): status file, tile guard, `launcher/` with list, live thumbnail grid, Settings dialog and orphan-process End Task. First play soak clean (Q15). Next: longer soaks, then the Simtropolis item. `docs/PHASES.md` has the checkboxes.
 
 ## Read in this order
 
 1. `docs/DESIGN.md`: why the regional record is the seam, why a file store, what deliberately stays local.
 2. `docs/ARCHITECTURE.md`: how the game loads plugins, the object graph we touch, process topology, data flow, lifecycle, source map, build pipelines, constraints.
-3. `docs/OPEN-QUESTIONS.md`: the seven experiments. Each has an "Observed" slot. Empty slots are the work.
+3. `docs/OPEN-QUESTIONS.md`: the experiments (Q1 to Q15). Each has an "Observed" slot. Empty slots are the work.
 4. `docs/PHASES.md`: ordered plan with exit criteria and current position.
 5. `src/RegionSyncDllDirector.cpp`: the entry point. Everything else is a helper.
 
@@ -29,7 +29,7 @@ make test                                    # host-side snapshot round-trip tes
 
 `--apt` instead of `--prebuilt` only works where apt ships clang 19+; the MSVC STL that xwin fetches refuses older compilers (Debian 12 apt has clang 14). The Makefile finds `~/.local/llvm-20` on its own. The build compiled clean on 2026-10-17 with zero warnings from our sources.
 
-Test loop: `make deploy` copies DLL + INI to the Windows box over SSH (game must be closed), `Start-ScheduledTask SC4Instance1`/`2` launches an instance, the human opens a city and types cheats, `make logs` pulls each instance's `SC4RegionSync.log` into `ingame_tests/`. The log is the only instrument we have; treat it as such. Ghidra 11 headless is set up for the exe (`tools/ghidra/`, project in `ingame_tests/ghidra`, gitignored).
+Test loop: `make deploy` copies DLL, INI and the launcher exe to the Windows box over SSH (game and launcher must be closed), `Start-ScheduledTask SC4Launcher` starts the launcher on the desktop (or `SC4Instance1`..`3` for a bare instance), the human opens a city and types cheats, `make logs` pulls each instance's `SC4RegionSync.log` into `ingame_tests/` (over base64: plain scp truncates at 200 KB). The log is the only instrument we have; treat it as such. Ghidra 11 headless is set up for the exe (`tools/ghidra/`, project in `ingame_tests/ghidra`, gitignored).
 
 ## Ground rules
 
