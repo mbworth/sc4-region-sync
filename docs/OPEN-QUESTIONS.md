@@ -77,6 +77,8 @@ Needed before autosave can be turned on with two instances. Expected: deal recor
 
 **Follow-up.** If the writes matter, the clean fix is to route those through the store too; the quick fix is the save lock described in DESIGN.md.
 
+**Partial answer from Ghidra (2026-10-17, not yet observed on disk).** The App save routine (`0x455e20`) writes the own record, then calls `GetAdjacentCities(list, true)` and for every neighbor with a save path opens that neighbor's `.sc4` read-write (`0x5dc2e0`) and writes the in-memory copy of that neighbor's regional record into it. That is how vanilla delivers symmetric connections and deals. Consequences for two instances: (a) a save in B overwrites A's record in `A.sc4` with B's view of A, which is at most one pull old, until A saves again; (b) anything the plugin writes into a neighbor's record copy (pulled values, injected connections) persists, so injected entries must be exact and deduped; (c) two saves at the same moment can collide on the same file, which is the save-lock case. The disk experiment above is still worth one run to confirm. See `docs/research/record-connections-641.md`.
+
 **Observed.** (unknown)
 
 ## Q5. Does version 641 allow two instances at once, and does `-UserDir` work as documented?
