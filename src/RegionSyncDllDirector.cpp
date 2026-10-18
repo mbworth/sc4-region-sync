@@ -949,7 +949,7 @@ private:
 		Logger& logger = Logger::GetInstance();
 		const regionsync::MirrorContext ctx{ pRegion, pOwnRegionalCity, pNeighborsSim, pSimulator, GZCOM(), allowRecordInjection };
 		regionsync::ConnectionMirrorResult connectionResult;
-		int createdDeals = 0;
+		regionsync::DealMirrorResult dealResult;
 		try
 		{
 			if (connections)
@@ -958,7 +958,7 @@ private:
 			}
 			if (deals)
 			{
-				createdDeals = mirror.MirrorDeals(ctx, snapshot);
+				dealResult = mirror.MirrorDeals(ctx, snapshot);
 			}
 		}
 		catch (const std::exception& e)
@@ -969,8 +969,8 @@ private:
 		{
 			logger.WriteLineFormatted(LogLevel::Error, "Mirror (%d,%d) threw a non-standard exception.", snapshot.regionX, snapshot.regionZ);
 		}
-		logger.WriteLineFormatted(LogLevel::Info, "Mirror (%d,%d): created connections=%d recordConnections=%d deals=%d",
-			snapshot.regionX, snapshot.regionZ, connectionResult.created, connectionResult.injected, createdDeals);
+		logger.WriteLineFormatted(LogLevel::Info, "Mirror (%d,%d): created connections=%d recordConnections=%d deals=%d updatedDeals=%d",
+			snapshot.regionX, snapshot.regionZ, connectionResult.created, connectionResult.injected, dealResult.created, dealResult.updated);
 	}
 
 	// Pull: read every snapshot in the store except our own and apply it to

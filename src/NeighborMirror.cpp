@@ -238,7 +238,7 @@ namespace regionsync
 	void NeighborMirror::Reset()
 	{
 		mirroredConnections.clear();
-		mirroredDeals.clear();
+		seenDeals.clear();
 	}
 
 	ConnectionMirrorResult NeighborMirror::MirrorConnections(const MirrorContext& ctx, const NeighborSnapshot& a)
@@ -336,25 +336,57 @@ namespace regionsync
 		return result;
 	}
 
-	int NeighborMirror::MirrorDeals(const MirrorContext& ctx, const NeighborSnapshot& a)
+	void NeighborMirror::SetAmountLogged(cISC4NeighborDeal* deal, int32_t amount)
 	{
 		Logger& logger = Logger::GetInstance();
+		logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: SetAmount(%d) ...", amount);
+		logger.Flush();
+		deal->SetAmount(amount);
+		logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: SetAmount returned, amount=%d cost=%lld flags=0x%X",
+			deal->GetAmount(), static_cast<long long>(deal->GetCost()), static_cast<uint32_t>(deal->GetFlags()));
+		logger.Flush();
+	}
+
+	// Existing deal whose published amount changed since we last saw it.
+	// Only a change on the publisher's side is followed, so two instances
+	// following each other converge instead of trading amounts each month.
+	bool NeighborMirror::FollowAmount(cISC4NeighborDeal* deal, int32_t amount, DealMirrorResult& result)
+	{
+		Logger& logger = Logger::GetInstance();
+		const int32_t have = deal->GetAmount();
+		const uint32_t flags = static_cast<uint32_t>(deal->GetFlags());
+		if (have == amount) return true;
+		if (flags & (kDealFlagsAmountLocked | kDealFlagsDead))
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: amount %d -> %d not followed, flags=0x%X", have, amount, flags);
+			return false;
+		}
+		logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: follow amount %d -> %d", have, amount);
+		SetAmountLogged(deal, amount);
+		result.updated++;
+		return true;
+	}
+
+	DealMirrorResult NeighborMirror::MirrorDeals(const MirrorContext& ctx, const NeighborSnapshot& a)
+	{
+		Logger& logger = Logger::GetInstance();
+		DealMirrorResult result;
 		if (!ctx.pRegion || !ctx.pOwnRegionalCity || !ctx.pNeighborsSim || !ctx.pSimulator)
 		{
 			logger.WriteLine(LogLevel::Error, "MirrorDeals: no region, city, neighbors simulator or simulator.");
-			return 0;
+			return result;
 		}
 		if (!a.dealsKnown)
 		{
 			logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: (%d,%d) snapshot has no deal list (schema 1?), skipped.", a.regionX, a.regionZ);
-			return 0;
+			return result;
 		}
 
 		int32_t ownX = 0, ownZ = 0;
 		ctx.pOwnRegionalCity->GetPosition(ownX, ownZ);
 		logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: from (%d,%d) '%s', %zu deal(s).", a.regionX, a.regionZ, a.cityName.c_str(), a.deals.size());
 
-		int created = 0;
+		std::set<DealKey> listed;
 		for (const DealRecord& d : a.deals)
 		{
 			if (d.otherTileX != ownX || d.otherTileZ != ownZ)
@@ -371,10 +403,10 @@ namespace regionsync
 
 			const uint32_t typeB = OtherSideDealType(d.type);
 			const DealKey key{ DealCommodity(d.type), a.regionX, a.regionZ };
-			if (mirroredDeals.count(key))
-			{
-				continue;
-			}
+			listed.insert(key);
+			const auto seen = seenDeals.find(key);
+			const bool seenBefore = seen != seenDeals.end();
+			const bool changed = !seenBefore || seen->second != d.amount;
 
 			// ReloadCity replaces record objects: resolve every time.
 			cISC4RegionalCity* pA = FindRegionalCity(ctx.pRegion, a.regionX, a.regionZ);
@@ -394,9 +426,33 @@ namespace regionsync
 				logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: FindDeals count=%zu", n);
 				if (n > 0)
 				{
-					mirroredDeals.insert(key);
+					// First sighting only records the amount: an existing deal may
+					// be the player's own, or a reload's copy (Q9 step 4).
+					if (!seenBefore)
+					{
+						logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: existing deal seen, amount=%d recorded.", d.amount);
+						seenDeals[key] = d.amount;
+					}
+					else if (changed && n == 1)
+					{
+						// Not recorded when the follow was refused, so it is retried.
+						if (FollowAmount(*existing.begin(), d.amount, result))
+						{
+							seenDeals[key] = d.amount;
+						}
+					}
+					else if (changed)
+					{
+						logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: %zu deals match, amount not followed.", n);
+					}
 					continue;
 				}
+			}
+			if (seenBefore)
+			{
+				// Present earlier this session and gone now: the player removed it here.
+				logger.WriteLine(LogLevel::Info, "MirrorDeals: seen before and no longer present, not re-created.");
+				continue;
 			}
 
 			logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: FindConnectionSuitableForDeal(0x%08X, %p) ...", typeB, static_cast<void*>(pA));
@@ -438,15 +494,18 @@ namespace regionsync
 			{
 				continue;
 			}
-			logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: SetAmount(%d) ...", d.amount);
-			logger.Flush();
-			deal->SetAmount(d.amount);
-			logger.WriteLineFormatted(LogLevel::Info, "MirrorDeals: SetAmount returned, amount=%d cost=%lld flags=0x%X",
-				deal->GetAmount(), deal->GetCost(), static_cast<uint32_t>(deal->GetFlags()));
-			logger.Flush();
-			mirroredDeals.insert(key);
-			created++;
+			SetAmountLogged(deal, d.amount);
+			seenDeals[key] = d.amount;
+			result.created++;
 		}
-		return created;
+		// Forget this publisher's deals it no longer lists, so a later deal
+		// with the same commodity is mirrored again.
+		for (auto it = seenDeals.begin(); it != seenDeals.end();)
+		{
+			const bool thisPublisher = std::get<1>(it->first) == a.regionX && std::get<2>(it->first) == a.regionZ;
+			if (thisPublisher && !listed.count(it->first)) it = seenDeals.erase(it);
+			else ++it;
+		}
+		return result;
 	}
 }

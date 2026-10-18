@@ -132,6 +132,8 @@ namespace regionsync
 	constexpr uint32_t kDealTypeLast = 0x4773FFE5;
 	constexpr uint32_t kDealFlagCancelled = 0x4;
 	constexpr uint32_t kDealFlagSilent = 0x80;
+	constexpr uint32_t kDealFlagsAmountLocked = 0x300;   // grace or probation: SetAmount is ignored
+	constexpr uint32_t kDealFlagsDead = 0x1C;            // cancelled, no connection, cannot afford
 	constexpr uint32_t kDealFlagsKnown = 0x3FF & ~kDealFlagSilent;
 
 	constexpr bool IsDealType(uint32_t type) { return type >= kDealTypeFirst && type <= kDealTypeLast; }
