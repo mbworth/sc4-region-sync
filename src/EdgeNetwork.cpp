@@ -15,6 +15,7 @@
 #include "cISC4NetworkOccupant.h"
 #include "cISC4NetworkTool.h"
 #include "cISC4Occupant.h"
+#include "cISCPropertyHolder.h"
 #include "cISC4OccupantManager.h"
 #include "cISC4ZoneManager.h"
 #include "cRZAutoRefCount.h"
@@ -100,6 +101,8 @@ namespace
 		return n;
 	}
 
+	constexpr uint32_t kConnectionMarkerProperty = 0xCAA46595;
+
 	// The game's layer filter (research step 6): pipe and subway networks
 	// demolish only their own layer, everything else only the surface.
 	class LayerFilter final : public cSC4BaseOccupantFilter
@@ -109,6 +112,13 @@ namespace
 		bool IsOccupantIncluded(cISC4Occupant* o) override
 		{
 			if (!o) return false;
+			// The connection's arrow marker (property 0xCAA46595, research) sits on
+			// the edge cell; the game lays it after demolition, we already have it.
+			if (cISCPropertyHolder* p = o->AsPropertyHolder(); p && p->HasProperty(kConnectionMarkerProperty))
+			{
+				Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "EdgeTile: occupant %p type=0x%08X is the connection marker, kept.", static_cast<void*>(o), static_cast<uint32_t>(o->GetType()));
+				return false;
+			}
 			if (netType == NetType::WaterPipe || netType == NetType::Subway) return IsNetworkOfType(o, netType);
 			return !IsNetworkOfType(o, NetType::WaterPipe) && !IsNetworkOfType(o, NetType::Subway);
 		}

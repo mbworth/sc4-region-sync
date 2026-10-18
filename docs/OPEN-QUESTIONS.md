@@ -211,7 +211,7 @@ Run with `SyncConnections=1` as shipped; the lay decision is idempotent, so the 
 3. Save B (A first, then B), reload both: stub persists, no second stub, the lay step logs `already laid`.
 4. Flip `LayEdgeNetwork=1`, repeat 1 with no cheats.
 
-**Observed.** (unknown)
+**Observed (2026-10-18, build `31421b2`, first run, cheat).** BumperVille built a road to TuggersVille's west edge at z=110 (the timed path had already created the connection: `CreateConnection(2, -1, 110, 0)`, `0x8A0D15DA`). `RegionSyncMirror` in TuggersVille: existing connections at (0,30), (0,38), (0,57) reported `already laid`; for (0,110): survey found two occupants on the edge cell (`type=0xA823821E` and `0x74758926`, flora on (2,110)), `DemolishRegion=1`, `Init=1`, `PlaceNetworkOccupants=1 GetFailureState=0` twice, `GetEdgeTypesFlag=0x00020000 -> SetEdgeTypesFlag(0x00020002)`, all three cells hold a road piece afterwards, `funds before=1001507 after=1001507` (free), tool `Release=0`. Player saw the road stub. **Defect:** no arrow above it: the demolition removed the connection marker occupant (`0xA823821E`, the prop the game lays after its own demolition) while the connection object itself survived (`Capture: connection type=2 inner=(0,110) ... active=1`). Fix: the layer filter keeps occupants carrying the marker property `0xCAA46595`. Unverified until the next deploy.
 
 ## Q11. Does removing what a live publisher stopped listing converge both instances without demolition?
 
