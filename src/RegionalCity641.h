@@ -14,15 +14,23 @@
  *     and the setters take (int32_t, double). Calling them with float
  *     leaves the stack 4 bytes short and the stores are garbage.
  *
- * Only the director/bridge should include this. Vendored headers stay
- * untouched; this is the local wrapper the ground rules ask for.
+ *   - slot 20 FindConnection returns cISC4NeighborConnection*, not
+ *     cISC4RegionalCity*.
+ *
+ * Also the neighbor record's connection list (+0x90) and the raw fields of
+ * a connection object, for injecting a connection into a neighbor's record
+ * (docs/research/record-connections-641.md).
+ *
+ * Only the director, bridge and mirror should include this. Vendored headers
+ * stay untouched; this is the local wrapper the ground rules ask for.
  */
 
 #pragma once
+#include "cISC4NeighborConnection.h"
+#include "cISC4RegionalCity.h"
+#include "SC4List.h"
 #include <cstddef>
 #include <cstdint>
-
-class cISC4RegionalCity;
 
 namespace regionsync::rc641
 {
@@ -138,4 +146,46 @@ namespace regionsync::rc641
 	// The demand simulator reads the extrapolated one.
 	inline int32_t* FindPopulationByType(cISC4RegionalCity* p, uint32_t type) { return FindTypeMapValue(p, 0x3c, type); }
 	inline int32_t* FindExtrapolatedPopulationByType(cISC4RegionalCity* p, uint32_t type) { return FindTypeMapValue(p, 0x48, type); }
+
+	// Slot 20 (0x4a7b40) walks the +0x90 list and matches GetType() == type
+	// and GetConnectionCell() == (x, z), in this record's frame. Nothing else
+	// (flags, inner cell, other side) is compared.
+	inline cISC4NeighborConnection* FindConnection(cISC4RegionalCity* p, uint32_t type, int32_t x, int32_t z)
+	{
+		return reinterpret_cast<cISC4NeighborConnection*>(p->FindConnection(static_cast<int32_t>(type), x, z));
+	}
+
+	// The record's connection list at this+0x90 (1.1.641): filled from the
+	// save by Read (0x4ac5b0) in a neighbor's process, by UpdateCityCache in
+	// the owner's. Same layout as SC4List: a single root pointer, no size
+	// field (+0x94 starts the pending vector), GZ allocator. Elements own one
+	// reference each (the game's inserts AddRef); clear 0x411d70 Releases them.
+	inline SC4List<cISC4NeighborConnection*>& ConnectionList(cISC4RegionalCity* p)
+	{
+		return *reinterpret_cast<SC4List<cISC4NeighborConnection*>*>(reinterpret_cast<uint8_t*>(p) + 0x90);
+	}
+
+	inline const SC4ListNode<cISC4NeighborConnection*>* ConnectionListRoot(cISC4RegionalCity* p)
+	{
+		return *reinterpret_cast<SC4ListNode<cISC4NeighborConnection*>* const*>(reinterpret_cast<uint8_t*>(p) + 0x90);
+	}
+
+	// cSC4NeighborConnection (0x44 bytes, factory 0x6d4b90). QI answers
+	// kIIDNeighborConnection with this, so the offsets apply to the
+	// interface pointer. The ctor zeroes everything (flags +0x38 = 0: active).
+	constexpr uint32_t kClsidNeighborConnection = 0x0A134F24;
+	constexpr uint32_t kIIDNeighborConnection = 0x0773FEF2;
+	constexpr size_t kConnectionTypeOffset = 0x24;
+	constexpr size_t kConnectionCellXOffset = 0x28;
+	constexpr size_t kConnectionCellZOffset = 0x2c;
+
+	// No setters exist for type or cell. Repair(record) then derives the
+	// other-side tile (+0x30/+0x34) from the cell.
+	inline void InitRawConnection(cISC4NeighborConnection* c, uint32_t type, int32_t x, int32_t z)
+	{
+		uint8_t* base = reinterpret_cast<uint8_t*>(c);
+		*reinterpret_cast<uint32_t*>(base + kConnectionTypeOffset) = type;
+		*reinterpret_cast<int32_t*>(base + kConnectionCellXOffset) = x;
+		*reinterpret_cast<int32_t*>(base + kConnectionCellZOffset) = z;
+	}
 }

@@ -54,6 +54,9 @@ namespace regionsync
 		uint32_t type = 0;        // cISC4NeighborsSimulator::ConnectionType
 		int32_t innerX = 0;       // inner edge cell, publisher's frame
 		int32_t innerZ = 0;
+		int32_t cellX = 0;        // GetConnectionCell: just outside the edge, publisher's frame
+		int32_t cellZ = 0;
+		bool cellKnown = false;   // false for snapshots written before the cell keys
 		int32_t otherTileX = 0;   // tile on the other side
 		int32_t otherTileZ = 0;
 	};
@@ -137,6 +140,17 @@ namespace regionsync
 	constexpr bool IsValidDealAmount(int32_t amount) { return amount >= 0 && amount <= 10000000; }
 	constexpr bool IsValidExpiresIn(int32_t days) { return days >= 0 && days <= 36500; }
 	constexpr uint32_t MaskDealFlags(uint32_t flags) { return flags & kDealFlagsKnown; }
+
+	// The connection cell lies just outside one edge of A (cellsA wide), one
+	// step outward from the inner cell; the other axis equals the inner cell's
+	// and is inside [0, cellsA-1].
+	constexpr bool IsConnectionCellAdjacent(int32_t innerX, int32_t innerZ, int32_t cellX, int32_t cellZ, int32_t cellsA)
+	{
+		const auto in = [cellsA](int32_t v) { return v >= 0 && v < cellsA; };
+		const bool xEdge = (cellX == -1 && innerX == 0) || (cellX == cellsA && innerX == cellsA - 1);
+		const bool zEdge = (cellZ == -1 && innerZ == 0) || (cellZ == cellsA && innerZ == cellsA - 1);
+		return (xEdge && cellZ == innerZ && in(cellZ)) || (zEdge && cellX == innerX && in(cellX));
+	}
 
 	constexpr int32_t kCellsPerRegionUnit = 64;
 	constexpr int32_t CityCells(uint32_t sizeEnum) { return kCellsPerRegionUnit << sizeEnum; }

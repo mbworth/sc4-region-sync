@@ -164,6 +164,11 @@ namespace regionsync
 				out << p << "type=" << c.type << '\n';
 				out << p << "innerX=" << c.innerX << '\n';
 				out << p << "innerZ=" << c.innerZ << '\n';
+				if (c.cellKnown)
+				{
+					out << p << "cellX=" << c.cellX << '\n';
+					out << p << "cellZ=" << c.cellZ << '\n';
+				}
 				out << p << "otherTileX=" << c.otherTileX << '\n';
 				out << p << "otherTileZ=" << c.otherTileZ << '\n';
 			}
@@ -278,6 +283,8 @@ namespace regionsync
 				Read(kv, p + "type", c.type);
 				Read(kv, p + "innerX", c.innerX);
 				Read(kv, p + "innerZ", c.innerZ);
+				const bool cellXKnown = Read(kv, p + "cellX", c.cellX);
+				c.cellKnown = Read(kv, p + "cellZ", c.cellZ) && cellXKnown;
 				Read(kv, p + "otherTileX", c.otherTileX);
 				Read(kv, p + "otherTileZ", c.otherTileZ);
 			}

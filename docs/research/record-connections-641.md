@@ -25,13 +25,19 @@ So in B, A's record has only what was in A.sc4 when B loaded. Most likely A's po
   - ChangeSymmetricConnection only appends to the pending vector.
   - `pA->UpdateCityCache(Bcity)` would overwrite A's record with B's data.
 
+**List layout (checked 2026-10-17): root pointer only, no size field.** The +0x90 object is one pointer to a sentinel node `{next, prev, value}`, as in the vendored `SC4List`. None of the game's list code writes `[list+4]`:
+- Read `0x4ac5b0` is the `cIGZSerializable` method (vtable `0xa8faf8`, stored at record+8 by ctor `0x4ab7f0`), so its `this+0x88` is record+0x90. Per entry it loads the root (`MOV EAX,[EBX+0x88]`), allocates a 0xc node, stores the value with AddRef, and links it before the root: `node->next=root; node->prev=root->prev; root->prev->next=node; root->prev=node` (`0x4aca15`..`0x4aca23`). It then Releases the ctor's reference, so the list owns one.
+- Range insert `0x4a86f0` (`where` is a node) does the same link-in per element with AddRef; nothing else is written.
+- Clear `0x411d70` (ECX = list object) Releases and frees every node, then sets `root->next = root->prev = root`. No count is reset.
+- Record+0x94 is not a list size: Read uses it (`this+0x8c`..`+0x94`) as begin/end/capacity of the 16-byte pending vector.
+
 Recommended sequence (cheat, try/catch, Info logs):
 1. `pA = FindRegionalCity(A)`. Log every entry of `pA->GetAllConnections`.
 2. Dedupe: `e = (cISC4NeighborConnection*)pA->FindConnection(4,-1,55)`. If found, `SetIsActive(true)` if needed and skip to step 7.
 3. `CreateInstance(0x0A134F24, 0x0773FEF2, &c)`.
 4. Raw-write +0x24=4, +0x28=-1, +0x2c=55 (from A's snapshot `GetConnectionCell`).
 5. `c->Repair(pA)`. Check `c->GetCityOnOtherSideOfConnection() == App->GetRegionalCity()`.
-6. `reinterpret_cast<SC4List<cISC4NeighborConnection*>*>((uint8_t*)pA+0x90)->push_back(c)`. The list keeps the CreateInstance reference; do not Release. SC4List's node allocator is the same GZ allocator service.
+6. `reinterpret_cast<SC4List<cISC4NeighborConnection*>*>((uint8_t*)pA+0x90)->push_back(c)`, then `AddRef` once for the list (the game's inserts AddRef; vendored SC4List does not). SC4List's node allocator is the same GZ allocator service.
 7. Verify: `sim->FindConnectionOnOtherSide(bConn)` returns c and `FindConnectionSuitableForDeal(0x4773FFE0,pA)` is non-null. Then ProposeDeal.
 
 ## 4. GetIsActive

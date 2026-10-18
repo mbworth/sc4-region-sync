@@ -267,8 +267,10 @@ namespace regionsync
 				continue;
 			}
 			pOther->GetPosition(c.otherTileX, c.otherTileZ);
-			logger.WriteLineFormatted(LogLevel::Debug, "Capture: connection type=%u inner=(%d,%d) otherTile=(%d,%d)",
-				c.type, c.innerX, c.innerZ, c.otherTileX, c.otherTileZ);
+			pConn->GetConnectionCell(c.cellX, c.cellZ);
+			c.cellKnown = true;
+			logger.WriteLineFormatted(LogLevel::Debug, "Capture: connection type=%u inner=(%d,%d) cell=(%d,%d) otherTile=(%d,%d)",
+				c.type, c.innerX, c.innerZ, c.cellX, c.cellZ, c.otherTileX, c.otherTileZ);
 			out.connections.push_back(c);
 		}
 		out.connectionsKnown = true;

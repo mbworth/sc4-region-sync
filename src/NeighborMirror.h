@@ -12,6 +12,8 @@
 #include <set>
 #include <tuple>
 
+class cIGZCOM;
+class cISC4NeighborConnection;
 class cISC4NeighborsSimulator;
 class cISC4Region;
 class cISC4RegionalCity;
@@ -25,13 +27,21 @@ namespace regionsync
 		cISC4RegionalCity* pOwnRegionalCity = nullptr;
 		cISC4NeighborsSimulator* pNeighborsSim = nullptr;
 		cISC4Simulator* pSimulator = nullptr;
+		cIGZCOM* pCOM = nullptr;   // creates connection objects for the record-side step
+		bool allowRecordInjection = false;   // RegionSyncMirror only; otherwise find and SetIsActive
+	};
+
+	struct ConnectionMirrorResult
+	{
+		int created = 0;    // our own connections created
+		int injected = 0;   // connections pushed onto the publisher's record copy
 	};
 
 	class NeighborMirror
 	{
 	public:
-		// Each returns the number of game objects created.
-		int MirrorConnections(const MirrorContext& ctx, const NeighborSnapshot& publisher);
+		ConnectionMirrorResult MirrorConnections(const MirrorContext& ctx, const NeighborSnapshot& publisher);
+		// Returns the number of deals created.
 		int MirrorDeals(const MirrorContext& ctx, const NeighborSnapshot& publisher);
 
 		// Call when the city closes; the sets are per city session.

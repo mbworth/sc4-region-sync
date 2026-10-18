@@ -27,7 +27,7 @@ int main(int argc, char** argv)
 	a.rciGroupCount = 3;
 	a.rciGroups[0] = { 0x1010, 100 }; a.rciGroups[1] = { 0x3110, 200 }; a.rciGroups[2] = { 0x4400, -1 };
 	a.connectionsKnown = true;
-	a.connections = { { 2, 0, 17, 2, 7 }, { 4, 127, -1, 3, 6 } };
+	a.connections = { { 2, 0, 17, -1, 17, true, 2, 7 }, { 4, 127, 0, 127, -1, true, 3, 6 }, { 5, 3, 0, 0, 0, false, 3, 6 } };
 	a.dealsKnown = true;
 	a.deals = { { 0x4773FFE4, 2, 7, 1500, 0x2, 365 }, { 0x4773FFE1, 4, 7, 0, 0x101, 0 } };
 
@@ -76,6 +76,7 @@ int main(int argc, char** argv)
 		const ConnectionRecord& x = a.connections[i];
 		const ConnectionRecord& y = b.connections[i];
 		CHECK(x.type == y.type && x.innerX == y.innerX && x.innerZ == y.innerZ && x.otherTileX == y.otherTileX && x.otherTileZ == y.otherTileZ);
+		CHECK(x.cellKnown == y.cellKnown && (!x.cellKnown || (x.cellX == y.cellX && x.cellZ == y.cellZ)));
 	}
 	CHECK(b.dealsKnown && b.deals.size() == a.deals.size());
 	for (size_t i = 0; i < a.deals.size() && i < b.deals.size(); i++)
@@ -127,6 +128,13 @@ int main(int argc, char** argv)
 	CHECK(error.find("connectionCount") != std::string::npos && error.find("dealCount") != std::string::npos);
 
 	// Validation helpers.
+	// Connection cell: west, east, north, south of a 64-cell tile accepted.
+	CHECK(IsConnectionCellAdjacent(0, 55, -1, 55, 64) && IsConnectionCellAdjacent(63, 10, 64, 10, 64));
+	CHECK(IsConnectionCellAdjacent(5, 0, 5, -1, 64) && IsConnectionCellAdjacent(5, 63, 5, 64, 64) && IsConnectionCellAdjacent(127, 3, 128, 3, 128));
+	// Interior pair, same cell, off-axis, two steps, 256 on a small tile, other axis outside.
+	CHECK(!IsConnectionCellAdjacent(10, 10, 11, 10, 64) && !IsConnectionCellAdjacent(0, 55, 0, 55, 64) && !IsConnectionCellAdjacent(0, 55, -1, 54, 64));
+	CHECK(!IsConnectionCellAdjacent(0, 55, 2, 55, 64) && !IsConnectionCellAdjacent(255, 0, 256, 0, 64) && !IsConnectionCellAdjacent(0, 64, -1, 64, 64));
+	CHECK(!IsConnectionCellAdjacent(0, 5, -1, 5, 0));
 	CHECK(IsMirrorableConnectionType(1) && IsMirrorableConnectionType(11) && IsMirrorableConnectionType(10));
 	CHECK(!IsMirrorableConnectionType(0) && !IsMirrorableConnectionType(3) && !IsMirrorableConnectionType(8) && !IsMirrorableConnectionType(9) && !IsMirrorableConnectionType(12));
 	CHECK(IsDealType(0x4773FFE0) && IsDealType(0x4773FFE5) && !IsDealType(0x4773FFE6) && !IsDealType(0x4773FFDF));

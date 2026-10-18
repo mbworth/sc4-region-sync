@@ -800,7 +800,7 @@ private:
 			pending.swap(mirrorPending);
 			for (const regionsync::NeighborSnapshot& snapshot : pending)
 			{
-				MirrorSnapshot(snapshot, settings.syncConnections, settings.syncDeals);
+				MirrorSnapshot(snapshot, settings.syncConnections, settings.syncDeals, false);
 			}
 		}
 	}
@@ -935,16 +935,18 @@ private:
 		~InPullScope() { flag = false; }
 	};
 
-	void MirrorSnapshot(const regionsync::NeighborSnapshot& snapshot, bool connections, bool deals)
+	// allowRecordInjection: only the cheat may add objects to a neighbor's record.
+	void MirrorSnapshot(const regionsync::NeighborSnapshot& snapshot, bool connections, bool deals, bool allowRecordInjection)
 	{
 		Logger& logger = Logger::GetInstance();
-		const regionsync::MirrorContext ctx{ pRegion, pOwnRegionalCity, pNeighborsSim, pSimulator };
-		int createdConnections = 0, createdDeals = 0;
+		const regionsync::MirrorContext ctx{ pRegion, pOwnRegionalCity, pNeighborsSim, pSimulator, GZCOM(), allowRecordInjection };
+		regionsync::ConnectionMirrorResult connectionResult;
+		int createdDeals = 0;
 		try
 		{
 			if (connections)
 			{
-				createdConnections = mirror.MirrorConnections(ctx, snapshot);
+				connectionResult = mirror.MirrorConnections(ctx, snapshot);
 			}
 			if (deals)
 			{
@@ -959,7 +961,8 @@ private:
 		{
 			logger.WriteLineFormatted(LogLevel::Error, "Mirror (%d,%d) threw a non-standard exception.", snapshot.regionX, snapshot.regionZ);
 		}
-		logger.WriteLineFormatted(LogLevel::Info, "Mirror (%d,%d): created connections=%d deals=%d", snapshot.regionX, snapshot.regionZ, createdConnections, createdDeals);
+		logger.WriteLineFormatted(LogLevel::Info, "Mirror (%d,%d): created connections=%d recordConnections=%d deals=%d",
+			snapshot.regionX, snapshot.regionZ, connectionResult.created, connectionResult.injected, createdDeals);
 	}
 
 	// Pull: read every snapshot in the store except our own and apply it to
@@ -1086,7 +1089,7 @@ private:
 		logger.Flush();
 		for (const regionsync::NeighborSnapshot& snapshot : snapshots)
 		{
-			MirrorSnapshot(snapshot, true, true);
+			MirrorSnapshot(snapshot, true, true, true);
 		}
 		logger.WriteLine(LogLevel::Info, "==== RegionSyncMirror end ====");
 	}
@@ -1242,9 +1245,9 @@ private:
 			logger.WriteLineFormatted(LogLevel::Info, "Connections from this tile: %zu", own.connections.size());
 			for (const regionsync::ConnectionRecord& c : own.connections)
 			{
-				logger.WriteLineFormatted(LogLevel::Info, "  %s (%u) inner=(%d,%d) otherTile=(%d,%d)",
+				logger.WriteLineFormatted(LogLevel::Info, "  %s (%u) inner=(%d,%d) cell=(%d,%d) otherTile=(%d,%d)",
 					ConnectionTypeName(static_cast<cISC4NeighborsSimulator::ConnectionType>(c.type)), c.type,
-					c.innerX, c.innerZ, c.otherTileX, c.otherTileZ);
+					c.innerX, c.innerZ, c.cellX, c.cellZ, c.otherTileX, c.otherTileZ);
 			}
 
 			logger.WriteLineFormatted(LogLevel::Info, "Deals (FindDealsAll): %zu", own.deals.size());
