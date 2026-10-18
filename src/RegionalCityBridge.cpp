@@ -269,8 +269,9 @@ namespace regionsync
 			pOther->GetPosition(c.otherTileX, c.otherTileZ);
 			pConn->GetConnectionCell(c.cellX, c.cellZ);
 			c.cellKnown = true;
-			logger.WriteLineFormatted(LogLevel::Debug, "Capture: connection type=%u inner=(%d,%d) cell=(%d,%d) otherTile=(%d,%d)",
-				c.type, c.innerX, c.innerZ, c.cellX, c.cellZ, c.otherTileX, c.otherTileZ);
+			c.active = pConn->GetIsActive();
+			logger.WriteLineFormatted(LogLevel::Debug, "Capture: connection type=%u inner=(%d,%d) cell=(%d,%d) otherTile=(%d,%d) active=%d",
+				c.type, c.innerX, c.innerZ, c.cellX, c.cellZ, c.otherTileX, c.otherTileZ, c.active ? 1 : 0);
 			out.connections.push_back(c);
 		}
 		out.connectionsKnown = true;

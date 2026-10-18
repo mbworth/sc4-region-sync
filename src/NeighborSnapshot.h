@@ -59,6 +59,7 @@ namespace regionsync
 		bool cellKnown = false;   // false for snapshots written before the cell keys
 		int32_t otherTileX = 0;   // tile on the other side
 		int32_t otherTileZ = 0;
+		bool active = false;      // display only (Dump); not serialized
 	};
 
 	struct DealRecord

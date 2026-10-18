@@ -60,6 +60,7 @@ Open the cheat box with Ctrl+X.
 | `RegionSyncReload` | Experimental: ask the region to reload adjacent tiles' records from their save files. |
 | `RegionSyncSave` | Fast-save the current city. |
 | `RegionSyncMirror` | Experimental (Q9): create other instances' published connections and deals in this city, ignoring `SyncConnections`/`SyncDeals`. |
+| `RegionSyncOffer` | Diagnostic: logs each neighbor/deal-type check behind a deal offer, then what `ProposeDeals` (not added to the sim) returns. |
 
 ## Settings
 

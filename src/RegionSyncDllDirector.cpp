@@ -30,6 +30,7 @@
 #include "SyncSettings.h"
 #include "InstanceMutex.h"
 #include "RegionalCity641.h"
+#include "NeighborsSim641.h"
 
 #include "cIGZCheatCodeManager.h"
 #include "cIGZCOM.h"
@@ -40,6 +41,8 @@
 #include "cISC4App.h"
 #include "cISC4City.h"
 #include "cISC4Demand.h"
+#include "cISC4NeighborConnection.h"
+#include "cISC4NeighborDeal.h"
 #include "cISC4DemandSimulator.h"
 #include "SC4List.h"
 #include "SC4Percentage.h"
@@ -102,6 +105,8 @@ static constexpr uint32_t kCheatDemandID = 0x7A3C9E5B;
 static constexpr uint32_t kCheatFakeNeighborID = 0x7A3C9E5C;
 // Outside the full 0x7A3C9E5x block. Drawn from /dev/urandom; checked against this repo only (Null45's published ids were not reachable offline).
 static constexpr uint32_t kCheatMirrorID = 0x1FDCE6B8;
+// Same: /dev/urandom, outside the 0x7A3C9E5x block, checked against this repo only.
+static constexpr uint32_t kCheatOfferID = 0x343F73E3;
 
 static constexpr std::string_view kCheatDump = "RegionSyncDump";
 static constexpr std::string_view kCheatPublish = "RegionSyncPublish";
@@ -115,6 +120,7 @@ static constexpr std::string_view kCheatProbe = "RegionSyncProbe";
 static constexpr std::string_view kCheatDemand = "RegionSyncDemand";
 static constexpr std::string_view kCheatFakeNeighbor = "RegionSyncFakeNeighbor";
 static constexpr std::string_view kCheatMirror = "RegionSyncMirror";
+static constexpr std::string_view kCheatOffer = "RegionSyncOffer";
 
 namespace
 {
@@ -429,6 +435,7 @@ private:
 			pCheatCodeManager->RegisterCheatCode(kCheatDemandID, cRZBaseString(kCheatDemand));
 			pCheatCodeManager->RegisterCheatCode(kCheatFakeNeighborID, cRZBaseString(kCheatFakeNeighbor));
 			pCheatCodeManager->RegisterCheatCode(kCheatMirrorID, cRZBaseString(kCheatMirror));
+			pCheatCodeManager->RegisterCheatCode(kCheatOfferID, cRZBaseString(kCheatOffer));
 			pCheatCodeManager->AddNotification2(this, 0);
 		}
 	}
@@ -726,6 +733,7 @@ private:
 			pCheatCodeManager->UnregisterCheatCode(kCheatDemandID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatFakeNeighborID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatMirrorID);
+			pCheatCodeManager->UnregisterCheatCode(kCheatOfferID);
 			pCheatCodeManager->RemoveNotification2(this, 0);
 		}
 	}
@@ -1245,9 +1253,9 @@ private:
 			logger.WriteLineFormatted(LogLevel::Info, "Connections from this tile: %zu", own.connections.size());
 			for (const regionsync::ConnectionRecord& c : own.connections)
 			{
-				logger.WriteLineFormatted(LogLevel::Info, "  %s (%u) inner=(%d,%d) cell=(%d,%d) otherTile=(%d,%d)",
+				logger.WriteLineFormatted(LogLevel::Info, "  %s (%u) inner=(%d,%d) cell=(%d,%d) otherTile=(%d,%d) active=%d",
 					ConnectionTypeName(static_cast<cISC4NeighborsSimulator::ConnectionType>(c.type)), c.type,
-					c.innerX, c.innerZ, c.cellX, c.cellZ, c.otherTileX, c.otherTileZ);
+					c.innerX, c.innerZ, c.cellX, c.cellZ, c.otherTileX, c.otherTileZ, c.active ? 1 : 0);
 			}
 
 			logger.WriteLineFormatted(LogLevel::Info, "Deals (FindDealsAll): %zu", own.deals.size());
@@ -1450,6 +1458,91 @@ private:
 		logger.Flush();
 	}
 
+	static void LogRecordStats(const char* who, cISC4RegionalCity* p)
+	{
+		using namespace regionsync::rc641;
+		Logger& logger = Logger::GetInstance();
+		logger.WriteLineFormatted(LogLevel::Info, "%s budget=%.0f", who, GetBudget(p));
+		for (int32_t c = 1; c <= 3; c++)
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "%s commodity %d prod=%.2f dem=%.2f imp=%.2f exp=%.2f",
+				who, c, GetCommodity(p, kGetProduced, c), GetCommodity(p, kGetDemanded, c),
+				GetCommodity(p, kGetImported, c), GetCommodity(p, kGetExported, c));
+		}
+		logger.Flush();
+	}
+
+	// Offer: why ProposeDeals does or does not produce an offer. Mirrors its
+	// per-neighbor, per-type checks, then calls it with addToSim=false.
+	void OfferDiagnostic()
+	{
+		Logger& logger = Logger::GetInstance();
+		if (!pCity || !pNeighborsSim || !pOwnRegionalCity)
+		{
+			logger.WriteLine(LogLevel::Error, "Offer: no city loaded.");
+			return;
+		}
+
+		logger.WriteLine(LogLevel::Info, "==== RegionSyncOffer begin ====");
+		logger.Flush();
+		try
+		{
+			namespace ns = regionsync::ns641;
+			pNeighborsSim->UpdateCommodityStats(pCity);
+			LogRecordStats("Offer: own", pOwnRegionalCity);
+
+			SC4List<cISC4RegionalCity*> adjacent;
+			pNeighborsSim->GetAdjacentCities(adjacent, false);
+			logger.WriteLineFormatted(LogLevel::Info, "Offer: adjacent established=%zu", adjacent.size());
+			logger.Flush();
+			for (cISC4RegionalCity* pOther : adjacent)
+			{
+				if (!pOther) continue;
+				int32_t x = -1, z = -1;
+				pOther->GetPosition(x, z);
+				char who[96];
+				snprintf(who, sizeof(who), "Offer: (%d,%d) '%s'", x, z, GetRegionalCityName(pOther).c_str());
+				LogRecordStats(who, pOther);
+				for (int32_t type = regionsync::kDealTypeFirst; type <= static_cast<int32_t>(regionsync::kDealTypeLast); type++)
+				{
+					cISC4NeighborConnection* pConn = pNeighborsSim->FindConnectionSuitableForDeal(type, pOther);
+					SC4List<cISC4NeighborDeal*> existing;
+					ns::FindDeals(pNeighborsSim, type, pOther, existing);
+					const double maxAmount = ns::GetDealMaxAmount(pNeighborsSim, type, pOther);
+					const double cost = ns::GetDealCost(pNeighborsSim, type, maxAmount, pOther);
+					logger.WriteLineFormatted(LogLevel::Info, "%s type=0x%08X conn=%p active=%d existing=%zu max=%.2f costAtMax=%.2f (gate uses cost at the tuning minimum)",
+						who, static_cast<uint32_t>(type), static_cast<void*>(pConn), pConn ? (pConn->GetIsActive() ? 1 : 0) : -1,
+						existing.size(), maxAmount, cost);
+					logger.Flush();
+				}
+			}
+
+			// 0x6d0520 AddRefs each element into the list; the SC4List destructor releases.
+			SC4List<cISC4NeighborDeal*> proposed;
+			const bool ok = ns::ProposeDeals(pNeighborsSim, proposed, false);
+			logger.WriteLineFormatted(LogLevel::Info, "Offer: ProposeDeals(false) ret=%d count=%zu", ok ? 1 : 0, proposed.size());
+			for (cISC4NeighborDeal* pDeal : proposed)
+			{
+				if (!pDeal) continue;
+				int32_t x = -1, z = -1;
+				if (cISC4RegionalCity* pOther = pDeal->GetCityOnOtherSideOfConnection()) pOther->GetPosition(x, z);
+				logger.WriteLineFormatted(LogLevel::Info, "Offer:   deal type=0x%08X other=(%d,%d) amount=%d cost=%lld flags=0x%X",
+					static_cast<uint32_t>(pDeal->GetType()), x, z, pDeal->GetAmount(),
+					static_cast<long long>(pDeal->GetCost()), static_cast<uint32_t>(pDeal->GetFlags()));
+			}
+		}
+		catch (const std::exception& e)
+		{
+			logger.WriteLineFormatted(LogLevel::Error, "Offer: threw: %s", e.what());
+		}
+		catch (...)
+		{
+			logger.WriteLine(LogLevel::Error, "Offer: threw a non-standard exception.");
+		}
+		logger.WriteLine(LogLevel::Info, "==== RegionSyncOffer end ====");
+		logger.Flush();
+	}
+
 	// FakeNeighbor: toggle. First call writes a huge population into the
 	// first other established tile's record and holds it against the
 	// monthly pull; second call restores the saved values and feeds the
@@ -1557,6 +1650,7 @@ private:
 		case kCheatDemandID: DemandDump(); break;
 		case kCheatFakeNeighborID: FakeNeighbor(); break;
 		case kCheatMirrorID: MirrorAll(); break;
+		case kCheatOfferID: OfferDiagnostic(); break;
 		}
 	}
 

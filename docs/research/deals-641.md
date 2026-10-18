@@ -117,6 +117,7 @@ MSVC overload grouping puts `GetPopulation(type)` at slot 9 and `GetPopulation()
 |---|---|---|
 | `ProposeDeal` | out deal is the only reference | `Release` after `AddDeal` |
 | `AddDeal` | `AddRef`s for its list | nothing extra |
+| `ProposeDeals(list, addToSim)` | worker `0x6d0520` `AddRef`s each deal into the out list (and into the sim list when addToSim) and `Release`s its own reference | nothing; `SC4List`'s destructor balances it (verified 2026-10-18) |
 | `FindDeals`, `FindDealsAll`, `GetAllConnections`, `GetLocalDeals` | `AddRef` every element | nothing; `SC4List`'s destructor balances it |
 | `cISC4Simulator::GetSimDate` | borrowed | no `Release` |
 | `cIGZDate::Clone` | new reference | `Release` |
