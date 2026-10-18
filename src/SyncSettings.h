@@ -58,6 +58,10 @@ namespace regionsync
 		// pull (Phase 1b). See the director's ApplyRegionalDemandDelta.
 		bool applyRegionalDemand = true;
 
+		// Set each pulled record's extrapolation cap to the live value so the
+		// game's monthly neighbor extrapolation adds nothing (Q16).
+		bool freezeExtrapolation = true;
+
 		// Regional sum for that feed: false = every established tile,
 		// true = GetAllConnectedCities (what the game's fold uses).
 		bool regionalSumConnected = false;

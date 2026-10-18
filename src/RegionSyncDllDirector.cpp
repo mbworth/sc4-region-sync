@@ -1552,10 +1552,10 @@ private:
 				settings.applyPulledSnapshots ? 1 : 0);
 			logger.WriteLineFormatted(
 				LogLevel::Info,
-				"Pull: applyFields established=%d budget=%d income=%d commodities=%d population=%d markDealsDirty=%d",
+				"Pull: applyFields established=%d budget=%d income=%d commodities=%d population=%d markDealsDirty=%d freezeExtrapolation=%d",
 				settings.applyEstablished ? 1 : 0, settings.applyBudget ? 1 : 0,
 				settings.applyIncome ? 1 : 0, settings.applyCommodities ? 1 : 0,
-				settings.applyPopulation ? 1 : 0, settings.markDealsDirty ? 1 : 0);
+				settings.applyPopulation ? 1 : 0, settings.markDealsDirty ? 1 : 0, settings.freezeExtrapolation ? 1 : 0);
 			logger.Flush();
 
 			if (!settings.applyPulledSnapshots)
@@ -1570,6 +1570,7 @@ private:
 			opt.income = settings.applyIncome;
 			opt.commodities = settings.applyCommodities;
 			opt.population = settings.applyPopulation;
+			opt.extrapolationCap = settings.freezeExtrapolation;
 
 			const int changed = regionsync::ApplySnapshotToRegionalCity(snapshot, pTarget, opt);
 			applied++;

@@ -50,6 +50,7 @@ namespace regionsync
 		bool income = true;
 		bool commodities = true;
 		bool population = true;   // totals and per-RCI-group, direct field writes
+		bool extrapolationCap = true;   // also set the record's +0x54 cap to the live value so the game stops extrapolating it (Q16)
 	};
 	int ApplySnapshotToRegionalCity(const NeighborSnapshot& snapshot, cISC4RegionalCity* pRegionalCity, const ApplyOptions& options);
 

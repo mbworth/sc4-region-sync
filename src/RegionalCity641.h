@@ -146,6 +146,8 @@ namespace regionsync::rc641
 	// The demand simulator reads the extrapolated one.
 	inline int32_t* FindPopulationByType(cISC4RegionalCity* p, uint32_t type) { return FindTypeMapValue(p, 0x3c, type); }
 	inline int32_t* FindExtrapolatedPopulationByType(cISC4RegionalCity* p, uint32_t type) { return FindTypeMapValue(p, 0x48, type); }
+	// Extrapolation cap (+0x54): the monthly extrapolation adds up to cap - extrapolated per cycle (Q16).
+	inline int32_t* FindExtrapolationCapByType(cISC4RegionalCity* p, uint32_t type) { return FindTypeMapValue(p, 0x54, type); }
 
 	// Slot 20 (0x4a7b40) walks the +0x90 list and matches GetType() == type
 	// and GetConnectionCell() == (x, z), in this record's frame. Nothing else

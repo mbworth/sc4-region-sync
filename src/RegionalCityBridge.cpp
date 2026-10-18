@@ -168,18 +168,23 @@ namespace regionsync
 				}
 				// Never insert: +0x48 is written only if the node exists (slot 17 falls back to +0x3c).
 				int32_t* pExtrapolated = rc641::FindExtrapolatedPopulationByType(pRegionalCity, g.groupId);
+				int32_t* pCap = opt.extrapolationCap ? rc641::FindExtrapolationCapByType(pRegionalCity, g.groupId) : nullptr;
 				const int32_t value = g.population < 0 ? 0 : g.population;
 				const bool plainDiffers = *pValue != value;
 				const bool extrapolatedDiffers = pExtrapolated && *pExtrapolated != value;
-				if (!plainDiffers && !extrapolatedDiffers)
+				// Cap without an extrapolated node: pin it to 0, or the game would insert ext=0 and grow it to the cap.
+				const int32_t capValue = pExtrapolated ? value : 0;
+				const bool capDiffers = pCap && *pCap != capValue;
+				if (!plainDiffers && !extrapolatedDiffers && !capDiffers)
 				{
 					continue;
 				}
-				logger.WriteLineFormatted(LogLevel::Info, "Apply: rci 0x%04X %d (extrapolated %d) -> %d (snapshot %d)",
-					g.groupId, *pValue, pExtrapolated ? *pExtrapolated : -1, value, g.population);
+				logger.WriteLineFormatted(LogLevel::Info, "Apply: rci 0x%04X %d (extrapolated %d, cap %d) -> %d (snapshot %d)",
+					g.groupId, *pValue, pExtrapolated ? *pExtrapolated : -1, pCap ? *pCap : -1, value, g.population);
 				logger.Flush();
 				*pValue = value;
 				if (pExtrapolated) *pExtrapolated = value;
+				if (pCap) *pCap = capValue;
 				changed++;
 			}
 		}

@@ -42,6 +42,6 @@ The earlier "18k → 91k" loop had the same cause. The vanilla record is not con
 ## Unknowns / checks
 
 - That `GetDemand(g, 0x10000)` exists for all 12 groups was not checked statically (the fold skips missing keys). **Experiment:** at city load, log `GetDemand(g,0x10000)->QuerySupplyValue()`. It should equal the connected-closure sum of slot 17, because Init sets it absolutely. That one line confirms the whole model.
-- Who first writes `+0x54` (cap) and seeds `+0x48`. No writer was found besides Read and `ExtrapolateGrowth`; probably the region-side save path (Q4). Writing `+0x48` below the cap invites the game to extrapolate up to 1000 per type per neighbor each cycle. Step 3 accounts for that.
+- Who first writes `+0x54` (cap) and seeds `+0x48`. No writer was found besides Read and `ExtrapolateGrowth`; probably the region-side save path (Q4). Writing `+0x48` below the cap invites the game to extrapolate up to 1000 per type per neighbor each cycle. Step 3 accounts for that, but the cancel shows on the demand graph as a saw-tooth (Q16, 2026-10-18); the apply now pins `+0x54` to the live value as well (`FreezeExtrapolation`).
 - What connection types 4 and 5, excluded from the closure, mean.
 - Whether `AddToSupplyValue` on the 0x10000 object moves the RCI graph as visibly as index 0 did. It should, since vanilla's whole regional effect goes through it.
