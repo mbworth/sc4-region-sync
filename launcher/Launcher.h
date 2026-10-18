@@ -22,9 +22,9 @@ namespace launcher
 		std::wstring statusDirectory;
 		std::wstring extraArgs;
 		std::wstring windowClass;  // empty = any class
-		int perInstanceRamMb = 3500;
+		int perInstanceRamMb = 1536;
 		int reserveCores = 1;
-		int reserveRamMb = 4096;
+		int reserveRamMb = 2048;
 		int maxInstances = 16;
 	};
 

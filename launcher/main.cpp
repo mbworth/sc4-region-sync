@@ -273,6 +273,15 @@ namespace
 			pids.push_back(r.pid);
 		}
 		app.resources = SampleResources(app.settings, pids);
+		for (const Row& r : app.rows)
+		{
+			if (!r.window || !IsWindow(r.window)) continue;
+			wchar_t cls[256] = L"";
+			GetClassNameW(r.window, cls, 256);
+			app.resources.tooltip += L"\r\nWindow class: ";
+			app.resources.tooltip += cls;
+			break;
+		}
 		SendMessageW(app.status, SB_SETTEXTW, SBT_OWNERDRAW, 0);
 		InvalidateRect(app.status, nullptr, TRUE);
 
