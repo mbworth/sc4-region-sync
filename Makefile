@@ -137,4 +137,4 @@ deploy: release
 
 logs:
 	@mkdir -p ingame_tests
-	@for i in 1 2; do scp -o BatchMode=yes -q "$(SC4_HOST):$(SC4_INSTANCES)/Instance$$i/SC4RegionSync.log" ingame_tests/instance$$i.log 2>/dev/null && echo "ingame_tests/instance$$i.log" || echo "Instance$$i: no log"; done
+	@for i in 1 2 3; do scp -o BatchMode=yes -q "$(SC4_HOST):$(SC4_INSTANCES)/Instance$$i/SC4RegionSync.log" ingame_tests/instance$$i.log 2>/dev/null && echo "ingame_tests/instance$$i.log" || echo "Instance$$i: no log"; done
