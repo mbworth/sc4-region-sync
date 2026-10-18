@@ -6,7 +6,7 @@ Agent onboarding for sc4-region-sync. Read this top to bottom before doing anyth
 
 A SimCity 4 DLL plugin (x86 Windows, C++20) that syncs the per-tile regional summary records between several running game instances, so the player can play multiple cities in one region at once and each city sees the others' growth without reloading. The host game is closed source and version-locked to 1.1.641.
 
-Status (2026-10-17): builds on Linux, runs in two instances, Phase 1 and 1b done (records sync both ways and move the demand simulator). Phase 2 (deals, connections, save lock) is next. `docs/PHASES.md` has the checkboxes.
+Status (2026-10-17): builds on Linux, runs in two instances, Phase 1 and 1b done (records sync both ways and move the demand simulator). Phase 2 connections and deals done 2026-10-18: live mirroring of single-network connections with edge stubs, deals with amount follow, removals, writer liveness. Left in Phase 2: dual-cell networks and ferry, save lock (Q4), Q1. `docs/PHASES.md` has the checkboxes.
 
 ## Read in this order
 
