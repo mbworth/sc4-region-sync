@@ -429,7 +429,7 @@ namespace
 			SetTextColor(dc, text);
 			DrawTextW(dc, c.caption.c_str(), -1, &tr, DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
 			// Letterbox bands; the compositor draws the thumbnail over the rest.
-			FillRect(dc, &c.area, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+			FillRect(dc, &c.area, GetSysColorBrush(COLOR_BTNSHADOW));  // letterbox bands
 			ExcludeClipRect(dc, c.cell.left, c.cell.top, c.cell.right, c.cell.bottom);
 		}
 		FillRect(dc, &app.gridRect, GetSysColorBrush(COLOR_APPWORKSPACE));  // gutters
@@ -850,11 +850,19 @@ namespace
 			}
 			return 0;
 		case WM_ERASEBKGND:
+		{
+			// The flat toolbar relies on the parent's erase; paint it in both modes.
+			// In grid mode the cells are painted by WM_PAINT, so skip that rect.
+			HDC dc = reinterpret_cast<HDC>(wParam);
+			RECT rc{};
+			GetClientRect(hwnd, &rc);
 			if (app.grid)
 			{
-				return 1;  // WM_PAINT fills everything
+				ExcludeClipRect(dc, app.gridRect.left, app.gridRect.top, app.gridRect.right, app.gridRect.bottom);
 			}
-			break;
+			FillRect(dc, &rc, GetSysColorBrush(COLOR_BTNFACE));
+			return 1;
+		}
 		case WM_PAINT:
 			if (app.grid)
 			{

@@ -21,7 +21,7 @@ namespace launcher
 		std::wstring userDirRoot;
 		std::wstring statusDirectory;
 		std::wstring extraArgs;
-		std::wstring windowClass;  // empty = any class
+		std::wstring windowClass = L"GDriverClass--DirectX";  // the game's main window (Q14); empty = any class
 		int perInstanceRamMb = 1536;
 		int reserveCores = 1;
 		int reserveRamMb = 2048;
