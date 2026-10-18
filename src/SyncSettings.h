@@ -70,11 +70,11 @@ namespace regionsync
 
 		// Lay the edge network stub under mirrored connections on the timed
 		// path. Off until Q10 is observed; RegionSyncMirror always lays.
-		bool layEdgeNetwork = false;
+		bool layEdgeNetwork = true;
 
 		// Remove connections and deals a live publisher stopped listing
 		// (docs/PLAN-REMOVAL.md). Off until Q11 is observed.
-		bool syncRemovals = false;
+		bool syncRemovals = true;
 
 		// Drop another instance's snapshot when its writer process has exited
 		// (the Exit button sends no shutdown). Same machine only.
