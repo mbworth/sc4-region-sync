@@ -1,91 +1,67 @@
 SC4RegionSync v0.1.0
-Initialized. instanceId=14324 enabled=1 publishEveryMonths=1 pullEveryMonths=1 autoSaveEveryMonths=0 syncConnections=0 syncDeals=0
-Unlock (startup): mutex handle 0x00B4 '\Sessions\1\BaseNamedObjects\SM0:14324:168:WilStaging_02'
-Unlock (startup): mutex handle 0x0294 '\Sessions\1\BaseNamedObjects\SimCity 4 Mutex'
-Unlock (startup): mutex handle 0x02A4 '\BaseNamedObjects\RasPbFile'
-Unlock (startup): mutex handle 0x04B4 '\BaseNamedObjects\{52813408-3561-4705-820a-2b3b78be92ba}_0'
-Unlock (startup): mutex handle 0x04CC '\Sessions\1\BaseNamedObjects\DirectSound Administrator shared thread array (lock'
-Unlock (startup): mutex handle 0x04F4 '\Sessions\1\BaseNamedObjects\CDdf212806D6EmB31yE0c'
-Unlock (startup): mutex handle 0x06CC '\Sessions\1\BaseNamedObjects\CDdf212806D6EmB31yE0c'
-Unlock (startup): mutex handle 0x0768 '\Sessions\1\BaseNamedObjects\DDrawDriverObjectListMutex'
-Unlock (startup): mutex handle 0x0784 '\Sessions\1\BaseNamedObjects\__DDrawExclMode__'
-Unlock (startup): mutex handle 0x0788 '\Sessions\1\BaseNamedObjects\__DDrawCheckExclMode__'
-Unlock (startup): mutex handle 0x078C '\Sessions\1\BaseNamedObjects\DDrawWindowListMutex'
+Initialized. instanceId=13744 enabled=1 publishEveryMonths=1 pullEveryMonths=1 autoSaveEveryMonths=0 syncConnections=0 syncDeals=0
+Unlock (startup): mutex handle 0x00BC '\Sessions\1\BaseNamedObjects\SM0:13744:168:WilStaging_02'
+Unlock (startup): mutex handle 0x0394 '\BaseNamedObjects\RasPbFile'
+Unlock (startup): mutex handle 0x039C '\Sessions\1\BaseNamedObjects\SimCity 4 Mutex'
+Unlock (startup): mutex handle 0x0704 '\Sessions\1\BaseNamedObjects\__DDrawExclMode__'
+Unlock (startup): mutex handle 0x071C '\Sessions\1\BaseNamedObjects\DirectSound Administrator shared thread array (lock'
+Unlock (startup): mutex handle 0x0720 '\Sessions\1\BaseNamedObjects\DDrawDriverObjectListMutex'
+Unlock (startup): mutex handle 0x072C '\Sessions\1\BaseNamedObjects\DDrawWindowListMutex'
+Unlock (startup): mutex handle 0x0730 '\Sessions\1\BaseNamedObjects\__DDrawCheckExclMode__'
+Unlock (startup): mutex handle 0x07A8 '\BaseNamedObjects\{52813408-3561-4705-820a-2b3b78be92ba}_0'
+Unlock (startup): mutex handle 0x07B0 '\Sessions\1\BaseNamedObjects\CDdf212806D6EmB31yE0c'
+Unlock (startup): mutex handle 0x07B4 '\Sessions\1\BaseNamedObjects\CDdf212806D6EmB31yE0c'
 Unlock (startup): closed 1 handle(s) named 'SimCity 4 Mutex'.
 Region loaded: 'New York'. Store directory: C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York
 Region loaded: 'New York'. Store directory: C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York
-City loaded: 'TuggersVille' at (6,6) established=1 neighborsSim=16B5EA94 simulator=157D9014
-RegionalDemand: 0x1010 index 0x00000 regionUse=1 baseline regional pop=10075 demand=0.0 supply=1348.0
-RegionalDemand: 0x1020 index 0x00000 regionUse=1 baseline regional pop=2689 demand=0.0 supply=11.0
-RegionalDemand: 0x1030 index 0x00000 regionUse=1 baseline regional pop=379 demand=0.0 supply=0.0
-RegionalDemand: 0x3110 index 0x00000 regionUse=1 baseline regional pop=1599 demand=0.0 supply=517.0
-RegionalDemand: 0x3120 index 0x00000 regionUse=1 baseline regional pop=235 demand=0.0 supply=310.0
-RegionalDemand: 0x3130 index 0x00000 regionUse=1 baseline regional pop=140 demand=0.0 supply=0.0
-RegionalDemand: 0x3320 index 0x00000 regionUse=1 baseline regional pop=710 demand=0.0 supply=124.0
-RegionalDemand: 0x3330 index 0x00000 regionUse=1 baseline regional pop=0 demand=0.0 supply=0.0
-RegionalDemand: 0x4100 index 0x00000 regionUse=1 baseline regional pop=0 demand=0.0 supply=0.0
-RegionalDemand: 0x4200 index 0x00000 regionUse=1 baseline regional pop=4320 demand=0.0 supply=0.0
-RegionalDemand: 0x4300 index 0x00000 regionUse=1 baseline regional pop=265 demand=0.0 supply=813.0
-RegionalDemand: 0x4400 index 0x00000 regionUse=1 baseline regional pop=0 demand=0.0 supply=0.0
-RegionalDemand: 12 region-using demand objects found.
+City loaded: 'TuggersVille' at (6,6) established=1 neighborsSim=16A7EA94 simulator=1B239014
+RegionalDemand: sum set=all; connected set not queried at load (RegionSyncDemand logs it).
+RegionalDemand: 0x1010 use=1 local supply=1348.0 target supply=10075.0 sumConnected=0 sumAll=10075
+RegionalDemand: 0x1020 use=1 local supply=11.0 target supply=2689.0 sumConnected=0 sumAll=2689
+RegionalDemand: 0x1030 use=1 local supply=0.0 target supply=379.0 sumConnected=0 sumAll=379
+RegionalDemand: 0x3110 use=1 local supply=517.0 target supply=1599.0 sumConnected=0 sumAll=1599
+RegionalDemand: 0x3120 use=1 local supply=310.0 target supply=235.0 sumConnected=0 sumAll=235
+RegionalDemand: 0x3130 use=1 local supply=0.0 target supply=140.0 sumConnected=0 sumAll=140
+RegionalDemand: 0x3320 use=1 local supply=124.0 target supply=710.0 sumConnected=0 sumAll=710
+RegionalDemand: 0x3330 use=1 local supply=0.0 target supply=0.0 sumConnected=0 sumAll=0
+RegionalDemand: 0x4100 use=1 local supply=0.0 target supply=0.0 sumConnected=0 sumAll=0
+RegionalDemand: 0x4200 use=1 local supply=0.0 target supply=4320.0 sumConnected=0 sumAll=4320
+RegionalDemand: 0x4300 use=1 local supply=813.0 target supply=265.0 sumConnected=0 sumAll=265
+RegionalDemand: 0x4400 use=1 local supply=0.0 target supply=0.0 sumConnected=0 sumAll=0
+RegionalDemand: 12 region-using groups, sum set=all.
 City load: publishing
-Capture: connection type=2 inner=(0,30) otherTile=(4,6)
-Capture: connection type=2 inner=(0,38) otherTile=(4,6)
-Publish: local share 0x1010 1348-10075=-8727 0x1020 11-2689=-2678 0x1030 0-379=-379 0x3110 517-1599=-1082 0x3120 310-235=75 0x3130 0-140=-140 0x3320 124-710=-586 0x4200 0-4320=-4320 0x4300 813-265=548
+Capture: connection type=2 inner=(0,30) cell=(-1,30) otherTile=(4,6)
+Capture: connection type=2 inner=(0,38) cell=(-1,38) otherTile=(4,6)
 Publish (city load): (6,6) 'TuggersVille' pop=1285 com=948 ind=811 connections=2 deals=0 simDate=2005-05-23 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
 City load: pulling
-Pull: record for (4,6) 'BumperVille' found (record pop=11328, snapshot pop=11471). apply=1
+Pull: record for (4,6) 'BumperVille' found (record pop=11328, snapshot pop=11328). apply=1
 Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
-Apply: population 11328 -> 11471
-Apply: industrialJobs 3817 -> 3825
-Apply: rci 0x1010 8739 (extrapolated 8739) -> 5927
-Apply: rci 0x1020 2689 (extrapolated 2689) -> 1810
-Apply: rci 0x3110 599 (extrapolated 599) -> -966
-Apply: rci 0x3120 181 (extrapolated 181) -> -161
-Apply: rci 0x3130 0 (extrapolated 0) -> -140
-Apply: rci 0x3320 0 (extrapolated 0) -> -834
-Apply: rci 0x4200 3744 (extrapolated 3744) -> 3174
-Apply: rci 0x4300 92 (extrapolated 92) -> -894
-Apply: SetBudget(1015860)
-Apply: SetIncome(6979)
-Apply: SetProduced(1, 7441.00) was 7442.00
-Apply: SetDemanded(1, 5403.00) was 5373.00
-Apply: SetDemanded(2, 12954.00) was 12802.00
-Apply: SetProduced(3, 10299.80) was 11368.17
-Apply: SetDemanded(3, 20400.00) was 22128.00
+Apply: industrialJobs 3817 -> 3822
+Apply: rci 0x1020 2689 (extrapolated 2689) -> 2810 (snapshot 2810)
+Apply: rci 0x4200 3744 (extrapolated 3744) -> 3747 (snapshot 3747)
+Apply: SetBudget(1012400)
+Apply: SetIncome(6905)
+Apply: SetDemanded(1, 5387.00) was 5373.00
+Apply: SetDemanded(2, 12875.00) was 12802.00
+Apply: SetProduced(3, 10753.20) was 11368.17
+Apply: SetDemanded(3, 22356.00) was 22128.00
 Apply: SetCostPerUnit(3, 0.01) was 0.01
-Apply: done, changed=18
-Pull: applied (4,6) changedFields=18
-RegionalDemand (pull): 0x1010 idx 0x00000 use=1 regional pop 10075 -> 7263, AddToSupplyValue(-2812); before demand=0.0 supply=1348.0
-RegionalDemand (pull): after demand=0.0 supply=1348.0
-RegionalDemand (pull): 0x1020 idx 0x00000 use=1 regional pop 2689 -> 1810, AddToSupplyValue(-879); before demand=0.0 supply=11.0
-RegionalDemand (pull): after demand=0.0 supply=11.0
-RegionalDemand (pull): 0x3110 idx 0x00000 use=1 regional pop 1599 -> 34, AddToSupplyValue(-1565); before demand=0.0 supply=517.0
-RegionalDemand (pull): after demand=0.0 supply=517.0
-RegionalDemand (pull): 0x3120 idx 0x00000 use=1 regional pop 235 -> -107, AddToSupplyValue(-342); before demand=0.0 supply=310.0
-RegionalDemand (pull): after demand=0.0 supply=310.0
-RegionalDemand (pull): 0x3130 idx 0x00000 use=1 regional pop 140 -> 0, AddToSupplyValue(-140); before demand=0.0 supply=0.0
-RegionalDemand (pull): after demand=0.0 supply=0.0
-RegionalDemand (pull): 0x3320 idx 0x00000 use=1 regional pop 710 -> -124, AddToSupplyValue(-834); before demand=0.0 supply=124.0
-RegionalDemand (pull): after demand=0.0 supply=124.0
-RegionalDemand (pull): 0x4200 idx 0x00000 use=1 regional pop 4320 -> 3750, AddToSupplyValue(-570); before demand=0.0 supply=0.0
-RegionalDemand (pull): after demand=0.0 supply=0.0
-RegionalDemand (pull): 0x4300 idx 0x00000 use=1 regional pop 265 -> -721, AddToSupplyValue(-986); before demand=0.0 supply=813.0
-RegionalDemand (pull): after demand=0.0 supply=813.0
+Apply: done, changed=10
+Pull: applied (4,6) changedFields=10
+RegionalDemand (pull): 0x1020 regional 2689 -> 2810, AddToSupplyValue(121); target before demand=0.0 supply=2689.0
+RegionalDemand (pull): 0x1020 target after demand=0.0 supply=2689.0
+RegionalDemand (pull): 0x4200 regional 4320 -> 4323, AddToSupplyValue(3); target before demand=0.0 supply=4320.0
+RegionalDemand (pull): 0x4200 target after demand=0.0 supply=4320.0
 Pull: calling MarkDealsDirty
 Pull: MarkDealsDirty returned
-Pull (city load): files=2 applied=1 changedFields=18 mirrorPending=0
+Pull (city load): files=2 applied=1 changedFields=10 mirrorPending=0
 City load: done
 SimNewDay 0x66956814 received (first this session).
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Capture: connection type=2 inner=(0,30) otherTile=(4,6)
-Capture: connection type=2 inner=(0,38) otherTile=(4,6)
-Publish: local share 0x1010 -1464-7263=-8727 0x1020 -868-1810=-2678 0x1030 0-379=-379 0x3110 -1313-34=-1347 0x3120 365--107=472 0x3320 -710--124=-586 0x4200 -570-3750=-4320 0x4300 -26--721=695
-Publish (month tick): (6,6) 'TuggersVille' pop=1285 com=1077 ind=1045 connections=2 deals=0 simDate=2005-06-02 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
-Pull: record for (4,6) 'BumperVille' found (record pop=11471, snapshot pop=11471). apply=1
+Capture: connection type=2 inner=(0,30) cell=(-1,30) otherTile=(4,6)
+Capture: connection type=2 inner=(0,38) cell=(-1,38) otherTile=(4,6)
+Publish (month tick): (6,6) 'TuggersVille' pop=1285 com=948 ind=810 connections=2 deals=0 simDate=2005-06-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=11328, snapshot pop=11328). apply=1
 Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
 Apply: done, changed=0
 Pull: applied (4,6) changedFields=0
@@ -94,385 +70,177 @@ Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0x8A0D15DA data1=2 data2=-1 data3=56 dirty=1
-RegionalDemand rebaseline: 0x1010 idx 0x00000 lastSum 7263 -> 7263; demand=0.0 supply=-1464.0
-RegionalDemand rebaseline: 0x1020 idx 0x00000 lastSum 1810 -> 1810; demand=0.0 supply=-868.0
-RegionalDemand rebaseline: 0x1030 idx 0x00000 lastSum 379 -> 379; demand=0.0 supply=0.0
-RegionalDemand rebaseline: 0x3110 idx 0x00000 lastSum 34 -> 34; demand=0.0 supply=-1313.0
-RegionalDemand rebaseline: 0x3120 idx 0x00000 lastSum -107 -> -107; demand=0.0 supply=365.0
-RegionalDemand rebaseline: 0x3130 idx 0x00000 lastSum 0 -> 0; demand=0.0 supply=-140.0
-RegionalDemand rebaseline: 0x3320 idx 0x00000 lastSum -124 -> -124; demand=0.0 supply=-710.0
-RegionalDemand rebaseline: 0x3330 idx 0x00000 lastSum 0 -> 0; demand=0.0 supply=0.0
-RegionalDemand rebaseline: 0x4100 idx 0x00000 lastSum 0 -> 0; demand=0.0 supply=0.0
-RegionalDemand rebaseline: 0x4200 idx 0x00000 lastSum 3750 -> 3750; demand=0.0 supply=-570.0
-RegionalDemand rebaseline: 0x4300 idx 0x00000 lastSum -721 -> -721; demand=0.0 supply=666.0
-RegionalDemand rebaseline: 0x4400 idx 0x00000 lastSum 0 -> 0; demand=0.0 supply=0.0
-Capture: connection type=2 inner=(0,30) otherTile=(4,6)
-Capture: connection type=2 inner=(0,38) otherTile=(4,6)
-Capture: connection type=2 inner=(0,56) otherTile=(4,6)
-Publish: local share 0x1010 -1464-7263=-8727 0x1020 -868-1810=-2678 0x1030 0-379=-379 0x3110 -1313-34=-1347 0x3120 365--107=472 0x3320 -710--124=-586 0x4200 -570-3750=-4320 0x4300 666--721=1387
-Publish (event): (6,6) 'TuggersVille' pop=1285 com=1077 ind=1045 connections=3 deals=0 simDate=2005-06-22 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Capture: connection type=2 inner=(0,30) otherTile=(4,6)
-Capture: connection type=2 inner=(0,38) otherTile=(4,6)
-Capture: connection type=2 inner=(0,56) otherTile=(4,6)
-Publish: local share 0x1010 -1464-7263=-8727 0x1020 -868-1810=-2678 0x1030 0-379=-379 0x3110 -1313-34=-1347 0x3120 365--107=472 0x3320 -710--124=-586 0x4200 -570-3750=-4320 0x4300 732--721=1453
-Publish (month tick): (6,6) 'TuggersVille' pop=1285 com=1077 ind=1045 connections=3 deals=0 simDate=2005-07-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
-Pull: record for (4,6) 'BumperVille' found (record pop=11471, snapshot pop=11830). apply=1
+Capture: connection type=2 inner=(0,30) cell=(-1,30) otherTile=(4,6)
+Capture: connection type=2 inner=(0,38) cell=(-1,38) otherTile=(4,6)
+Publish (month tick): (6,6) 'TuggersVille' pop=1285 com=948 ind=810 connections=2 deals=0 simDate=2005-07-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=11328, snapshot pop=11471). apply=1
 Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
-Apply: population 11471 -> 11830
-Apply: commercialJobs 768 -> 801
-Apply: industrialJobs 3825 -> 3841
-Apply: rci 0x1010 5927 (extrapolated 5927) -> 6042
-Apply: rci 0x1020 1810 (extrapolated 1810) -> 1932
-Apply: rci 0x3110 -966 (extrapolated -966) -> -905
-Apply: rci 0x4200 3174 (extrapolated 3174) -> 3202
-Apply: SetBudget(1019360)
-Apply: SetIncome(7024)
-Apply: SetProduced(1, 7440.00) was 7441.00
-Apply: SetDemanded(1, 5442.00) was 5403.00
-Apply: SetDemanded(2, 13082.00) was 12954.00
-Apply: SetProduced(3, 9710.83) was 10299.80
-Apply: SetDemanded(3, 22068.00) was 20400.00
+Apply: population 11328 -> 11471
+Apply: industrialJobs 3822 -> 3825
+Apply: rci 0x1010 8739 (extrapolated 8739) -> 8745 (snapshot 8745)
+Apply: rci 0x3110 599 (extrapolated 599) -> 608 (snapshot 608)
+Apply: rci 0x3120 181 (extrapolated 181) -> 203 (snapshot 203)
+Apply: rci 0x4200 3747 (extrapolated 3747) -> 3752 (snapshot 3752)
+Apply: SetBudget(1015860)
+Apply: SetIncome(6978)
+Apply: SetProduced(1, 7441.00) was 7442.00
+Apply: SetDemanded(1, 5392.00) was 5387.00
+Apply: SetDemanded(2, 12923.00) was 12875.00
+Apply: SetProduced(3, 10332.20) was 10753.20
+Apply: SetDemanded(3, 20052.00) was 22356.00
 Apply: SetCostPerUnit(3, 0.01) was 0.01
-Apply: done, changed=15
-Pull: applied (4,6) changedFields=15
-RegionalDemand (pull): 0x1010 idx 0x00000 use=1 regional pop 7263 -> 7378, AddToSupplyValue(115); before demand=0.0 supply=-1464.0
-RegionalDemand (pull): after demand=0.0 supply=-1464.0
-RegionalDemand (pull): 0x1020 idx 0x00000 use=1 regional pop 1810 -> 1932, AddToSupplyValue(122); before demand=0.0 supply=-868.0
-RegionalDemand (pull): after demand=0.0 supply=-868.0
-RegionalDemand (pull): 0x3110 idx 0x00000 use=1 regional pop 34 -> 95, AddToSupplyValue(61); before demand=0.0 supply=-1313.0
-RegionalDemand (pull): after demand=0.0 supply=-1313.0
-RegionalDemand (pull): 0x4200 idx 0x00000 use=1 regional pop 3750 -> 3778, AddToSupplyValue(28); before demand=0.0 supply=-570.0
-RegionalDemand (pull): after demand=0.0 supply=-570.0
+Apply: done, changed=14
+Pull: applied (4,6) changedFields=14
+RegionalDemand (pull): 0x1010 regional 10075 -> 10081, AddToSupplyValue(6); target before demand=0.0 supply=10075.0
+RegionalDemand (pull): 0x1010 target after demand=0.0 supply=10075.0
+RegionalDemand (pull): 0x3110 regional 1599 -> 1608, AddToSupplyValue(9); target before demand=0.0 supply=1599.0
+RegionalDemand (pull): 0x3110 target after demand=0.0 supply=1599.0
+RegionalDemand (pull): 0x3120 regional 235 -> 257, AddToSupplyValue(22); target before demand=0.0 supply=235.0
+RegionalDemand (pull): 0x3120 target after demand=0.0 supply=235.0
+RegionalDemand (pull): 0x4200 regional 4323 -> 4328, AddToSupplyValue(5); target before demand=0.0 supply=4323.0
+RegionalDemand (pull): 0x4200 target after demand=0.0 supply=4323.0
 Pull: calling MarkDealsDirty
 Pull: MarkDealsDirty returned
-Pull (month tick): files=2 applied=1 changedFields=15 mirrorPending=0
+Pull (month tick): files=2 applied=1 changedFields=14 mirrorPending=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Capture: connection type=2 inner=(0,30) otherTile=(4,6)
-Capture: connection type=2 inner=(0,38) otherTile=(4,6)
-Capture: connection type=2 inner=(0,56) otherTile=(4,6)
-Publish: local share 0x1010 -1349-7378=-8727 0x1020 -746-1932=-2678 0x1030 0-379=-379 0x3110 -1252-95=-1347 0x3120 365--107=472 0x3320 -710--124=-586 0x4200 -542-3778=-4320 0x4300 732--721=1453
-Publish (month tick): (6,6) 'TuggersVille' pop=1285 com=1077 ind=1713 connections=3 deals=0 simDate=2005-08-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
-Pull: record for (4,6) 'BumperVille' found (record pop=11830, snapshot pop=11830). apply=1
+Capture: connection type=2 inner=(0,30) cell=(-1,30) otherTile=(4,6)
+Capture: connection type=2 inner=(0,38) cell=(-1,38) otherTile=(4,6)
+Publish (month tick): (6,6) 'TuggersVille' pop=1285 com=948 ind=809 connections=2 deals=0 simDate=2005-08-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=11471, snapshot pop=11622). apply=1
 Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
-Apply: rci 0x1010 6042 (extrapolated 7042) -> 6042
-Apply: rci 0x1020 1932 (extrapolated 2932) -> 1932
-Apply: rci 0x1030 379 (extrapolated 1000) -> 379
-Apply: rci 0x3110 -905 (extrapolated 95) -> -905
-Apply: rci 0x3130 -140 (extrapolated -101) -> -140
-Apply: rci 0x3320 -834 (extrapolated 0) -> -834
-Apply: rci 0x4200 3202 (extrapolated 4118) -> 3202
-Apply: done, changed=7
-Pull: applied (4,6) changedFields=7
-Pull: calling MarkDealsDirty
-Pull: MarkDealsDirty returned
-Pull (month tick): files=2 applied=1 changedFields=7 mirrorPending=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Capture: connection type=2 inner=(0,30) otherTile=(4,6)
-Capture: connection type=2 inner=(0,38) otherTile=(4,6)
-Capture: connection type=2 inner=(0,56) otherTile=(4,6)
-Publish: local share 0x1010 -1349-7378=-8727 0x1020 -746-1932=-2678 0x1030 0-379=-379 0x3110 -1377-95=-1472 0x3120 534--107=641 0x3320 -710--124=-586 0x4200 -542-3778=-4320 0x4300 1193--721=1914
-Publish (month tick): (6,6) 'TuggersVille' pop=1284 com=1077 ind=1713 connections=3 deals=0 simDate=2005-09-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
-Pull: record for (4,6) 'BumperVille' found (record pop=11830, snapshot pop=11766). apply=1
-Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
-Apply: population 11830 -> 11766
-Apply: commercialJobs 801 -> 875
-Apply: industrialJobs 3841 -> 3866
-Apply: rci 0x1010 6042 (extrapolated 7042) -> 6042
-Apply: rci 0x1020 1932 (extrapolated 2932) -> 1932
-Apply: rci 0x1030 379 (extrapolated 1000) -> 379
-Apply: rci 0x3110 -905 (extrapolated 95) -> -905
-Apply: rci 0x3130 -140 (extrapolated -123) -> -140
-Apply: rci 0x3320 -834 (extrapolated -272) -> -834
-Apply: rci 0x4200 3202 (extrapolated 4118) -> 3220
-Apply: SetBudget(1029930)
-Apply: SetIncome(7058)
-Apply: SetDemanded(1, 5467.00) was 5442.00
-Apply: SetProduced(2, 3557.00) was 3558.00
-Apply: SetDemanded(2, 13135.00) was 13082.00
-Apply: SetProduced(3, 7970.33) was 9710.83
-Apply: SetDemanded(3, 21572.00) was 22068.00
+Apply: population 11471 -> 11622
+Apply: commercialJobs 768 -> 799
+Apply: industrialJobs 3825 -> 3830
+Apply: rci 0x1010 8745 (extrapolated 8745) -> 8850 (snapshot 8850)
+Apply: rci 0x1020 2810 (extrapolated 2810) -> 2883 (snapshot 2883)
+Apply: rci 0x4200 3752 (extrapolated 3752) -> 3763 (snapshot 3763)
+Apply: SetBudget(1019340)
+Apply: SetIncome(7011)
+Apply: SetDemanded(1, 5430.00) was 5392.00
+Apply: SetDemanded(2, 13017.00) was 12923.00
+Apply: SetProduced(3, 9690.83) was 10332.20
+Apply: SetDemanded(3, 22696.00) was 20052.00
 Apply: SetCostPerUnit(3, 0.01) was 0.01
-Apply: done, changed=18
-Pull: applied (4,6) changedFields=18
-RegionalDemand (pull): 0x4200 idx 0x00000 use=1 regional pop 3778 -> 3796, AddToSupplyValue(18); before demand=0.0 supply=-542.0
-RegionalDemand (pull): after demand=0.0 supply=-542.0
-Pull: calling MarkDealsDirty
-Pull: MarkDealsDirty returned
-Pull (month tick): files=2 applied=1 changedFields=18 mirrorPending=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Capture: connection type=2 inner=(0,30) otherTile=(4,6)
-Capture: connection type=2 inner=(0,38) otherTile=(4,6)
-Capture: connection type=2 inner=(0,56) otherTile=(4,6)
-Publish: local share 0x1010 -1349-7378=-8727 0x1020 -746-1932=-2678 0x1030 0-379=-379 0x3110 -1406-95=-1501 0x3120 552--107=659 0x3320 -710--124=-586 0x4200 -524-3796=-4320 0x4300 1575--721=2296
-Publish (month tick): (6,6) 'TuggersVille' pop=1282 com=1121 ind=2169 connections=3 deals=0 simDate=2005-10-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
-Pull: record for (4,6) 'BumperVille' found (record pop=11766, snapshot pop=11770). apply=1
-Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
-Apply: population 11766 -> 11770
-Apply: industrialJobs 3866 -> 3874
-Apply: rci 0x1010 6042 (extrapolated 7042) -> 6042
-Apply: rci 0x1020 1932 (extrapolated 2932) -> 1932
-Apply: rci 0x1030 379 (extrapolated 1000) -> 379
-Apply: rci 0x3110 -905 (extrapolated 95) -> -954
-Apply: rci 0x3120 -161 (extrapolated -161) -> 42
-Apply: rci 0x3130 -140 (extrapolated -101) -> -140
-Apply: rci 0x3320 -834 (extrapolated -514) -> -834
-Apply: rci 0x4200 3220 (extrapolated 4118) -> 3220
-Apply: SetBudget(1037040)
-Apply: SetIncome(7159)
-Apply: SetProduced(1, 7439.00) was 7440.00
-Apply: SetDemanded(1, 5478.00) was 5467.00
-Apply: SetDemanded(2, 13317.00) was 13135.00
-Apply: SetProduced(3, 6847.00) was 7970.33
-Apply: SetDemanded(3, 22572.00) was 21572.00
-Apply: SetCostPerUnit(3, 0.01) was 0.01
-Apply: done, changed=18
-Pull: applied (4,6) changedFields=18
-RegionalDemand (pull): 0x3110 idx 0x00000 use=1 regional pop 95 -> 46, AddToSupplyValue(-49); before demand=0.0 supply=-1406.0
-RegionalDemand (pull): after demand=0.0 supply=-1406.0
-RegionalDemand (pull): 0x3120 idx 0x00000 use=1 regional pop -107 -> 96, AddToSupplyValue(203); before demand=0.0 supply=552.0
-RegionalDemand (pull): after demand=0.0 supply=552.0
-Pull: calling MarkDealsDirty
-Pull: MarkDealsDirty returned
-Pull (month tick): files=2 applied=1 changedFields=18 mirrorPending=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Capture: connection type=2 inner=(0,30) otherTile=(4,6)
-Capture: connection type=2 inner=(0,38) otherTile=(4,6)
-Capture: connection type=2 inner=(0,56) otherTile=(4,6)
-Publish: local share 0x1010 -1349-7378=-8727 0x1020 -746-1932=-2678 0x1030 0-379=-379 0x3110 -1455-46=-1501 0x3120 755-96=659 0x3320 -710--124=-586 0x4200 -524-3796=-4320 0x4300 1954--721=2675
-Publish (month tick): (6,6) 'TuggersVille' pop=1281 com=1111 ind=2566 connections=3 deals=0 simDate=2005-11-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
-Pull: record for (4,6) 'BumperVille' found (record pop=11770, snapshot pop=11761). apply=1
-Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
-Apply: population 11770 -> 11761
-Apply: commercialJobs 875 -> 1029
-Apply: SetBudget(1040640)
-Apply: SetIncome(7160)
-Apply: SetProduced(1, 7438.00) was 7439.00
-Apply: SetProduced(3, 6439.33) was 6847.00
-Apply: SetDemanded(3, 21392.00) was 22572.00
-Apply: SetCostPerUnit(3, 0.01) was 0.01
-Apply: done, changed=8
-Pull: applied (4,6) changedFields=8
-Pull: calling MarkDealsDirty
-Pull: MarkDealsDirty returned
-Pull (month tick): files=2 applied=1 changedFields=8 mirrorPending=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0x8A0D15DA data1=4 data2=-1 data3=55 dirty=1
-RegionalDemand rebaseline: 0x1010 idx 0x00000 lastSum 7378 -> 8378; demand=0.0 supply=-1349.0
-RegionalDemand rebaseline: 0x1020 idx 0x00000 lastSum 1932 -> 2932; demand=0.0 supply=-746.0
-RegionalDemand rebaseline: 0x1030 idx 0x00000 lastSum 379 -> 1000; demand=0.0 supply=0.0
-RegionalDemand rebaseline: 0x3110 idx 0x00000 lastSum 46 -> 46; demand=0.0 supply=-1455.0
-RegionalDemand rebaseline: 0x3120 idx 0x00000 lastSum 96 -> 96; demand=0.0 supply=755.0
-RegionalDemand rebaseline: 0x3130 idx 0x00000 lastSum 0 -> 17; demand=0.0 supply=-140.0
-RegionalDemand rebaseline: 0x3320 idx 0x00000 lastSum -124 -> 438; demand=0.0 supply=-710.0
-RegionalDemand rebaseline: 0x3330 idx 0x00000 lastSum 0 -> 0; demand=0.0 supply=0.0
-RegionalDemand rebaseline: 0x4100 idx 0x00000 lastSum 0 -> 0; demand=0.0 supply=0.0
-RegionalDemand rebaseline: 0x4200 idx 0x00000 lastSum 3796 -> 4694; demand=0.0 supply=-524.0
-RegionalDemand rebaseline: 0x4300 idx 0x00000 lastSum -721 -> -721; demand=0.0 supply=1846.0
-RegionalDemand rebaseline: 0x4400 idx 0x00000 lastSum 0 -> 0; demand=0.0 supply=0.0
-Capture: connection type=2 inner=(0,30) otherTile=(4,6)
-Capture: connection type=2 inner=(0,38) otherTile=(4,6)
-Capture: connection type=2 inner=(0,56) otherTile=(4,6)
-Capture: connection type=4 inner=(0,55) otherTile=(4,6)
-Publish: local share 0x1010 -1349-8378=-9727 0x1020 -746-2932=-3678 0x1030 0-1000=-1000 0x3110 -1455-46=-1501 0x3120 755-96=659 0x3130 -140-17=-157 0x3320 -710-438=-1148 0x4200 -524-4694=-5218 0x4300 1846--721=2567
-Publish (event): (6,6) 'TuggersVille' pop=1282 com=1110 ind=2920 connections=4 deals=0 simDate=2005-11-14 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Capture: connection type=2 inner=(0,30) otherTile=(4,6)
-Capture: connection type=2 inner=(0,38) otherTile=(4,6)
-Capture: connection type=2 inner=(0,56) otherTile=(4,6)
-Capture: connection type=4 inner=(0,55) otherTile=(4,6)
-Publish: local share 0x1010 -1349-8378=-9727 0x1020 -746-2932=-3678 0x1030 0-1000=-1000 0x3110 -1455-46=-1501 0x3120 755-96=659 0x3130 -140-17=-157 0x3320 -710-438=-1148 0x4200 -524-4694=-5218 0x4300 1924--721=2645
-Publish (month tick): (6,6) 'TuggersVille' pop=1282 com=1110 ind=2920 connections=4 deals=0 simDate=2005-12-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
-Pull: record for (4,6) 'BumperVille' found (record pop=11761, snapshot pop=11761). apply=1
-Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
-Apply: commercialJobs 1029 -> 1028
-Apply: industrialJobs 3874 -> 3879
-Apply: rci 0x1010 6042 (extrapolated 8042) -> 5042
-Apply: rci 0x1020 1932 (extrapolated 2957) -> 932
-Apply: rci 0x1030 379 (extrapolated 1000) -> -621
-Apply: rci 0x3110 -954 (extrapolated -447) -> -1143
-Apply: rci 0x3120 42 (extrapolated 1000) -> 78
-Apply: rci 0x3130 -140 (extrapolated -84) -> -140
-Apply: rci 0x3320 -834 (extrapolated 0) -> -1571
-Apply: rci 0x4200 3220 (extrapolated 4118) -> 3225
-Apply: SetBudget(1044250)
-Apply: SetIncome(7163)
-Apply: SetDemanded(1, 5485.00) was 5478.00
-Apply: SetDemanded(2, 13366.00) was 13317.00
-Apply: SetProduced(3, 5902.00) was 6439.33
-Apply: SetDemanded(3, 22948.00) was 21392.00
-Apply: SetCostPerUnit(3, 0.01) was 0.01
-Apply: done, changed=17
-Pull: applied (4,6) changedFields=17
-RegionalDemand (pull): 0x1010 idx 0x00000 use=1 regional pop 8378 -> 6378, AddToSupplyValue(-2000); before demand=0.0 supply=-1349.0
-RegionalDemand (pull): after demand=0.0 supply=-1349.0
-RegionalDemand (pull): 0x1020 idx 0x00000 use=1 regional pop 2932 -> 932, AddToSupplyValue(-2000); before demand=0.0 supply=-746.0
-RegionalDemand (pull): after demand=0.0 supply=-746.0
-RegionalDemand (pull): 0x1030 idx 0x00000 use=1 regional pop 1000 -> -621, AddToSupplyValue(-1621); before demand=0.0 supply=0.0
-RegionalDemand (pull): after demand=0.0 supply=0.0
-RegionalDemand (pull): 0x3110 idx 0x00000 use=1 regional pop 46 -> -143, AddToSupplyValue(-189); before demand=0.0 supply=-1455.0
-RegionalDemand (pull): after demand=0.0 supply=-1455.0
-RegionalDemand (pull): 0x3120 idx 0x00000 use=1 regional pop 96 -> 132, AddToSupplyValue(36); before demand=0.0 supply=755.0
-RegionalDemand (pull): after demand=0.0 supply=755.0
-RegionalDemand (pull): 0x3130 idx 0x00000 use=1 regional pop 17 -> 0, AddToSupplyValue(-17); before demand=0.0 supply=-140.0
-RegionalDemand (pull): after demand=0.0 supply=-140.0
-RegionalDemand (pull): 0x3320 idx 0x00000 use=1 regional pop 438 -> -861, AddToSupplyValue(-1299); before demand=0.0 supply=-710.0
-RegionalDemand (pull): after demand=0.0 supply=-710.0
-RegionalDemand (pull): 0x4200 idx 0x00000 use=1 regional pop 4694 -> 3801, AddToSupplyValue(-893); before demand=0.0 supply=-524.0
-RegionalDemand (pull): after demand=0.0 supply=-524.0
-Pull: calling MarkDealsDirty
-Pull: MarkDealsDirty returned
-Pull (month tick): files=2 applied=1 changedFields=17 mirrorPending=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=2 data2=0 data3=0 dirty=1
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Capture: connection type=2 inner=(0,30) otherTile=(4,6)
-Capture: connection type=2 inner=(0,38) otherTile=(4,6)
-Capture: connection type=2 inner=(0,56) otherTile=(4,6)
-Capture: connection type=4 inner=(0,55) otherTile=(4,6)
-Capture: deal type=0x4773FFE1 otherTile=(4,6) amount=1000 flags=0x2 expiresIn=365
-Publish: local share 0x1010 -3280-6378=-9658 0x1020 -2746-932=-3678 0x1030 -1621--621=-1000 0x3110 -1644--143=-1501 0x3120 791-132=659 0x3320 -2009--861=-1148 0x4200 -1417-3801=-5218 0x4300 1799--721=2520
-Publish (event): (6,6) 'TuggersVille' pop=1282 com=1110 ind=2864 connections=4 deals=1 simDate=2005-12-11 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Capture: connection type=2 inner=(0,30) otherTile=(4,6)
-Capture: connection type=2 inner=(0,38) otherTile=(4,6)
-Capture: connection type=2 inner=(0,56) otherTile=(4,6)
-Capture: connection type=4 inner=(0,55) otherTile=(4,6)
-Capture: deal type=0x4773FFE1 otherTile=(4,6) amount=1000 flags=0x2 expiresIn=343
-Publish: local share 0x1010 -3280-6378=-9658 0x1020 -2746-932=-3678 0x1030 -1621--621=-1000 0x3110 -1644--143=-1501 0x3120 791-132=659 0x3320 -2009--861=-1148 0x4200 -1417-3801=-5218 0x4300 1821--721=2542
-Publish (month tick): (6,6) 'TuggersVille' pop=1282 com=1110 ind=2864 connections=4 deals=1 simDate=2006-01-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
-Pull: record for (4,6) 'BumperVille' found (record pop=11761, snapshot pop=11747). apply=1
-Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
-Apply: population 11761 -> 11747
-Apply: commercialJobs 1028 -> 958
-Apply: rci 0x1020 932 (extrapolated 1932) -> 932
-Apply: rci 0x1030 -621 (extrapolated 379) -> -621
-Apply: rci 0x3110 -1143 (extrapolated -755) -> -1651
-Apply: rci 0x3120 78 (extrapolated 78) -> 496
-Apply: rci 0x3320 -1571 (extrapolated -571) -> -1571
-Apply: rci 0x4200 3225 (extrapolated 4118) -> 3225
-Apply: SetBudget(1066430)
-Apply: SetIncome(7315)
-Apply: SetProduced(1, 7435.00) was 7438.00
-Apply: SetDemanded(1, 5499.00) was 5485.00
-Apply: SetProduced(2, 3555.00) was 3557.00
-Apply: SetDemanded(2, 13620.00) was 13366.00
-Apply: SetProduced(3, 3183.00) was 5902.00
-Apply: SetDemanded(3, 21744.00) was 22948.00
-Apply: SetCostPerUnit(3, 0.02) was 0.01
-Apply: done, changed=17
-Pull: applied (4,6) changedFields=17
-RegionalDemand (pull): 0x3110 idx 0x00000 use=1 regional pop -143 -> -651, AddToSupplyValue(-508); before demand=0.0 supply=-1644.0
-RegionalDemand (pull): after demand=0.0 supply=-1644.0
-RegionalDemand (pull): 0x3120 idx 0x00000 use=1 regional pop 132 -> 550, AddToSupplyValue(418); before demand=0.0 supply=791.0
-RegionalDemand (pull): after demand=0.0 supply=791.0
-Pull: calling MarkDealsDirty
-Pull: MarkDealsDirty returned
-Pull (month tick): files=2 applied=1 changedFields=17 mirrorPending=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
-Capture: connection type=2 inner=(0,30) otherTile=(4,6)
-Capture: connection type=2 inner=(0,38) otherTile=(4,6)
-Capture: connection type=2 inner=(0,56) otherTile=(4,6)
-Capture: connection type=4 inner=(0,55) otherTile=(4,6)
-Capture: deal type=0x4773FFE1 otherTile=(4,6) amount=1000 flags=0x2 expiresIn=312
-Publish: local share 0x1010 -3280-6378=-9658 0x1020 -2746-932=-3678 0x1030 -1621--621=-1000 0x3110 -2152--651=-1501 0x3120 1209-550=659 0x3320 -2009--861=-1148 0x4200 -1417-3801=-5218 0x4300 1947--721=2668
-Publish (month tick): (6,6) 'TuggersVille' pop=1351 com=1107 ind=2760 connections=4 deals=1 simDate=2006-02-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
-Pull: record for (4,6) 'BumperVille' found (record pop=11747, snapshot pop=11749). apply=1
-Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
-Apply: population 11747 -> 11749
-Apply: commercialJobs 958 -> 960
-Apply: industrialJobs 3879 -> 3880
-Apply: rci 0x1020 932 (extrapolated 1932) -> 932
-Apply: rci 0x1030 -621 (extrapolated 379) -> -621
-Apply: rci 0x3110 -1651 (extrapolated -653) -> -1651
-Apply: rci 0x3130 -140 (extrapolated -72) -> -140
-Apply: rci 0x3320 -1571 (extrapolated -571) -> -1571
-Apply: rci 0x4200 3225 (extrapolated 4118) -> 3225
-Apply: SetBudget(1070150)
-Apply: SetProduced(3, 2755.08) was 3183.00
-Apply: SetDemanded(3, 22636.00) was 21744.00
-Apply: SetCostPerUnit(3, 0.02) was 0.02
 Apply: done, changed=13
 Pull: applied (4,6) changedFields=13
+RegionalDemand (pull): 0x1010 regional 10081 -> 10186, AddToSupplyValue(105); target before demand=0.0 supply=10081.0
+RegionalDemand (pull): 0x1010 target after demand=0.0 supply=10081.0
+RegionalDemand (pull): 0x1020 regional 2810 -> 2883, AddToSupplyValue(73); target before demand=0.0 supply=2810.0
+RegionalDemand (pull): 0x1020 target after demand=0.0 supply=2810.0
+RegionalDemand (pull): 0x4200 regional 4328 -> 4339, AddToSupplyValue(11); target before demand=0.0 supply=4328.0
+RegionalDemand (pull): 0x4200 target after demand=0.0 supply=4328.0
 Pull: calling MarkDealsDirty
 Pull: MarkDealsDirty returned
 Pull (month tick): files=2 applied=1 changedFields=13 mirrorPending=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0x8A0D15DA data1=4 data2=-1 data3=60 dirty=1
+Capture: connection type=2 inner=(0,30) cell=(-1,30) otherTile=(4,6)
+Capture: connection type=2 inner=(0,38) cell=(-1,38) otherTile=(4,6)
+Capture: connection type=4 inner=(0,60) cell=(-1,60) otherTile=(4,6)
+Publish (event): (6,6) 'TuggersVille' pop=1285 com=946 ind=809 connections=3 deals=0 simDate=2005-08-02 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=0 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Capture: connection type=2 inner=(0,30) cell=(-1,30) otherTile=(4,6)
+Capture: connection type=2 inner=(0,38) cell=(-1,38) otherTile=(4,6)
+Capture: connection type=4 inner=(0,60) cell=(-1,60) otherTile=(4,6)
+Capture: deal type=0x4773FFE1 otherTile=(4,6) amount=1000 flags=0x2 expiresIn=340
+Publish (month tick): (6,6) 'TuggersVille' pop=1283 com=946 ind=809 connections=3 deals=1 simDate=2005-09-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=11622, snapshot pop=11765). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
+Apply: population 11622 -> 11765
+Apply: commercialJobs 799 -> 904
+Apply: industrialJobs 3830 -> 3854
+Apply: rci 0x1010 8850 (extrapolated 9612) -> 8909 (snapshot 8909)
+Apply: rci 0x1020 2883 (extrapolated 2957) -> 2927 (snapshot 2927)
+Apply: rci 0x1030 379 (extrapolated 1000) -> 379 (snapshot 379)
+Apply: rci 0x3110 608 (extrapolated 608) -> 669 (snapshot 669)
+Apply: rci 0x3120 203 (extrapolated 203) -> 235 (snapshot 235)
+Apply: rci 0x4200 3763 (extrapolated 4118) -> 3776 (snapshot 3776)
+Apply: SetBudget(1026380)
+Apply: SetIncome(7023)
+Apply: SetProduced(1, 7440.00) was 7441.00
+Apply: SetDemanded(1, 5452.00) was 5430.00
+Apply: SetProduced(2, 3557.00) was 3558.00
+Apply: SetDemanded(2, 13148.00) was 13017.00
+Apply: SetProduced(3, 8533.17) was 9690.83
+Apply: SetDemanded(3, 22268.00) was 22696.00
+Apply: SetCostPerUnit(3, 0.01) was 0.01
+Apply: done, changed=18
+Pull: applied (4,6) changedFields=18
+RegionalDemand (pull): 0x1010 regional 10948 -> 10245, AddToSupplyValue(-703); target before demand=0.0 supply=10948.0
+RegionalDemand (pull): 0x1010 target after demand=0.0 supply=10948.0
+RegionalDemand (pull): 0x1020 regional 2957 -> 2927, AddToSupplyValue(-30); target before demand=0.0 supply=2957.0
+RegionalDemand (pull): 0x1020 target after demand=0.0 supply=2957.0
+RegionalDemand (pull): 0x1030 regional 1000 -> 379, AddToSupplyValue(-621); target before demand=0.0 supply=1000.0
+RegionalDemand (pull): 0x1030 target after demand=0.0 supply=1000.0
+RegionalDemand (pull): 0x3110 regional 1608 -> 1669, AddToSupplyValue(61); target before demand=0.0 supply=1608.0
+RegionalDemand (pull): 0x3110 target after demand=0.0 supply=1608.0
+RegionalDemand (pull): 0x3120 regional 257 -> 289, AddToSupplyValue(32); target before demand=0.0 supply=257.0
+RegionalDemand (pull): 0x3120 target after demand=0.0 supply=257.0
+RegionalDemand (pull): 0x4200 regional 4694 -> 4352, AddToSupplyValue(-342); target before demand=0.0 supply=4694.0
+RegionalDemand (pull): 0x4200 target after demand=0.0 supply=4694.0
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=18 mirrorPending=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Capture: connection type=2 inner=(0,30) cell=(-1,30) otherTile=(4,6)
+Capture: connection type=2 inner=(0,38) cell=(-1,38) otherTile=(4,6)
+Capture: connection type=4 inner=(0,60) cell=(-1,60) otherTile=(4,6)
+Capture: deal type=0x4773FFE1 otherTile=(4,6) amount=1000 flags=0x2 expiresIn=310
+Publish (month tick): (6,6) 'TuggersVille' pop=1282 com=962 ind=809 connections=3 deals=1 simDate=2005-10-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\6_6.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=11765, snapshot pop=11853). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
+Apply: population 11765 -> 11853
+Apply: industrialJobs 3854 -> 3866
+Apply: rci 0x1010 8909 (extrapolated 9612) -> 8984 (snapshot 8984)
+Apply: rci 0x1020 2927 (extrapolated 2957) -> 2935 (snapshot 2935)
+Apply: rci 0x1030 379 (extrapolated 1000) -> 379 (snapshot 379)
+Apply: rci 0x3110 669 (extrapolated 687) -> 669 (snapshot 669)
+Apply: rci 0x4200 3776 (extrapolated 4118) -> 3789 (snapshot 3789)
+Apply: SetBudget(1029910)
+Apply: SetIncome(7081)
+Apply: SetProduced(1, 7439.00) was 7440.00
+Apply: SetDemanded(1, 5473.00) was 5452.00
+Apply: SetCostPerUnit(1, 0.04) was 0.04
+Apply: SetDemanded(2, 13230.00) was 13148.00
+Apply: SetProduced(3, 7956.67) was 8533.17
+Apply: SetDemanded(3, 22100.00) was 22268.00
+Apply: SetCostPerUnit(3, 0.01) was 0.01
+Apply: done, changed=16
+Pull: applied (4,6) changedFields=16
+RegionalDemand (pull): 0x1010 regional 10948 -> 10320, AddToSupplyValue(-628); target before demand=0.0 supply=10948.0
+RegionalDemand (pull): 0x1010 target after demand=0.0 supply=10948.0
+RegionalDemand (pull): 0x1020 regional 2957 -> 2935, AddToSupplyValue(-22); target before demand=0.0 supply=2957.0
+RegionalDemand (pull): 0x1020 target after demand=0.0 supply=2957.0
+RegionalDemand (pull): 0x1030 regional 1000 -> 379, AddToSupplyValue(-621); target before demand=0.0 supply=1000.0
+RegionalDemand (pull): 0x1030 target after demand=0.0 supply=1000.0
+RegionalDemand (pull): 0x3110 regional 1687 -> 1669, AddToSupplyValue(-18); target before demand=0.0 supply=1687.0
+RegionalDemand (pull): 0x3110 target after demand=0.0 supply=1687.0
+RegionalDemand (pull): 0x4200 regional 4694 -> 4365, AddToSupplyValue(-329); target before demand=0.0 supply=4694.0
+RegionalDemand (pull): 0x4200 target after demand=0.0 supply=4694.0
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=2 applied=1 changedFields=16 mirrorPending=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
