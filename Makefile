@@ -38,6 +38,8 @@ SRCS = \
 	src/SyncSettings.cpp \
 	src/InstanceMutex.cpp \
 	src/WriterIdentity.cpp \
+	src/SaveLock.cpp \
+	src/SaveHook641.cpp \
 	src/RegionSyncDllDirector.cpp \
 	$(GZCOM)/src/cRZBaseString.cpp \
 	$(GZCOM)/src/cRZBaseUnknown.cpp \

@@ -111,6 +111,8 @@ namespace regionsync
 				layEdgeNetwork = ParseBool(sync->get_value("LayEdgeNetwork", ""), layEdgeNetwork);
 				syncRemovals = ParseBool(sync->get_value("SyncRemovals", ""), syncRemovals);
 				checkWriterLiveness = ParseBool(sync->get_value("CheckWriterLiveness", ""), checkWriterLiveness);
+				saveLock = ParseBool(sync->get_value("SaveLock", ""), saveLock);
+				saveLockTimeoutMs = (std::max)(0, ParseInt(sync->get_value("SaveLockTimeoutMs", ""), saveLockTimeoutMs));
 			}
 
 			auto logging = reader.get_section_optional("Logging");

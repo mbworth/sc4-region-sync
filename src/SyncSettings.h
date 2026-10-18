@@ -80,6 +80,12 @@ namespace regionsync
 		// (the Exit button sends no shutdown). Same machine only.
 		bool checkWriterLiveness = true;
 
+		// Hold a region-wide named mutex across every save (docs/PLAN-SAVE-LOCK.md).
+		// Cooperative: an instance with 0 does not take it.
+		bool saveLock = true;
+		// Longest a save waits for the peer; then it goes ahead unlocked. 0 = never wait.
+		int saveLockTimeoutMs = 5000;
+
 		// Where snapshots live. Empty means "<DLL folder>\RegionSync\<region dir>".
 		// Both game instances share the install, so the default is already a
 		// shared location. Set it explicitly if the instances use separate

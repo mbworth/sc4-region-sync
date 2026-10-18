@@ -32,6 +32,8 @@
 #include "RegionalCity641.h"
 #include "NeighborsSim641.h"
 #include "WriterIdentity.h"
+#include "SaveLock.h"
+#include "SaveHook641.h"
 
 #include "cIGZCheatCodeManager.h"
 #include "cIGZCOM.h"
@@ -68,6 +70,7 @@
 #include <cmath>
 #include <cwctype>
 #include <filesystem>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -112,6 +115,8 @@ static constexpr uint32_t kCheatFakeNeighborID = 0x7A3C9E5C;
 static constexpr uint32_t kCheatMirrorID = 0x1FDCE6B8;
 // Same: /dev/urandom, outside the 0x7A3C9E5x block, checked against this repo only.
 static constexpr uint32_t kCheatOfferID = 0x343F73E3;
+// Outside the 0x7A3C9E5x block; no hit in this repo or on GitHub code search (owner 0xC0000054).
+static constexpr uint32_t kCheatHoldLockID = 0x4C9D27B1;
 
 static constexpr std::string_view kCheatDump = "RegionSyncDump";
 static constexpr std::string_view kCheatPublish = "RegionSyncPublish";
@@ -126,6 +131,7 @@ static constexpr std::string_view kCheatDemand = "RegionSyncDemand";
 static constexpr std::string_view kCheatFakeNeighbor = "RegionSyncFakeNeighbor";
 static constexpr std::string_view kCheatMirror = "RegionSyncMirror";
 static constexpr std::string_view kCheatOffer = "RegionSyncOffer";
+static constexpr std::string_view kCheatHoldLock = "RegionSyncHoldLock";
 
 namespace
 {
@@ -214,6 +220,11 @@ public:
 		logger.Flush();
 	}
 
+	~RegionSyncDllDirector()
+	{
+		regionsync::savehook641::Uninstall(false);
+	}
+
 	uint32_t GetDirectorID() const
 	{
 		return kRegionSyncDllDirector;
@@ -257,6 +268,23 @@ public:
 			pCheatCodeManager = pSC4App->GetCheatCodeManager();
 		}
 
+		bool hookInstalled = false;
+		if (settings.saveLock && pSC4App)
+		{
+			try
+			{
+				hookInstalled = regionsync::savehook641::Install(pSC4App, LockTimeoutMs());
+			}
+			catch (const std::exception& e)
+			{
+				logger.WriteLineFormatted(LogLevel::Error, "SaveHook: install threw: %s", e.what());
+			}
+			catch (...)
+			{
+				logger.WriteLine(LogLevel::Error, "SaveHook: install threw a non-standard exception.");
+			}
+		}
+
 		cIGZMessageServer2Ptr pMS2;
 		if (!pMS2)
 		{
@@ -290,7 +318,7 @@ public:
 
 		logger.WriteLineFormatted(
 			LogLevel::Info,
-			"Initialized. instanceId=%u enabled=%d publishEveryMonths=%d pullEveryMonths=%d autoSaveEveryMonths=%d syncConnections=%d syncDeals=%d layEdgeNetwork=%d syncRemovals=%d",
+			"Initialized. instanceId=%u enabled=%d publishEveryMonths=%d pullEveryMonths=%d autoSaveEveryMonths=%d syncConnections=%d syncDeals=%d layEdgeNetwork=%d syncRemovals=%d saveLock=%d saveLockTimeoutMs=%d hook=%d",
 			instanceId,
 			settings.enabled ? 1 : 0,
 			settings.publishEveryMonths,
@@ -299,7 +327,10 @@ public:
 			settings.syncConnections ? 1 : 0,
 			settings.syncDeals ? 1 : 0,
 			settings.layEdgeNetwork ? 1 : 0,
-			settings.syncRemovals ? 1 : 0);
+			settings.syncRemovals ? 1 : 0,
+			settings.saveLock ? 1 : 0,
+			settings.saveLockTimeoutMs,
+			hookInstalled ? 1 : 0);
 
 		ownWriter = regionsync::writer::Current();
 		logger.WriteLineFormatted(LogLevel::Info, "Writer: host=%s pid=%u start=%llu checkWriterLiveness=%d",
@@ -312,6 +343,26 @@ public:
 			Unlock("startup");
 		}
 
+		return true;
+	}
+
+	bool PreAppShutdown()
+	{
+		// The Exit button sends no PostCityShutdown; release the hold here.
+		try
+		{
+			regionsync::savehook641::Uninstall(true);
+			if (holdLock)
+			{
+				holdLock = false;
+				Logger::GetInstance().WriteLine(LogLevel::Info, "HoldLock: released at app shutdown.");
+			}
+			regionsync::savelock::Close();
+			Logger::GetInstance().Flush();
+		}
+		catch (...)
+		{
+		}
 		return true;
 	}
 
@@ -336,10 +387,32 @@ public:
 			}
 			break;
 		case kSC4MessagePostRegionInit:
-			PostRegionInit();
+			try
+			{
+				PostRegionInit();
+			}
+			catch (const std::exception& e)
+			{
+				Logger::GetInstance().WriteLineFormatted(LogLevel::Error, "PostRegionInit threw: %s", e.what());
+			}
+			catch (...)
+			{
+				Logger::GetInstance().WriteLine(LogLevel::Error, "PostRegionInit threw a non-standard exception.");
+			}
 			break;
 		case kSC4MessagePreRegionShutdown:
-			PreRegionShutdown();
+			try
+			{
+				PreRegionShutdown();
+			}
+			catch (const std::exception& e)
+			{
+				Logger::GetInstance().WriteLineFormatted(LogLevel::Error, "PreRegionShutdown threw: %s", e.what());
+			}
+			catch (...)
+			{
+				Logger::GetInstance().WriteLine(LogLevel::Error, "PreRegionShutdown threw a non-standard exception.");
+			}
 			break;
 		case kSC4MessagePostCityInit:
 			PostCityInit(pStandardMsg);
@@ -348,7 +421,18 @@ public:
 			PostCityInitComplete();
 			break;
 		case kSC4MessagePostCityShutdown:
-			PostCityShutdown();
+			try
+			{
+				PostCityShutdown();
+			}
+			catch (const std::exception& e)
+			{
+				Logger::GetInstance().WriteLineFormatted(LogLevel::Error, "PostCityShutdown threw: %s", e.what());
+			}
+			catch (...)
+			{
+				Logger::GetInstance().WriteLine(LogLevel::Error, "PostCityShutdown threw a non-standard exception.");
+			}
 			break;
 		case kSC4MessageSimNewMonth:
 			OnNewMonth();
@@ -419,11 +503,18 @@ private:
 				"Region loaded: '%s'. Store directory: %s",
 				regionDirectoryName.c_str(),
 				storeDirectory.string().c_str());
+
+			if (settings.saveLock)
+			{
+				regionsync::savelock::Open(regionDirectoryName);
+			}
 		}
 	}
 
 	void PreRegionShutdown()
 	{
+		holdLock = false;
+		regionsync::savelock::Close();
 		pRegion = nullptr;
 		regionDirectoryName.clear();
 	}
@@ -460,6 +551,7 @@ private:
 			pCheatCodeManager->RegisterCheatCode(kCheatFakeNeighborID, cRZBaseString(kCheatFakeNeighbor));
 			pCheatCodeManager->RegisterCheatCode(kCheatMirrorID, cRZBaseString(kCheatMirror));
 			pCheatCodeManager->RegisterCheatCode(kCheatOfferID, cRZBaseString(kCheatOffer));
+			pCheatCodeManager->RegisterCheatCode(kCheatHoldLockID, cRZBaseString(kCheatHoldLock));
 			pCheatCodeManager->AddNotification2(this, 0);
 		}
 	}
@@ -736,6 +828,13 @@ private:
 			}
 		}
 
+		if (holdLock)
+		{
+			holdLock = false;
+			regionsync::savelock::Release("hold");
+			Logger::GetInstance().WriteLine(LogLevel::Info, "HoldLock: released at city shutdown.");
+		}
+
 		pCity = nullptr;
 		pOwnRegionalCity = nullptr;
 		pNeighborsSim = nullptr;
@@ -758,6 +857,7 @@ private:
 			pCheatCodeManager->UnregisterCheatCode(kCheatFakeNeighborID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatMirrorID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatOfferID);
+			pCheatCodeManager->UnregisterCheatCode(kCheatHoldLockID);
 			pCheatCodeManager->RemoveNotification2(this, 0);
 		}
 	}
@@ -1269,6 +1369,12 @@ private:
 			if (p && p->GetEstablished()) adjacent.push_back(p);
 		}
 
+		std::optional<regionsync::savelock::Guard> lock;
+		if (settings.saveLock)
+		{
+			lock.emplace(LockTimeoutMs(), "reload");
+		}
+
 		int reloaded = 0;
 		for (cISC4RegionalCity* pAdj : adjacent)
 		{
@@ -1299,6 +1405,7 @@ private:
 				reloaded++;
 			}
 		}
+		lock.reset();
 
 		if (reloaded > 0)
 		{
@@ -1317,6 +1424,29 @@ private:
 			const bool ok = pSC4App->RequestSaveCity(false, true);
 			Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "Save (%s): requested, ok=%d", reason, ok ? 1 : 0);
 		}
+	}
+
+	uint32_t LockTimeoutMs() const { return static_cast<uint32_t>(settings.saveLockTimeoutMs); }
+
+	// Toggle: hold the save lock until the next use or city shutdown, so the
+	// peer's saves can be watched waiting. Diagnostic only.
+	void HoldLock()
+	{
+		Logger& logger = Logger::GetInstance();
+		if (holdLock)
+		{
+			holdLock = false;
+			regionsync::savelock::Release("hold");
+			logger.WriteLine(LogLevel::Info, "HoldLock: off.");
+			return;
+		}
+		if (!settings.saveLock)
+		{
+			logger.WriteLine(LogLevel::Info, "HoldLock: SaveLock=0, nothing to hold.");
+			return;
+		}
+		holdLock = regionsync::savelock::Acquire(LockTimeoutMs(), "hold").held;
+		logger.WriteLine(LogLevel::Info, holdLock ? "HoldLock: on." : "HoldLock: not taken.");
 	}
 
 	// Dump: write everything we can see about the region and this tile's
@@ -1788,6 +1918,7 @@ private:
 		case kCheatFakeNeighborID: FakeNeighbor(); break;
 		case kCheatMirrorID: MirrorAll(); break;
 		case kCheatOfferID: OfferDiagnostic(); break;
+		case kCheatHoldLockID: HoldLock(); break;
 		}
 	}
 
@@ -1829,6 +1960,7 @@ private:
 	bool connectionsReady = false;   // 0x6AC284F3 arrived this city session
 	bool inPull = false;
 	bool sawNewDay = false;
+	bool holdLock = false;   // RegionSyncHoldLock taken
 };
 
 cRZCOMDllDirector* RZGetCOMDllDirector()

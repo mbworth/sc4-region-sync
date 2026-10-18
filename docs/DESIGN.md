@@ -41,7 +41,7 @@ Phase 2 replaces the file poll with a named pipe or shared memory and a tiny coo
 
 Saving a city writes this tile's `.sc4` file and also writes updated connection and deal info into the adjacent tiles' files. With two instances saving against each other that is a corruption risk.
 
-Phase 1 sidesteps it: autosave is off by default and the snapshot store carries the cross-tile data instead of the save files. The player saves each instance by hand as usual. The plan for making saves safe is a lock file in the store directory: an instance takes the lock before `SaveCity`, releases after, and the other instance delays its own save until the lock is free. That is a Phase 2 item. See OPEN-QUESTIONS.md, Q4, for the open question of whether the neighbor-file write on save can be suppressed entirely while our store is active.
+Phase 1 sidesteps it: autosave is off by default and the snapshot store carries the cross-tile data instead of the save files. The player saves each instance by hand as usual. Saves are serialized by a region-wide named mutex (`Local\SC4RegionSync.SaveLock.<region>`) held across the game's whole save routine: the plugin wraps App vtable slot 15 (`SaveCity(path, fast)`, which every save path reaches), so a save waits for the other instance's save or reload to finish, up to `SaveLockTimeoutMs`, then goes ahead unlocked and logs it. The kernel abandons the mutex if an instance dies, so there is no stale lock. See PLAN-SAVE-LOCK.md. See OPEN-QUESTIONS.md, Q4, for the open question of whether the neighbor-file write on save can be suppressed entirely while our store is active.
 
 ## What is still a guess
 

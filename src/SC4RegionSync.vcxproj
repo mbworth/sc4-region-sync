@@ -16,6 +16,8 @@
     <ClInclude Include="NeighborsSim641.h" />
     <ClInclude Include="NeighborSnapshot.h" />
     <ClInclude Include="RegionalCityBridge.h" />
+    <ClInclude Include="SaveHook641.h" />
+    <ClInclude Include="SaveLock.h" />
     <ClInclude Include="SyncSettings.h" />
     <ClInclude Include="WriterIdentity.h" />
     <ClInclude Include="resource.h" />
@@ -41,6 +43,8 @@
     <ClCompile Include="NeighborSnapshot.cpp" />
     <ClCompile Include="RegionalCityBridge.cpp" />
     <ClCompile Include="RegionSyncDllDirector.cpp" />
+    <ClCompile Include="SaveHook641.cpp" />
+    <ClCompile Include="SaveLock.cpp" />
     <ClCompile Include="SyncSettings.cpp" />
     <ClCompile Include="WriterIdentity.cpp" />
   </ItemGroup>
