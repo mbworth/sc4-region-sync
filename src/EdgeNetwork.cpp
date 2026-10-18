@@ -91,17 +91,20 @@ namespace
 	}
 
 	// Logs every occupant on the cell; returns the count.
+	constexpr uint32_t kConnectionMarkerProperty = 0xCAA46595;
+
+	// Logs every occupant on the cell (marker props flagged); returns the count.
 	int LogOccupants(cISC4OccupantManager* occ, int32_t x, int32_t z, const char* when)
 	{
 		int n = 0;
 		ForEachOccupant(occ, x, z, kAnyOccupantType, [&](cISC4Occupant* o) {
 			n++;
-			Log().WriteLineFormatted(LogLevel::Info, "EdgeTile:   %s (%d,%d) occupant %p type=0x%08X", when, x, z, static_cast<void*>(o), static_cast<uint32_t>(o->GetType()));
+			cISCPropertyHolder* p = o->AsPropertyHolder();
+			const bool marker = p && p->HasProperty(kConnectionMarkerProperty);
+			Log().WriteLineFormatted(LogLevel::Info, "EdgeTile:   %s (%d,%d) occupant %p type=0x%08X%s", when, x, z, static_cast<void*>(o), static_cast<uint32_t>(o->GetType()), marker ? " marker" : "");
 		});
 		return n;
 	}
-
-	constexpr uint32_t kConnectionMarkerProperty = 0xCAA46595;
 
 	// The game's layer filter (research step 6): pipe and subway networks
 	// demolish only their own layer, everything else only the surface.
@@ -265,16 +268,17 @@ namespace
 
 	// Side byte to 2 on hi's edge cell, and on lo's when the 0x04 bit links
 	// the two pieces. alreadyLaid: leave a piece whose flags already match,
-	// and one with no 0x04 inward (a network along the edge, not a stub).
+	// and one with no inward link (a network along the edge, not a stub).
+	// 0x04 is the dual-lane partner link, 0x02 a plain link (log, 2026-10-18).
 	void SetSideFlags(cISC4OccupantManager* occ, const regionsync::EdgeStub& hi, const regionsync::EdgeStub* lo, NetType netType, bool alreadyLaid)
 	{
 		const uint32_t clear = ~(0xFFu << (hi.side * 8));
 		const uint32_t set = 2u << (hi.side * 8);
 		const uint32_t inward = (hi.side + 2) & 3;
 		const auto mark = [&](uint32_t f) {
-			if (alreadyLaid && !((f >> (inward * 8)) & 0x04u))
+			if (alreadyLaid && !((f >> (inward * 8)) & 0xFFu))
 			{
-				Log().WriteLineFormatted(LogLevel::Info, "EdgeTile: flags 0x%08X have no 0x04 inward, not a stub, flag skipped.", f);
+				Log().WriteLineFormatted(LogLevel::Info, "EdgeTile: flags 0x%08X have no inward link, not a stub, flag skipped.", f);
 				return f;
 			}
 			return (f & clear) | set;
@@ -352,6 +356,7 @@ namespace
 		if (CountPieces(occ, s.sx, s.sz, netType) > 0)
 		{
 			logger.WriteLine(LogLevel::Info, "EdgeTile: already laid.");
+			for (int l = 0; l < nLines; l++) LogOccupants(occ, lines[l].sx, lines[l].sz, "now");
 			if (!power) SetSideFlags(occ, s, pair ? &lo : nullptr, netType, true);
 			return { false, "already laid" };
 		}
