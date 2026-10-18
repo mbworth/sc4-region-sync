@@ -6,14 +6,14 @@ Agent onboarding for sc4-region-sync. Read this top to bottom before doing anyth
 
 A SimCity 4 DLL plugin (x86 Windows, C++20) that syncs the per-tile regional summary records between several running game instances, so the player can play multiple cities in one region at once and each city sees the others' growth without reloading. The host game is closed source and version-locked to 1.1.641.
 
-Status at hand-off: scaffold complete, never built, never loaded in the game. The design is a hypothesis until Q2 in `docs/OPEN-QUESTIONS.md` has an observation recorded.
+Status (2026-10-17): builds on Linux, runs in two instances, Phase 1 and 1b done (records sync both ways and move the demand simulator). Phase 2 (deals, connections, save lock) is next. `docs/PHASES.md` has the checkboxes.
 
 ## Read in this order
 
 1. `docs/DESIGN.md`: why the regional record is the seam, why a file store, what deliberately stays local.
 2. `docs/ARCHITECTURE.md`: how the game loads plugins, the object graph we touch, process topology, data flow, lifecycle, source map, build pipelines, constraints.
 3. `docs/OPEN-QUESTIONS.md`: the seven experiments. Each has an "Observed" slot. Empty slots are the work.
-4. `docs/PHASES.md`: ordered plan with exit criteria. We are at Phase 0.
+4. `docs/PHASES.md`: ordered plan with exit criteria and current position.
 5. `src/RegionSyncDllDirector.cpp`: the entry point. Everything else is a helper.
 
 Then skim `vendor/gzcom-dll/gzcom-dll/include/` for `cISC4RegionalCity.h`, `cISC4NeighborsSimulator.h`, `cISC4Region.h`, `cISC4App.h`, `cISC4Simulator.h`. Those five headers are the whole surface Phase 1 uses.
@@ -29,7 +29,7 @@ make test                                    # host-side snapshot round-trip tes
 
 `--apt` instead of `--prebuilt` only works where apt ships clang 19+; the MSVC STL that xwin fetches refuses older compilers (Debian 12 apt has clang 14). The Makefile finds `~/.local/llvm-20` on its own. The build compiled clean on 2026-10-17 with zero warnings from our sources.
 
-A clean build is the Phase 0 entry point. The build output then goes to the Windows machine's `<install>\Plugins` folder (DLL + INI), the game is started, a city is opened, and `SC4RegionSync.log` next to the DLL is read. That log is the only instrument we have; treat it as such.
+Test loop: `make deploy` copies DLL + INI to the Windows box over SSH (game must be closed), `Start-ScheduledTask SC4Instance1`/`2` launches an instance, the human opens a city and types cheats, `make logs` pulls each instance's `SC4RegionSync.log` into `ingame_tests/`. The log is the only instrument we have; treat it as such. Ghidra 11 headless is set up for the exe (`tools/ghidra/`, project in `ingame_tests/ghidra`, gitignored).
 
 ## Ground rules
 
@@ -45,15 +45,15 @@ A clean build is the Phase 0 entry point. The build output then goes to the Wind
 
 ## Workflow per change
 
-Plan, adversarial review of the plan, implement, adversarial review of the code, build, deploy to the game, run the matching experiment, record the observation. Small changes still get the build-and-log step; there is no test suite that can stand in for the game.
+The global flow (plan, review, implement, review, test, deploy, verify) applies. Here "test" is `make test` plus the in-game experiment, and "verify" means the observation is written into `docs/OPEN-QUESTIONS.md`. Small changes still get the build-and-log step; there is no test suite that can stand in for the game.
 
-Commit messages: imperative subject, body says what was observed in-game if anything. Attribution lines are fine.
+Commit messages: imperative subject, body says what was observed in-game if anything.
 
 ## Things that look wrong but are not
 
 - `cISC4Region::GetCity(x, z)` returns a pointer to a ref-counted **slot**, not a city pointer. `FindRegionalCity` in the bridge does the cast. Do not `AddRef` or `Release`.
 - `cISC4Region::GetDirectoryName()` returns `SC4String*`, which is `cIGZString`-compatible and has `ToChar()`.
-- `cISC4RegionalCity` has setters for budget, income and commodity stats but none for population or jobs. That gap is Q2, not an oversight in the bridge.
+- `cISC4RegionalCity` has setters for budget, income and commodity stats but none for population or jobs; `src/RegionalCity641.h` writes those fields directly at offsets confirmed in Ghidra. The vendored header also declares float where the binary uses double; the wrapper is the fix, not the header.
 - `version.rc` is UTF-16 LE with a BOM. MSVC's rc and `llvm-rc` both want it that way. Do not convert it.
 - The Makefile passes `/LD` and `/MD`: dynamic CRT, same as the vcxproj. The game ships without a static CRT dependency on us; the player needs the VC++ 2022 x86 redistributable, which every other DLL plugin also requires.
 
@@ -62,7 +62,7 @@ Commit messages: imperative subject, body says what was observed in-game if anyt
 1. Check whether Null45 has already called it: `grep -rn MethodName` across his repos (`sc4-auto-run-cheats`, `sc4-region-census`, `sc4-growify`, `sc4-more-building-styles` and others on github.com/0xC0000054).
 2. Check `nam-dll` (github.com/NAMTeam/nam-dll) for the same.
 3. If nobody has, treat the call as an experiment: log before, call, log after, in a cheat command, not on a timer, so it only runs when a human types it.
-4. Only then reach for Ghidra on `SimCity 4.exe`. The regional city class's population fields (Q2) are the first thing worth that effort.
+4. Only then reach for Ghidra (`tools/ghidra/*.py`, known vtables and offsets are listed in `docs/OPEN-QUESTIONS.md`).
 
 ## What not to do
 
