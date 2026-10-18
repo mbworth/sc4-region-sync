@@ -22,7 +22,7 @@ Exit criterion: growth in instance B visibly changes regional demand in instance
 
 - [x] The simulator caches regional population at load (Q2). Instead of `ReloadCity`, the director mirrors the simulator's own init: after every pull it feeds the change in regional extrapolated population into the 12 region-use demand objects (`AddToSupplyValue`). Verified in game 2026-10-17.
 - [x] Two-instance confirmation: TuggersVille grew 17.5k -> 21.8k, BumperVille's record and demand supply followed month by month with no drift (2026-10-17, after fixing the publish feedback loop and stale snapshots).
-- [ ] Target fix (Q2 correction, 2026-10-17): the feed now goes into `GetDemand(group, 0x10000)`, not index 0, and the publish is raw. Unverified until the next run shows the load check.
+- [x] Target fix (Q2 correction, 2026-10-17): the feed goes into `GetDemand(group, 0x10000)`, not index 0, and the publish is raw. The load check (`RegionalDemand: <group> use=1 ... target supply=`) has shown in every run since 2026-10-18.
 - [ ] Q3 (`ReloadCity`) is now optional; keep for the thumbnail refresh in Phase 3.
 
 ## Phase 2: hardening
@@ -30,7 +30,7 @@ Exit criterion: growth in instance B visibly changes regional demand in instance
 - [x] Population and RCI-group setters on the regional record. Direct field writes at +0x24/0x28/0x2c and the type map at +0x3c (Ghidra, 2026-10-17).
 - [x] Save lock (Q4): kernel mutex across the SaveCity slot, observed 2026-10-18 (wait, timeout, abandoned, neighbor writes inside the lock).
 - [x] Autosave with two instances: Q4 step 8 soak and stale-copy check passed 2026-10-18. Shipped default stays off; `AutoSaveEveryMonths=1` is safe to set.
-- [ ] Connections and deals between running instances: see `docs/PLAN-PHASE2.md`. Slice 1 (mirror single-cell connections and deals, create only) done 2026-10-18: Q9 steps 1 to 4 observed, on by default, save and reload produce no duplicates.
+- [x] Connections and deals between running instances: see `docs/PLAN-PHASE2.md`. All slices done (the items below). Slice 1 (mirror single-cell connections and deals, create only) done 2026-10-18: Q9 steps 1 to 4 observed, on by default, save and reload produce no duplicates.
 - [x] Amount follow (slice 2a): done 2026-10-18, observed both ways.
 - [x] Removal of connections and deals (slice 2c) and edge network stubs (slice 2b): observed with the cheat 2026-10-18 (Q10, Q11), on by default, no-cheat run observed the same day.
 - [x] Three instances at once: Q13 observed 2026-10-18 (pulls, mirror, save lock queueing, dead writer, restart). Ferry log line observed (Q12 step 6).
