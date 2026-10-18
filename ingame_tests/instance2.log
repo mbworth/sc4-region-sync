@@ -907,3 +907,167 @@ Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
 Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Capture: connection type=9 inner=(85,127) cell=(85,128) otherTile=(4,6) active=1
+Capture: connection type=2 inner=(112,127) cell=(112,128) otherTile=(4,6) active=1
+Capture: connection type=9 inner=(101,0) cell=(101,-1) otherTile=(4,2) active=1
+Capture: connection type=2 inner=(119,127) cell=(119,128) otherTile=(4,6) active=1
+Publish (month tick): (4,4) 'DumpsVille' pop=3044 com=5247 ind=1622 connections=4 deals=0 simDate=2020-02-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\4_4.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=13520, snapshot pop=13519). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
+Apply: population 13520 -> 13519
+Apply: rci 0x1020 3315 (extrapolated 3538) -> 3315 (snapshot 3315)
+Apply: rci 0x1030 556 (extrapolated 1000) -> 556 (snapshot 556)
+Apply: rci 0x3110 317 (extrapolated 1000) -> 317 (snapshot 317)
+Apply: rci 0x3330 30 (extrapolated 1000) -> 30 (snapshot 30)
+Apply: rci 0x4200 3827 (extrapolated 4209) -> 3827 (snapshot 3827)
+Apply: rci 0x4300 92 (extrapolated 429) -> 92 (snapshot 92)
+Apply: SetBudget(1430420)
+Apply: SetProduced(3, 51945.80) was 51825.20
+Apply: SetDemanded(3, 21864.00) was 20644.00
+Apply: done, changed=10
+Pull: applied (4,6) changedFields=10
+Pull: record for (6,6) 'TuggersVille' found (record pop=3118, snapshot pop=3191). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
+Apply: population 3118 -> 3191
+Apply: industrialJobs 3803 -> 3804
+Apply: rci 0x1010 3362 (extrapolated 3362) -> 3394 (snapshot 3394)
+Apply: SetIncome(2981)
+Apply: SetDemanded(2, 6837.00) was 6831.00
+Apply: done, changed=5
+Pull: applied (6,6) changedFields=5
+RegionalDemand (pull): 0x1010 regional 13271 -> 13303, AddToSupplyValue(32); target before demand=0.0 supply=13271.0
+RegionalDemand (pull): 0x1010 target after demand=0.0 supply=13271.0
+RegionalDemand (pull): 0x1020 regional 3549 -> 3326, AddToSupplyValue(-223); target before demand=0.0 supply=3549.0
+RegionalDemand (pull): 0x1020 target after demand=0.0 supply=3549.0
+RegionalDemand (pull): 0x1030 regional 1000 -> 556, AddToSupplyValue(-444); target before demand=0.0 supply=1000.0
+RegionalDemand (pull): 0x1030 target after demand=0.0 supply=1000.0
+RegionalDemand (pull): 0x3110 regional 1000 -> 317, AddToSupplyValue(-683); target before demand=0.0 supply=1000.0
+RegionalDemand (pull): 0x3110 target after demand=0.0 supply=1000.0
+RegionalDemand (pull): 0x3330 regional 1000 -> 30, AddToSupplyValue(-970); target before demand=0.0 supply=1000.0
+RegionalDemand (pull): 0x3330 target after demand=0.0 supply=1000.0
+RegionalDemand (pull): 0x4200 regional 4635 -> 4253, AddToSupplyValue(-382); target before demand=0.0 supply=4635.0
+RegionalDemand (pull): 0x4200 target after demand=0.0 supply=4635.0
+RegionalDemand (pull): 0x4300 regional 3914 -> 3577, AddToSupplyValue(-337); target before demand=0.0 supply=3687.0
+RegionalDemand (pull): 0x4300 target after demand=0.0 supply=3687.0
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=3 dead=0 applied=2 changedFields=15 mirrorPending=2
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+MirrorConnections: from (4,6) 'BumperVille', 11 connection(s), cellsA=128 (0: dual lanes cannot pair). Own tile (4,4) GetCitySize=(2,2) sizeEnum=1 cells=128
+MirrorDeals: from (4,6) 'BumperVille', 1 deal(s).
+Mirror (4,6): created connections=0 recordConnections=0 laid=0 removed=0 deals=0 updatedDeals=0 cancelledDeals=0 alive=1
+MirrorConnections: from (6,6) 'TuggersVille', 5 connection(s), cellsA=128 (0: dual lanes cannot pair). Own tile (4,4) GetCitySize=(2,2) sizeEnum=1 cells=128
+MirrorDeals: from (6,6) 'TuggersVille', 1 deal(s).
+Mirror (6,6): created connections=0 recordConnections=0 laid=0 removed=0 deals=0 updatedDeals=0 cancelledDeals=0 alive=1
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Capture: connection type=9 inner=(85,127) cell=(85,128) otherTile=(4,6) active=1
+Capture: connection type=2 inner=(112,127) cell=(112,128) otherTile=(4,6) active=1
+Capture: connection type=9 inner=(101,0) cell=(101,-1) otherTile=(4,2) active=1
+Capture: connection type=2 inner=(119,127) cell=(119,128) otherTile=(4,6) active=1
+Publish (month tick): (4,4) 'DumpsVille' pop=3066 com=5315 ind=1622 connections=4 deals=0 simDate=2020-03-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\4_4.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=13519, snapshot pop=13517). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
+Apply: population 13519 -> 13517
+Apply: rci 0x1020 3315 (extrapolated 3538) -> 3315 (snapshot 3315)
+Apply: rci 0x1030 556 (extrapolated 1000) -> 556 (snapshot 556)
+Apply: rci 0x3110 317 (extrapolated 1000) -> 317 (snapshot 317)
+Apply: rci 0x3330 30 (extrapolated 1000) -> 30 (snapshot 30)
+Apply: rci 0x4200 3827 (extrapolated 4209) -> 3827 (snapshot 3827)
+Apply: rci 0x4300 92 (extrapolated 539) -> 92 (snapshot 92)
+Apply: SetIncome(7696)
+Apply: SetProduced(1, 7377.00) was 7378.00
+Apply: done, changed=9
+Pull: applied (4,6) changedFields=9
+Pull: record for (6,6) 'TuggersVille' found (record pop=3191, snapshot pop=3176). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
+Apply: population 3191 -> 3176
+Apply: industrialJobs 3804 -> 3807
+Apply: rci 0x1010 3394 (extrapolated 3394) -> 3392 (snapshot 3392)
+Apply: SetBudget(1172360)
+Apply: SetIncome(2989)
+Apply: SetDemanded(1, 1096.00) was 1097.00
+Apply: SetDemanded(2, 6836.00) was 6837.00
+Apply: SetDemanded(3, 8796.00) was 8600.00
+Apply: done, changed=8
+Pull: applied (6,6) changedFields=8
+RegionalDemand (pull): 0x1010 regional 13303 -> 13301, AddToSupplyValue(-2); target before demand=0.0 supply=13303.0
+RegionalDemand (pull): 0x1010 target after demand=0.0 supply=13303.0
+RegionalDemand (pull): 0x1020 regional 3549 -> 3326, AddToSupplyValue(-223); target before demand=0.0 supply=3326.0
+RegionalDemand (pull): 0x1020 target after demand=0.0 supply=3326.0
+RegionalDemand (pull): 0x1030 regional 1000 -> 556, AddToSupplyValue(-444); target before demand=0.0 supply=556.0
+RegionalDemand (pull): 0x1030 target after demand=0.0 supply=556.0
+RegionalDemand (pull): 0x3110 regional 1000 -> 317, AddToSupplyValue(-683); target before demand=0.0 supply=317.0
+RegionalDemand (pull): 0x3110 target after demand=0.0 supply=317.0
+RegionalDemand (pull): 0x3330 regional 1000 -> 30, AddToSupplyValue(-970); target before demand=0.0 supply=30.0
+RegionalDemand (pull): 0x3330 target after demand=0.0 supply=30.0
+RegionalDemand (pull): 0x4200 regional 4635 -> 4253, AddToSupplyValue(-382); target before demand=0.0 supply=4253.0
+RegionalDemand (pull): 0x4200 target after demand=0.0 supply=4253.0
+RegionalDemand (pull): 0x4300 regional 4024 -> 3577, AddToSupplyValue(-447); target before demand=0.0 supply=3577.0
+RegionalDemand (pull): 0x4300 target after demand=0.0 supply=3577.0
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=3 dead=0 applied=2 changedFields=17 mirrorPending=2
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+MirrorConnections: from (4,6) 'BumperVille', 11 connection(s), cellsA=128 (0: dual lanes cannot pair). Own tile (4,4) GetCitySize=(2,2) sizeEnum=1 cells=128
+MirrorDeals: from (4,6) 'BumperVille', 1 deal(s).
+Mirror (4,6): created connections=0 recordConnections=0 laid=0 removed=0 deals=0 updatedDeals=0 cancelledDeals=0 alive=1
+MirrorConnections: from (6,6) 'TuggersVille', 5 connection(s), cellsA=128 (0: dual lanes cannot pair). Own tile (4,4) GetCitySize=(2,2) sizeEnum=1 cells=128
+MirrorDeals: from (6,6) 'TuggersVille', 1 deal(s).
+Mirror (6,6): created connections=0 recordConnections=0 laid=0 removed=0 deals=0 updatedDeals=0 cancelledDeals=0 alive=1
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+SaveLock: 15:09:38.907 hold: acquired waited=0 ms depth=1
+HoldLock: on.
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+SaveLock: 15:09:50.751 hold: released held=11844 ms ok=1
+HoldLock: off.
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Capture: connection type=9 inner=(85,127) cell=(85,128) otherTile=(4,6) active=1
+Capture: connection type=2 inner=(112,127) cell=(112,128) otherTile=(4,6) active=1
+Capture: connection type=9 inner=(101,0) cell=(101,-1) otherTile=(4,2) active=1
+Capture: connection type=2 inner=(119,127) cell=(119,128) otherTile=(4,6) active=1
+Publish (month tick): (4,4) 'DumpsVille' pop=3200 com=5617 ind=1622 connections=4 deals=0 simDate=2020-04-01 -> C:\Users\player\Documents\SimCity 4 Instances\Instance2\Plugins\RegionSync\New York\4_4.snapshot
+Pull: record for (4,6) 'BumperVille' found (record pop=13517, snapshot pop=13517). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
+Apply: done, changed=0
+Pull: applied (4,6) changedFields=0
+Pull: record for (6,6) 'TuggersVille' found (record pop=3176, snapshot pop=3214). apply=1
+Pull: applyFields established=1 budget=1 income=1 commodities=1 population=1 markDealsDirty=1
+Apply: population 3176 -> 3214
+Apply: industrialJobs 3807 -> 3809
+Apply: rci 0x1010 3392 (extrapolated 3392) -> 3396 (snapshot 3396)
+Apply: rci 0x4200 426 (extrapolated 426) -> 517 (snapshot 517)
+Apply: SetBudget(1174510)
+Apply: SetIncome(3004)
+Apply: SetDemanded(1, 1106.00) was 1096.00
+Apply: SetDemanded(2, 6832.00) was 6836.00
+Apply: SetDemanded(3, 9032.00) was 8796.00
+Apply: done, changed=9
+Pull: applied (6,6) changedFields=9
+RegionalDemand (pull): 0x1010 regional 13301 -> 13305, AddToSupplyValue(4); target before demand=0.0 supply=13301.0
+RegionalDemand (pull): 0x1010 target after demand=0.0 supply=13301.0
+RegionalDemand (pull): 0x4200 regional 4253 -> 4344, AddToSupplyValue(91); target before demand=0.0 supply=4253.0
+RegionalDemand (pull): 0x4200 target after demand=0.0 supply=4253.0
+Pull: calling MarkDealsDirty
+Pull: MarkDealsDirty returned
+Pull (month tick): files=3 dead=0 applied=2 changedFields=9 mirrorPending=2
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+MirrorConnections: from (4,6) 'BumperVille', 11 connection(s), cellsA=128 (0: dual lanes cannot pair). Own tile (4,4) GetCitySize=(2,2) sizeEnum=1 cells=128
+MirrorDeals: from (4,6) 'BumperVille', 1 deal(s).
+Mirror (4,6): created connections=0 recordConnections=0 laid=0 removed=0 deals=0 updatedDeals=0 cancelledDeals=0 alive=1
+MirrorConnections: from (6,6) 'TuggersVille', 5 connection(s), cellsA=128 (0: dual lanes cannot pair). Own tile (4,4) GetCitySize=(2,2) sizeEnum=1 cells=128
+MirrorDeals: from (6,6) 'TuggersVille', 1 deal(s).
+Mirror (6,6): created connections=0 recordConnections=0 laid=0 removed=0 deals=0 updatedDeals=0 cancelledDeals=0 alive=1
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
+Event 0xEA418D8F data1=8 data2=0 data3=0 dirty=0
