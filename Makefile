@@ -129,7 +129,7 @@ LAUNCHER_RES = $(BUILD)/launcher.res
 LAUNCHER_EXE = $(BUILD)/SC4RegionSyncLauncher.exe
 
 # launcher.rc is UTF-8, so no iconv step.
-$(LAUNCHER_RES): launcher/launcher.rc launcher/launcher.manifest src/version.h | $(BUILD)
+$(LAUNCHER_RES): launcher/launcher.rc launcher/launcher.manifest launcher/resource.h src/version.h | $(BUILD)
 	$(LLVM_RC) /I launcher /I src /FO $@ launcher/launcher.rc
 
 launcher: check-toolchain $(LAUNCHER_RES)

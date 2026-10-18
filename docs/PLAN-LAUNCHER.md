@@ -71,7 +71,7 @@ Preconditions, each with a message when it fails: `GameExe` exists; `steam_appid
 
 A free `InstanceN` is an existing dir under `UserDirRoot` (created once by `scripts/Setup-MultiInstance.ps1 -Setup -Instances 16`, which stays the only place that builds the layout) whose normalised path (case-insensitive, no trailing backslash) matches no live status file and no pending launch. Pending launches are an in-memory map user dir -> pid, kept until that pid's status file appears or the pid exits; after 60 s a message is shown and Launch is re-enabled, but the dir stays reserved until the pid exits. A pid that exits with no status file is reported once (Q5's silent quit). Paths are compared after full-path and long-name normalisation, case-insensitive, no trailing backslash. While one is pending, Launch is disabled: the game closes its single-instance mutex only in `PostAppInit`, so a second exe started before that finds the mutex and quits silently (Q5).
 
-Command line built by hand, no quoting helper (Q5): `"<exe>" -UserDir:"<dir>\" <ExtraArgs>`, `CreateProcessW` with the exe's folder as working directory.
+Command line built by hand, no quoting helper (Q5): `"<exe>" -UserDir:"<dir>\" <ExtraArgs>` (slice 3 replaces `<ExtraArgs>` with the composed switches), `CreateProcessW` with the exe's folder as working directory.
 
 ### Raise
 

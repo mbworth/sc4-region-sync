@@ -51,26 +51,6 @@ namespace
 		return found;
 	}
 
-	bool HasWindowedArg(const std::wstring& args)
-	{
-		size_t pos = 0;
-		while (pos < args.size())
-		{
-			const size_t start = args.find_first_not_of(L" \t", pos);
-			if (start == std::wstring::npos)
-			{
-				break;
-			}
-			const size_t end = std::min(args.find_first_of(L" \t", start), args.size());
-			if (_wcsicmp(args.substr(start, end - start).c_str(), L"-w") == 0)
-			{
-				return true;
-			}
-			pos = end;
-		}
-		return false;
-	}
-
 	// Instance<N> dirs under root, by N.
 	std::vector<std::pair<int, std::wstring>> InstanceDirs(const std::wstring& root)
 	{
@@ -134,9 +114,9 @@ namespace launcher
 			ShowMessage(owner, L"Steam is not running. Start Steam first.");
 			return false;
 		}
-		if (!HasWindowedArg(settings.extraArgs))
+		if (!settings.windowed)
 		{
-			ShowMessage(owner, L"ExtraArgs in launcher.ini must contain -w: a fullscreen instance switches display modes when raised.");
+			ShowMessage(owner, L"Turn on Windowed in Settings: a fullscreen instance switches display modes when raised.");
 			return false;
 		}
 		if (LaunchInFlight(pending))
@@ -181,7 +161,25 @@ namespace launcher
 		}
 
 		// Built by hand: -UserDir needs its trailing backslash inside the quotes (Q5).
-		std::wstring command = L"\"" + exe + L"\" -UserDir:\"" + dir + L"\\\" " + settings.extraArgs;
+		std::wstring command = L"\"" + exe + L"\" -UserDir:\"" + dir + L"\\\""
+			+ (settings.windowed ? L" -w" : L" -f") + L" -CustomResolution:enabled -r" + std::to_wstring(settings.width)
+			+ L"x" + std::to_wstring(settings.height) + L"x" + std::to_wstring(settings.depth);
+		if (settings.skipIntro)
+		{
+			command += L" -intro:off";
+		}
+		if (settings.singleCpu)
+		{
+			command += L" -CPUCount:1";
+		}
+		if (const std::wstring renderer = RendererName(settings.renderer); renderer != L"DirectX")
+		{
+			command += L" -d:" + renderer;
+		}
+		if (!settings.extraArgs.empty())
+		{
+			command += L" " + settings.extraArgs;
+		}
 		const std::wstring workDir = Folder(exe);
 		STARTUPINFOW si{};
 		si.cb = sizeof(si);

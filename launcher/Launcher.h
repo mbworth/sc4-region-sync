@@ -15,13 +15,22 @@
 
 namespace launcher
 {
+	inline constexpr wchar_t kDefaultWindowClass[] = L"GDriverClass--DirectX";
+
 	struct Settings
 	{
 		std::wstring gameExe;
 		std::wstring userDirRoot;
 		std::wstring statusDirectory;
-		std::wstring extraArgs;
-		std::wstring windowClass = L"GDriverClass--DirectX";  // the game's main window (Q14); empty = any class
+		std::wstring extraArgs;  // appended verbatim
+		int width = 1600;
+		int height = 900;
+		int depth = 32;
+		bool windowed = true;
+		bool skipIntro = true;
+		bool singleCpu = false;
+		std::wstring renderer = L"DirectX";  // DirectX, Software or OpenGL
+		std::wstring windowClass = kDefaultWindowClass;  // the game's main window (Q14); empty = any class
 		int perInstanceRamMb = 1536;
 		int reserveCores = 1;
 		int reserveRamMb = 2048;
@@ -30,6 +39,12 @@ namespace launcher
 
 	// Creates launcher.ini next to the exe with defaults when missing.
 	Settings LoadSettings();
+
+	// DirectX, Software or OpenGL, matched ignoring case; anything else is DirectX.
+	const wchar_t* RendererName(const std::wstring& renderer);
+
+	// Modal Settings dialog. True when OK wrote launcher.ini.
+	bool EditSettings(HWND owner, const Settings& current);
 
 	// One status file, as written by the plugin (plan A1).
 	struct InstanceStatus

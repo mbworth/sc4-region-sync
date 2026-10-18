@@ -23,6 +23,7 @@ namespace
 	constexpr int kCmdRefresh = 102;
 	constexpr int kCmdList = 103;
 	constexpr int kCmdGrid = 104;
+	constexpr int kCmdSettings = 105;
 	constexpr size_t kMaxCells = 16;
 	constexpr ULONGLONG kPendingTimeoutMs = 60000;
 
@@ -119,6 +120,12 @@ namespace
 		}
 		wchar_t cls[256]{};
 		GetClassNameW(hwnd, cls, 256);
+		if (_wcsicmp(app.settings.windowClass.c_str(), kDefaultWindowClass) == 0)
+		{
+			// The default also binds the other renderers' classes (suffix unverified).
+			constexpr wchar_t prefix[] = L"GDriverClass--";
+			return _wcsnicmp(cls, prefix, std::size(prefix) - 1) == 0;
+		}
 		return _wcsicmp(cls, app.settings.windowClass.c_str()) == 0;
 	}
 
@@ -693,10 +700,10 @@ namespace
 			0, 0, 0, 0, hwnd, nullptr, inst, nullptr);
 		SendMessageW(app.toolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
 		SendMessageW(app.toolbar, TB_SETBITMAPSIZE, 0, MAKELONG(0, 0));
-		TBBUTTON buttons[5]{};
-		const wchar_t* labels[] = { L"Launch", L"Refresh", nullptr, L"List", L"Grid" };
-		const int ids[] = { kCmdLaunch, kCmdRefresh, 0, kCmdList, kCmdGrid };
-		for (int i = 0; i < 5; ++i)
+		TBBUTTON buttons[7]{};
+		const wchar_t* labels[] = { L"Launch", L"Refresh", nullptr, L"List", L"Grid", nullptr, L"Settings" };
+		const int ids[] = { kCmdLaunch, kCmdRefresh, 0, kCmdList, kCmdGrid, 0, kCmdSettings };
+		for (int i = 0; i < 7; ++i)
 		{
 			if (!labels[i])
 			{
@@ -706,11 +713,11 @@ namespace
 			buttons[i].iBitmap = I_IMAGENONE;
 			buttons[i].idCommand = ids[i];
 			buttons[i].fsState = TBSTATE_ENABLED;
-			buttons[i].fsStyle = (i >= 3 ? BTNS_CHECKGROUP : BTNS_BUTTON) | BTNS_AUTOSIZE | BTNS_SHOWTEXT;
+			buttons[i].fsStyle = (i == 3 || i == 4 ? BTNS_CHECKGROUP : BTNS_BUTTON) | BTNS_AUTOSIZE | BTNS_SHOWTEXT;
 			buttons[i].iString = reinterpret_cast<INT_PTR>(labels[i]);
 		}
 		buttons[3].fsState |= TBSTATE_CHECKED;  // always starts in List
-		SendMessageW(app.toolbar, TB_ADDBUTTONSW, 5, reinterpret_cast<LPARAM>(buttons));
+		SendMessageW(app.toolbar, TB_ADDBUTTONSW, 7, reinterpret_cast<LPARAM>(buttons));
 
 		app.list = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, nullptr,
 			WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_OWNERDATA | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
@@ -834,7 +841,8 @@ namespace
 						Discover();
 					}
 				}
-				else if (LOWORD(wParam) == kCmdRefresh)
+				else if (LOWORD(wParam) == kCmdRefresh
+					|| (LOWORD(wParam) == kCmdSettings && EditSettings(hwnd, app.settings)))
 				{
 					app.settings = LoadSettings();
 					Discover();

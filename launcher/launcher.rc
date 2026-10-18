@@ -1,6 +1,20 @@
 // sc4-region-sync launcher resources. UTF-8, unlike src/version.rc.
 // No winres.h: its SpecStrings.h include warns on a case-sensitive disk.
 #include "version.h"
+#include "resource.h"
+
+// winuser.h values used below (no winres.h).
+#define IDOK 1
+#define IDCANCEL 2
+#define WS_POPUP 0x80000000L
+#define WS_CAPTION 0x00C00000L
+#define WS_SYSMENU 0x00080000L
+#define WS_VSCROLL 0x00200000L
+#define DS_SHELLFONT 0x48L
+#define DS_MODALFRAME 0x80L
+#define DS_CENTER 0x800L
+#define ES_AUTOHSCROLL 0x80L
+#define CBS_DROPDOWNLIST 0x3L
 
 LANGUAGE 0x09, 0x01  // LANG_ENGLISH, SUBLANG_ENGLISH_US
 
@@ -33,4 +47,38 @@ BEGIN
     BEGIN
         VALUE "Translation", 0x409, 1200
     END
+END
+
+IDD_SETTINGS DIALOGEX 0, 0, 320, 246
+STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Settings"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    LTEXT "Game exe:", -1, 7, 9, 90, 8
+    EDITTEXT IDC_GAME_EXE, 100, 7, 213, 14, ES_AUTOHSCROLL
+    LTEXT "User dir root:", -1, 7, 27, 90, 8
+    EDITTEXT IDC_USER_DIR_ROOT, 100, 25, 213, 14, ES_AUTOHSCROLL
+    LTEXT "Width (640 to 7680):", -1, 7, 45, 90, 8
+    EDITTEXT IDC_WIDTH, 100, 43, 50, 14, ES_AUTOHSCROLL
+    LTEXT "Height (480 to 4320):", -1, 7, 63, 90, 8
+    EDITTEXT IDC_HEIGHT, 100, 61, 50, 14, ES_AUTOHSCROLL
+    LTEXT "Colour depth (16 or 32):", -1, 7, 81, 90, 8
+    EDITTEXT IDC_DEPTH, 100, 79, 50, 14, ES_AUTOHSCROLL
+    AUTOCHECKBOX "Windowed", IDC_WINDOWED, 100, 98, 65, 10
+    AUTOCHECKBOX "Skip intro", IDC_SKIP_INTRO, 170, 98, 65, 10
+    AUTOCHECKBOX "Single CPU", IDC_SINGLE_CPU, 240, 98, 73, 10
+    LTEXT "Renderer:", -1, 7, 117, 90, 8
+    COMBOBOX IDC_RENDERER, 100, 115, 80, 60, CBS_DROPDOWNLIST | WS_VSCROLL
+    LTEXT "Extra arguments:", -1, 7, 135, 90, 8
+    EDITTEXT IDC_EXTRA_ARGS, 100, 133, 213, 14, ES_AUTOHSCROLL
+    LTEXT "Per-instance RAM (MB):", -1, 7, 153, 90, 8
+    EDITTEXT IDC_PER_INSTANCE, 100, 151, 50, 14, ES_AUTOHSCROLL
+    LTEXT "Reserve RAM (MB):", -1, 7, 171, 90, 8
+    EDITTEXT IDC_RESERVE_RAM, 100, 169, 50, 14, ES_AUTOHSCROLL
+    LTEXT "Reserve cores:", -1, 7, 189, 90, 8
+    EDITTEXT IDC_RESERVE_CORES, 100, 187, 50, 14, ES_AUTOHSCROLL
+    LTEXT "Max instances (1 to 16):", -1, 7, 207, 90, 8
+    EDITTEXT IDC_MAX_INSTANCES, 100, 205, 50, 14, ES_AUTOHSCROLL
+    DEFPUSHBUTTON "OK", IDOK, 209, 225, 50, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 263, 225, 50, 14
 END
