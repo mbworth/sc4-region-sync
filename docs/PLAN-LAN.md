@@ -255,6 +255,7 @@ On every connect the host copies to the guest the region the guest selects. The 
 - **Inbound `PUT`.**
   - Caps: snapshot 256 KiB, status 16 KiB. Per peer: at most `MaxInstances` status files and one snapshot per tile of the selected region. Past a cap the launcher sends `BYE reason=cap` and logs it.
   - Reject the file unless its writer host is the peer's `site` (`SameHost`) and not ours.
+  - Never overwrite an existing local file whose writer is not the peer (a peer knows our pids from mirrored status files). A status file is rejected; a snapshot is held like an open tile until the local file is reaped.
   - A snapshot's `regionX` and `regionZ` must match its canonical name. A status file's `pid` and `start` must match its name.
   - Skip the write when the bytes equal the local file.
   - **Refuse a snapshot for tile (x,z) when either holds:** the local snapshot for that tile has a live writer on our host (pid check), or a local status file (our host) shows that tile in `city` state.

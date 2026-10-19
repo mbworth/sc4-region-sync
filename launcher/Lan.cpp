@@ -938,6 +938,11 @@ namespace
 			if (!Target(S.statusDir, p.name, target)) return true;
 			std::string local;
 			if (ReadSharedFile(target, local, kMaxStatus) && local == text) return true;
+			if (Exists(target) && !PeerWrote(target, false))
+			{
+				Log("PUT status " + p.name + " rejected: a local writer owns that file");
+				return true;
+			}
 			if (!Exists(target) && PeerStatusCount(p.name) + 1 > static_cast<size_t>(S.settings.maxInstances))
 			{
 				Cap("more than MaxInstances status files from " + S.peerSite);
@@ -962,11 +967,11 @@ namespace
 		if (!Target(StoreDir(), p.name, target)) return true;
 		// Open here first: the held bytes wait until the local city closes. The live writer's
 		// next publish wins any race with a write below (no restore step).
-		if (TileOpenHere(t))
+		if (TileOpenHere(t) || (Exists(target) && !PeerWrote(target, true)))
 		{
 			if (S.openBoth.insert(t).second)
 			{
-				Log("Tile (" + std::to_string(t.x) + "," + std::to_string(t.z) + ") is open on both PCs; peer snapshot held");
+				Log("Tile (" + std::to_string(t.x) + "," + std::to_string(t.z) + ") has a local snapshot or is open here; peer snapshot held");
 				Bump();
 			}
 			return false;
