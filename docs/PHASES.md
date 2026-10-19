@@ -36,7 +36,7 @@ Exit criterion: growth in instance B visibly changes regional demand in instance
 - [x] Three instances at once: Q13 observed 2026-10-18 (pulls, mirror, save lock queueing, dead writer, restart). Ferry log line observed (Q12 step 6).
 - [x] Dual-lane networks (avenue, highway, ground highway) mirrored as pairs with a 2 by 3 stub: observed 2026-10-18 for all three types (`docs/PLAN-DUAL-FERRY.md`, Q12).
 - [x] Ferry: not mirrored by design (each city's terrain scan makes its own; deals never use it); logged from the cheat.
-- [ ] Replace the monthly file poll with a change notification (`ReadDirectoryChangesW` on the store) if the cadence feels laggy.
+- [x] Replace the monthly file poll with a change notification: `FindFirstChangeNotification` on the store polled on the sim-day tick, observed 2026-10-19 (Q17 step 2, `docs/PLAN-WATCH.md`). Monthly pull stays as fallback.
 - [ ] Separate installs: make `StoreDirectory` a required setting when the DLL detects it is not under a shared Plugins folder.
 
 ## Phase 3: nice to have

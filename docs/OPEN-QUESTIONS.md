@@ -319,4 +319,12 @@ Two instances on New York, instance 1 BumperVille (4,6), instance 2 TuggersVille
 
 If step 4 reloads the record but the picture does not change, the region view caches the thumbnail; that is a separate slice.
 
-**Observed.**
+**Observed (2026-10-19, build `6df167c`, steps 1 and 2).** Both instances logged `StoreWatch: opened ...\RegionSync\New York` at region init and again after the late init; instance 1 also logged `RegionWatch: PostRegionInit message, regionViewReady=1 watch=0` at startup. After a TuggersVille month tick, BumperVille logged, before its own month tick:
+
+```
+Pull: applied (6,6) changedFields=20
+RegionalDemand (pull): 0x4200 regional 12745 -> 12529, AddToSupplyValue(-216); ...
+Pull (store change): files=2 dead=0 applied=1 changedFields=20 mirrorPending=1
+```
+
+Later cycles in both logs: `Pull (store change)` carries the deltas (changedFields 20, 9, 7, 10 in instance 1; 7, 10 in instance 2) and the `Pull (month tick)` that follows finds `changedFields=0`. Each instance's own publish produces two `StoreWatch: signal, no peer change` lines at Debug (the `.tmp` write and the rename), no pull. No Warning or Error lines. Step 2 confirmed; the monthly pull is now the fallback it was meant to be. Steps 3 to 8 pending.
