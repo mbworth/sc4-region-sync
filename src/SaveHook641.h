@@ -20,4 +20,6 @@ namespace regionsync::savehook641
 	// Restores the slot if it still holds our wrapper. log=false for DLL
 	// detach, where the Logger may be gone.
 	void Uninstall(bool log);
+	// True while a SaveCity call is inside the wrapper.
+	bool InSave();
 }

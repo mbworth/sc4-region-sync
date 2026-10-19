@@ -90,6 +90,12 @@ namespace regionsync
 		// Longest a save waits for the peer; then it goes ahead unlocked. 0 = never wait.
 		int saveLockTimeoutMs = 15000;
 
+		// Pull on the sim day after a peer snapshot lands (Q17 slice A).
+		bool pullOnStoreChange = true;
+
+		// Region view: reload a tile when its save file changes (Q17 slice B).
+		bool reloadOnPeerSave = false;
+
 		// Where snapshots live. Empty means "<DLL folder>\RegionSync\<region dir>".
 		// Both game instances share the install, so the default is already a
 		// shared location. Set it explicitly if the instances use separate

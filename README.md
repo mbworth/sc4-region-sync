@@ -77,6 +77,8 @@ See `src\SC4RegionSync.ini`. Everything has a default; with no INI the plugin ru
 
 - `SaveLock` (default 1): every save holds a region-wide named mutex, so two instances never write each other's `.sc4` files at the same time. Both instances need it on; the log shows `saveLock=`, `hook=` and `peer=`.
 - `SaveLockTimeoutMs` (default 15000): longest a save waits for the other instance before it saves unlocked (logged). 0 = never wait.
+- `PullOnStoreChange` (default 1, Q17): pull on the sim day after a peer's snapshot lands. Monthly pull stays as fallback; `PullEveryMonths=0` does not disable this.
+- `ReloadOnPeerSave` (default 0, experiment Q17): in the region view, reload a tile's record when another instance saves it.
 
 ## Layout
 

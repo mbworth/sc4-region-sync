@@ -166,6 +166,37 @@ namespace regionsync::savelock
 		return r;
 	}
 
+	bool IsOpen()
+	{
+		return mutex != nullptr;
+	}
+
+	AcquireResult TryAcquire(const char* who)
+	{
+		AcquireResult r;
+		if (!mutex)
+		{
+			return r;
+		}
+		if (depth > 0)
+		{
+			r.held = true;
+			r.depth = ++depth;
+			return r;
+		}
+		const DWORD result = WaitForSingleObject(mutex, 0);
+		if (result == WAIT_OBJECT_0 || result == WAIT_ABANDONED)
+		{
+			r.held = true;
+			r.abandoned = result == WAIT_ABANDONED;
+			r.depth = depth = 1;
+			acquiredAt = GetTickCount64();
+			Log(r.abandoned ? kWarning : LogLevel::Info, true, "SaveLock: %s %s: acquired%s (try) depth=1",
+				Stamp().c_str(), Label(who), r.abandoned ? " (abandoned)" : "");
+		}
+		return r;
+	}
+
 	void Release(const char* who)
 	{
 		if (!mutex || depth <= 0)
@@ -183,6 +214,8 @@ namespace regionsync::savelock
 	}
 
 	Guard::Guard(uint32_t timeoutMs, const char* who) : who(who), held(Acquire(timeoutMs, who).held) {}
+
+	Guard::Guard(const char* who) : who(who), held(TryAcquire(who).held) {}
 
 	Guard::~Guard()
 	{

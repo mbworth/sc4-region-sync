@@ -114,6 +114,8 @@ namespace regionsync
 				checkWriterLiveness = ParseBool(sync->get_value("CheckWriterLiveness", ""), checkWriterLiveness);
 				saveLock = ParseBool(sync->get_value("SaveLock", ""), saveLock);
 				saveLockTimeoutMs = (std::max)(0, ParseInt(sync->get_value("SaveLockTimeoutMs", ""), saveLockTimeoutMs));
+				pullOnStoreChange = ParseBool(sync->get_value("PullOnStoreChange", ""), pullOnStoreChange);
+				reloadOnPeerSave = ParseBool(sync->get_value("ReloadOnPeerSave", ""), reloadOnPeerSave);
 			}
 
 			auto logging = reader.get_section_optional("Logging");

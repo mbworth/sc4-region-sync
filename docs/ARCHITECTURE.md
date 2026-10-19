@@ -84,21 +84,24 @@ Nothing the plugin controls. The demand simulator consults regional totals when 
 game start
   RZGetCOMDllDirector()      static RegionSyncDllDirector constructed; Logger initialized
   OnStart(cIGZCOM*)          version check (641 or disable); load INI; AddHook(this)
-  PostAppInit()              grab cheat manager; subscribe to 6 message IDs; SaveLock=1: patch App vtable slot 15 (SaveCity) with the lock wrapper; reap dead status files, write own status (starting)
+  PostAppInit()              grab cheat manager; subscribe to 6 message IDs; SaveLock=1: patch App vtable slot 15 (SaveCity) with the lock wrapper; reap dead status files, write own status (starting); ReloadOnPeerSave=1: add the idle service (AddSystemService, AddToOnIdle)
 region opened
-  PostRegionInit             cache cISC4Region*, region dir name, resolve store path; open the save mutex; status (region)
+  PostRegionInit             cache cISC4Region*, region dir name, resolve store path; open the save mutex; status (region); Enabled=1 and PullOnStoreChange=1: create the store folder and open its change handle; ReloadOnPeerSave=1: GetRegionsDirectory, open the region folder's change handle; register RegionSyncReload; the message (not the late call) sets regionViewReady and seeds the region probe
 city opened
-  PostCityInit               cache cISC4City*; register 6 cheat codes; subscribe to cheat messages
+  PostCityInit               cache cISC4City*; register cheat codes; subscribe to cheat messages; clear storeSeen and regionViewReady
   PostCityInitComplete       cache regional city, neighbors sim, simulator; open the tile mutex (peer present = conflict, no store writes while this city is open); status (city); publish + pull on load
 playing
   SimNewMonth (0x66956816)   increment counters; publish / pull / autosave on cadence
+  SimNewDay (0x66956814)     store handle signalled and a peer snapshot new or changed: Pull("store change"); event publish; pending mirror
   CheatIssued (0x230E27AC)   dispatch RegionSync* commands
 city closed
-  PostCityShutdown           publish once more (or remove own snapshot); release a RegionSyncHoldLock hold; close the tile mutex; status (region); clear city pointers; unregister cheats
+  PostCityShutdown           publish once more (or remove own snapshot); release a RegionSyncHoldLock hold; close the tile mutex; status (region); clear city pointers; unregister city cheats (RegionSyncReload stays); clear regionViewReady
+region view
+  OnIdle (idle service)      not saving, regionViewReady, no city: region handle signalled, 750 ms quiet, tiles whose save file changed and matched a probe at least 750 ms old: try-lock the save lock (never reloads unlocked), ReloadCity each, release; probes at most every 750 ms
 region closed
-  PreRegionShutdown          clear region pointer; close the save mutex; status (starting)
+  PreRegionShutdown          clear region pointer; close both change handles; unregister RegionSyncReload; close the save mutex; status (starting)
 game exit
-  PreAppShutdown             restore the SaveCity slot; clear the hold, close the save and tile mutexes; delete own status file (Exit sends no PostCityShutdown)
+  PreAppShutdown             remove the idle service (callback cleared first); unregister RegionSyncReload; close both change handles; restore the SaveCity slot; clear the hold, close the save and tile mutexes; delete own status file (Exit sends no PostCityShutdown)
 ```
 
 Pointers cached at `PostCityInitComplete` are only valid until `PostCityShutdown`. Every operation null-checks them because cheats and month messages can arrive in odd orders during transitions.
@@ -137,6 +140,8 @@ src/
                               stale ones. No game headers, no Windows headers, unit-tested.
   SaveHook641.{h,cpp}         Patches App vtable slot 15 (SaveCity(path, fast), 1.1.641 only) with a
                               wrapper that holds the save lock across the game's save routine.
+  IdleService.{h,cpp}         cRZBaseSystemService whose OnIdle calls one callback inside try/catch;
+                              added only when ReloadOnPeerSave=1 (Q17).
   SyncSettings.{h,cpp}        INI parsing with safe defaults; resolves the store directory.
   SC4RegionSync.ini           Shipped defaults; lives next to the DLL in Plugins.
   version.h / version.rc      Plugin version and the Win32 VERSIONINFO resource (rc is UTF-16 LE).

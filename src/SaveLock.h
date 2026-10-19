@@ -29,11 +29,14 @@ namespace regionsync::savelock
 	bool Open(const std::string& regionDirectoryName);
 	// Releases a hold still taken, then closes the handle.
 	void Close();
+	bool IsOpen();
 
 	// Depth 0 waits up to timeoutMs (0 ms while a previous wait timed out
 	// and none has succeeded since); depth > 0 returns at once. Not held:
 	// the caller goes ahead unlocked. who labels the log line.
 	AcquireResult Acquire(uint32_t timeoutMs, const char* who);
+	// Zero wait, no back-off. Not held: busy or no mutex.
+	AcquireResult TryAcquire(const char* who);
 	// Decrements; ReleaseMutex at depth 0. No-op when not held.
 	void Release(const char* who);
 
@@ -46,6 +49,8 @@ namespace regionsync::savelock
 	{
 	public:
 		Guard(uint32_t timeoutMs, const char* who);
+		// Zero wait (TryAcquire).
+		explicit Guard(const char* who);
 		~Guard();
 		Guard(const Guard&) = delete;
 		Guard& operator=(const Guard&) = delete;

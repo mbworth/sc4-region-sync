@@ -213,4 +213,9 @@ namespace regionsync::savehook641
 			logger.Flush();
 		}
 	}
+
+	bool InSave()
+	{
+		return saveDepth > 0;
+	}
 }

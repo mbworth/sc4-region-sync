@@ -301,3 +301,22 @@ Reported by the player during the first soak (Q15): DumpsVille's commercial dema
 Fix: `FreezeExtrapolation=1` (default): the apply also writes the record's extrapolation cap (`+0x54`, never inserted, same type map layout as `+0x3c` and `+0x48`) to the live value, so `GetAllowableExtrapolation` (slot 18, `0x4a9820`, `max(0, cap54 - ext48)` through the same map `operator[]` `0x497a00` that `FindTypeMapValue` mirrors; verified in Ghidra at review) is 0 and the game adds nothing. The derived job and commute extrapolations sit inside the same `n >= 10` gate, so they freeze too. A cap node without an extrapolated node is pinned to 0 instead (otherwise the game would insert ext=0 and grow it to the cap). The `Apply: rci` line now shows `cap` too. Side effect: a save stores that cap in the neighbor's file, so a vanilla session afterwards would not extrapolate that neighbor until it is played and saved again.
 
 **Observed (2026-10-18, build `181bf27`).** DumpsVille relaunched with the fix: `Pull: applyFields ... freezeExtrapolation=1`, and the first pull pinned every cap: `Apply: rci 0x3120 149 (extrapolated 149, cap 1000) -> 149`, `0x3330 735 (cap 1000)`, `0x4300 173 (cap 1000)`, `0x1010 24084 (cap 26492)`, `0x3320 6914 (cap 7605)` (the game's caps sit at about 110 % of the value with a floor of 1000, which is exactly the headroom the extrapolation used). The feeds afterwards are the real month-to-month changes (`0x1020 +40`, `0x3110 +114`) instead of the repeating -1000, -990, -989 of the previous session. Player, after a further run of months: the commercial demand graph holds steady. **Q16 closed.**
+
+## Q17. Does a peer's snapshot land within a sim day, and can the region view reload a peer's saved tile?
+
+Plan: `docs/PLAN-WATCH.md`. Slice A (`PullOnStoreChange=1`): a change handle on the store folder, polled on `SimNewDay`, pulls when a peer's snapshot is new or changed. Slice B (`ReloadOnPeerSave`, default 0): an idle service watches the region folder and, in the region view, try-locks the save lock and `ReloadCity`s tiles whose save file changed and held still across two idles. `RegionSyncReload` is also registered at region init and in the region view reloads every established tile. New game calls, logged at Info: `GetRegionsDirectory`, `GetCitySaveFilePath`, `AddSystemService`/`AddToOnIdle`, cheat registration and `ReloadCity` in the region view.
+
+Two instances on New York, instance 1 BumperVille (4,6), instance 2 TuggersVille (6,6).
+
+1. Both logs: `StoreWatch: opened ...`. With `ReloadOnPeerSave=1` also `RegionsDirectory: ... regionIni=1` and `IdleService: added=1 onIdle=1`.
+2. Slice A: wait for a month tick in 2. Within a sim day, 1 logs `Pull (store change): ...` before its own month tick. `Pull (month tick)` still appears monthly. Instance 1's own month publish produces `StoreWatch: signal, no peer change` at Debug and no pull. No spurious pull after a city load: `PostCityInit` clears `storeSeen` and every `Pull` rescans it before reading, so the load pull (`PullOnLoad=1`) seeds it. Only with `PullOnLoad=0` can the first signal after a load pull once.
+3. Cheat in region view: instance 1 exits to the region view. Log shows the `RegionWatch: PostCityShutdown` line and whether a `RegionWatch: PostRegionInit message` line followed. Type `RegionSyncReload`. Does the cheat fire (`Reload: cheat fired in the region view`, then `Reload (x,z) ...` lines)? Hover, select, and open a reloaded tile. Game stable?
+4. Timer path (`ReloadOnPeerSave=1`): 1 in region view, 2 saves. Within about a second of 2's `SaveLock: released`, 1 logs `RegionWatch: N tile(s) due` and `Reload (6,6): ... recordPtrChanged=1`. Did TuggersVille's thumbnail and hover population change without leaving the region view? Yes or no goes in the Observed slot.
+5. Danger window: 2 saves, and the human clicks Play on a tile in 1 inside the next second. Expect `regionViewReady` cleared by `PostCityInit` before any reload, and the city loads.
+6. 1 exits a city to the region view while 2 is saving (`RegionSyncHoldLock` in 2 to widen it). Expect `RegionWatch: busy` lines, then the reload once 2 releases. 2's save succeeds.
+7. Negative control: 2's own save never reloads anything in 2.
+8. Ten minutes at cheetah, both in city: no warning lines, store-change pulls arrive per peer month tick.
+
+If step 4 reloads the record but the picture does not change, the region view caches the thumbnail; that is a separate slice.
+
+**Observed.**

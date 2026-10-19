@@ -36,6 +36,7 @@
 #include "SaveHook641.h"
 #include "InstanceStatus.h"
 #include "TileLock.h"
+#include "IdleService.h"
 
 #include "cIGZCheatCodeManager.h"
 #include "cIGZCOM.h"
@@ -73,6 +74,7 @@
 #include <ctime>
 #include <cwctype>
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
@@ -101,6 +103,11 @@ static constexpr uint32_t kMessageConnectionsReady = 0x6AC284F3;
 
 // Director ID. Random 32-bit value, must not collide with other plugins.
 static constexpr uint32_t kRegionSyncDllDirector = 0x7A3C9E51;
+
+// Idle service ID (Q17), random.
+static constexpr uint32_t kIdleServiceID = 0x51CDBF59;
+// Quiet period after a region-folder signal.
+static constexpr ULONGLONG kWatchQuietMs = 750;
 
 // Cheat IDs and strings.
 static constexpr uint32_t kCheatDumpID = 0x7A3C9E52;
@@ -238,6 +245,62 @@ namespace
 		}
 		return name.ToChar();
 	}
+
+	// Change-notification handle, polled from the game thread (Q17).
+	struct ChangeWatch
+	{
+		const char* who;
+		HANDLE handle = INVALID_HANDLE_VALUE;
+		std::filesystem::path path;
+
+		bool IsOpen() const { return handle != INVALID_HANDLE_VALUE; }
+
+		// Idempotent for the same path; another path closes the old handle first.
+		void Open(const std::filesystem::path& dir, DWORD filter)
+		{
+			if (IsOpen() && dir == path)
+			{
+				return;
+			}
+			Close();
+			handle = FindFirstChangeNotificationW(dir.c_str(), FALSE, filter);
+			if (!IsOpen())
+			{
+				Logger::GetInstance().WriteLineFormatted(regionsync::savelock::kWarning, "%s: warning, cannot watch %s, error=%lu",
+					who, dir.string().c_str(), GetLastError());
+				return;
+			}
+			path = dir;
+			Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "%s: opened %s", who, path.string().c_str());
+		}
+
+		void Close()
+		{
+			if (IsOpen())
+			{
+				FindCloseChangeNotification(handle);
+				handle = INVALID_HANDLE_VALUE;
+				Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "%s: closed %s", who, path.string().c_str());
+			}
+			path.clear();
+		}
+
+		// True once per signal; re-arms.
+		bool Signalled()
+		{
+			if (!IsOpen() || WaitForSingleObject(handle, 0) != WAIT_OBJECT_0)
+			{
+				return false;
+			}
+			if (!FindNextChangeNotification(handle))
+			{
+				Logger::GetInstance().WriteLineFormatted(regionsync::savelock::kWarning, "%s: warning, FindNextChangeNotification failed, error=%lu; watch closed",
+					who, GetLastError());
+				Close();
+			}
+			return true;
+		}
+	};
 }
 
 class RegionSyncDllDirector final : public cRZMessage2COMDirector
@@ -359,9 +422,14 @@ public:
 			}
 		}
 
+		if (settings.reloadOnPeerSave)
+		{
+			AddIdleService();
+		}
+
 		logger.WriteLineFormatted(
 			LogLevel::Info,
-			"Initialized. instanceId=%u enabled=%d publishEveryMonths=%d pullEveryMonths=%d autoSaveEveryMonths=%d syncConnections=%d syncDeals=%d layEdgeNetwork=%d syncRemovals=%d saveLock=%d saveLockTimeoutMs=%d hook=%d",
+			"Initialized. instanceId=%u enabled=%d publishEveryMonths=%d pullEveryMonths=%d autoSaveEveryMonths=%d syncConnections=%d syncDeals=%d layEdgeNetwork=%d syncRemovals=%d saveLock=%d saveLockTimeoutMs=%d hook=%d pullOnStoreChange=%d reloadOnPeerSave=%d",
 			instanceId,
 			settings.enabled ? 1 : 0,
 			settings.publishEveryMonths,
@@ -373,7 +441,9 @@ public:
 			settings.syncRemovals ? 1 : 0,
 			settings.saveLock ? 1 : 0,
 			settings.saveLockTimeoutMs,
-			hookInstalled ? 1 : 0);
+			hookInstalled ? 1 : 0,
+			settings.pullOnStoreChange ? 1 : 0,
+			settings.reloadOnPeerSave ? 1 : 0);
 
 		ownWriter = regionsync::writer::Current();
 		logger.WriteLineFormatted(LogLevel::Info, "Writer: host=%s pid=%u start=%llu checkWriterLiveness=%d",
@@ -409,6 +479,10 @@ public:
 		// The Exit button sends no PostCityShutdown; release the hold here.
 		try
 		{
+			RemoveIdleService();
+			UnregisterReloadCheat();
+			storeWatch.Close();
+			regionWatch.Close();
 			regionsync::savehook641::Uninstall(true);
 			if (holdLock)
 			{
@@ -455,7 +529,7 @@ public:
 		case kSC4MessagePostRegionInit:
 			try
 			{
-				PostRegionInit();
+				PostRegionInit(true);
 			}
 			catch (const std::exception& e)
 			{
@@ -560,11 +634,23 @@ public:
 	}
 
 private:
+	using TileKey = std::pair<int32_t, int32_t>;
+
+	// A tile's save file as the region watch last saw it.
+	struct TileProbe
+	{
+		uintmax_t size = 0;
+		std::filesystem::file_time_type time{};
+		bool operator==(const TileProbe&) const = default;
+	};
+	using TileProbes = std::map<TileKey, TileProbe>;
+
 	// ---------------------------------------------------------------
 	// Lifecycle
 	// ---------------------------------------------------------------
 
-	void PostRegionInit()
+	// fromMessage: false for the late PostCityInitComplete call.
+	void PostRegionInit(bool fromMessage)
 	{
 		cISC4AppPtr pSC4App;
 		pRegion = pSC4App ? pSC4App->GetRegion() : nullptr;
@@ -588,11 +674,39 @@ private:
 
 			status.region = AcpToUtf8(regionDirectoryName);
 			SetStatus("region", "region init");
+
+			if (settings.enabled && settings.pullOnStoreChange)
+			{
+				std::error_code ec;
+				std::filesystem::create_directories(storeDirectory, ec);
+				storeWatch.Open(storeDirectory, FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE);
+			}
+
+			if (settings.reloadOnPeerSave)
+			{
+				OpenRegionWatch(pSC4App);
+			}
+		}
+
+		RegisterReloadCheat();
+
+		if (fromMessage)
+		{
+			regionViewReady = true;
+			SeedRegionSeen();
+			Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "RegionWatch: PostRegionInit message, regionViewReady=1 watch=%d",
+				regionWatch.IsOpen() ? 1 : 0);
 		}
 	}
 
 	void PreRegionShutdown()
 	{
+		regionViewReady = false;
+		regionPending = false;
+		storeWatch.Close();
+		regionWatch.Close();
+		storeSeen.clear();
+		UnregisterReloadCheat();
 		holdLock = false;
 		regionsync::savelock::Close();
 		pRegion = nullptr;
@@ -616,13 +730,15 @@ private:
 		FILETIME now{};
 		GetSystemTimeAsFileTime(&now);
 		cityLoadedAt = (static_cast<uint64_t>(now.dwHighDateTime) << 32) | now.dwLowDateTime;
+		storeSeen.clear();
+		regionViewReady = false;
+		regionPending = false;
 
 		if (pCheatCodeManager)
 		{
 			pCheatCodeManager->RegisterCheatCode(kCheatDumpID, cRZBaseString(kCheatDump));
 			pCheatCodeManager->RegisterCheatCode(kCheatPublishID, cRZBaseString(kCheatPublish));
 			pCheatCodeManager->RegisterCheatCode(kCheatPullID, cRZBaseString(kCheatPull));
-			pCheatCodeManager->RegisterCheatCode(kCheatReloadID, cRZBaseString(kCheatReload));
 			pCheatCodeManager->RegisterCheatCode(kCheatStatusID, cRZBaseString(kCheatStatus));
 			pCheatCodeManager->RegisterCheatCode(kCheatSaveID, cRZBaseString(kCheatSave));
 			pCheatCodeManager->RegisterCheatCode(kCheatUnlockID, cRZBaseString(kCheatUnlock));
@@ -633,8 +749,32 @@ private:
 			pCheatCodeManager->RegisterCheatCode(kCheatMirrorID, cRZBaseString(kCheatMirror));
 			pCheatCodeManager->RegisterCheatCode(kCheatOfferID, cRZBaseString(kCheatOffer));
 			pCheatCodeManager->RegisterCheatCode(kCheatHoldLockID, cRZBaseString(kCheatHoldLock));
-			pCheatCodeManager->AddNotification2(this, 0);
 		}
+		RegisterReloadCheat();
+	}
+
+	// RegionSyncReload also runs in the region view, so it and the cheat
+	// notification outlive the city cheats.
+	void RegisterReloadCheat()
+	{
+		if (!pCheatCodeManager || reloadCheat)
+		{
+			return;
+		}
+		pCheatCodeManager->RegisterCheatCode(kCheatReloadID, cRZBaseString(kCheatReload));
+		pCheatCodeManager->AddNotification2(this, 0);
+		reloadCheat = true;
+	}
+
+	void UnregisterReloadCheat()
+	{
+		if (!pCheatCodeManager || !reloadCheat)
+		{
+			return;
+		}
+		pCheatCodeManager->UnregisterCheatCode(kCheatReloadID);
+		pCheatCodeManager->RemoveNotification2(this, 0);
+		reloadCheat = false;
 	}
 
 	void PostCityInitComplete()
@@ -659,7 +799,7 @@ private:
 		if (pRegion && regionDirectoryName.empty())
 		{
 			// PostRegionInit can fire before our subscription in some paths.
-			PostRegionInit();
+			PostRegionInit(false);
 		}
 
 		int32_t x = -1, z = -1;
@@ -960,12 +1100,12 @@ private:
 		regionalDemand.clear();
 		ResetSessionState();
 
+		// RegionSyncReload stays registered for the region view.
 		if (pCheatCodeManager)
 		{
 			pCheatCodeManager->UnregisterCheatCode(kCheatDumpID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatPublishID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatPullID);
-			pCheatCodeManager->UnregisterCheatCode(kCheatReloadID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatStatusID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatSaveID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatUnlockID);
@@ -976,8 +1116,11 @@ private:
 			pCheatCodeManager->UnregisterCheatCode(kCheatMirrorID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatOfferID);
 			pCheatCodeManager->UnregisterCheatCode(kCheatHoldLockID);
-			pCheatCodeManager->RemoveNotification2(this, 0);
 		}
+
+		regionViewReady = false;
+		regionPending = false;
+		Logger::GetInstance().WriteLine(LogLevel::Info, "RegionWatch: PostCityShutdown, regionViewReady=0 until a PostRegionInit message.");
 	}
 
 	void OnNewMonth()
@@ -1037,6 +1180,32 @@ private:
 			logger.WriteLineFormatted(LogLevel::Info, "SimNewDay 0x%08X received (first this session).", kSC4MessageSimNewDay);
 		}
 
+		if (settings.enabled && settings.pullOnStoreChange && !inPull && pCity && pOwnRegionalCity)
+		{
+			try
+			{
+				if (storeWatch.Signalled())
+				{
+					if (PeerSnapshotChanged())
+					{
+						Pull("store change");
+					}
+					else
+					{
+						logger.WriteLine(LogLevel::Debug, "StoreWatch: signal, no peer change");
+					}
+				}
+			}
+			catch (const std::exception& e)
+			{
+				logger.WriteLineFormatted(LogLevel::Error, "StoreWatch: threw: %s", e.what());
+			}
+			catch (...)
+			{
+				logger.WriteLine(LogLevel::Error, "StoreWatch: threw a non-standard exception.");
+			}
+		}
+
 		if (publishDirty && !inPull && settings.enabled && pCity)
 		{
 			Publish("event");
@@ -1053,6 +1222,274 @@ private:
 				MirrorSnapshot(snapshot, false);
 			}
 		}
+	}
+
+	// ---------------------------------------------------------------
+	// Change notification (Q17, docs/PLAN-WATCH.md)
+	// ---------------------------------------------------------------
+
+	// Peer snapshot file name -> last write time. Our own tile is left out.
+	std::map<std::string, std::filesystem::file_time_type> ScanPeerSnapshots() const
+	{
+		std::map<std::string, std::filesystem::file_time_type> times;
+		if (!pOwnRegionalCity)
+		{
+			return times;
+		}
+		int32_t x = -1, z = -1;
+		pOwnRegionalCity->GetPosition(x, z);
+		const std::string own = regionsync::SnapshotFileName(x, z);
+		std::error_code ec;
+		for (const auto& entry : std::filesystem::directory_iterator(storeDirectory, ec))
+		{
+			const std::string name = entry.path().filename().string();
+			std::error_code fileEc;
+			if (!entry.is_regular_file(fileEc) || entry.path().extension() != ".snapshot" || name == own)
+			{
+				continue;
+			}
+			std::error_code timeEc;
+			const auto time = entry.last_write_time(timeEc);
+			if (!timeEc)
+			{
+				times[name] = time;
+			}
+		}
+		return times;
+	}
+
+	bool PeerSnapshotChanged() const
+	{
+		for (const auto& [name, time] : ScanPeerSnapshots())
+		{
+			const auto seen = storeSeen.find(name);
+			if (seen == storeSeen.end() || seen->second != time)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void AddIdleService()
+	{
+		Logger& logger = Logger::GetInstance();
+		try
+		{
+			cIGZFrameWork* pFramework = RZGetFrameWork();
+			if (!pFramework)
+			{
+				logger.WriteLine(LogLevel::Error, "IdleService: no framework.");
+				return;
+			}
+			idleService.SetCallback([this] { OnIdle(); });
+			idleAdded = pFramework->AddSystemService(&idleService);
+			onIdleAdded = idleAdded && pFramework->AddToOnIdle(&idleService);
+			logger.WriteLineFormatted(LogLevel::Info, "IdleService: added=%d onIdle=%d id=0x%08X",
+				idleAdded ? 1 : 0, onIdleAdded ? 1 : 0, kIdleServiceID);
+		}
+		catch (const std::exception& e)
+		{
+			logger.WriteLineFormatted(LogLevel::Error, "IdleService: add threw: %s", e.what());
+		}
+		catch (...)
+		{
+			logger.WriteLine(LogLevel::Error, "IdleService: add threw a non-standard exception.");
+		}
+	}
+
+	void RemoveIdleService()
+	{
+		idleService.SetCallback(nullptr);
+		if (!idleAdded)
+		{
+			return;
+		}
+		cIGZFrameWork* pFramework = RZGetFrameWork();
+		const bool fromIdle = onIdleAdded && pFramework && pFramework->RemoveFromOnIdle(&idleService);
+		const bool removed = pFramework && pFramework->RemoveSystemService(&idleService);
+		onIdleAdded = false;
+		idleAdded = false;
+		Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "IdleService: removed onIdle=%d service=%d", fromIdle ? 1 : 0, removed ? 1 : 0);
+	}
+
+	// Watch the region's save folder (Q17 slice B).
+	void OpenRegionWatch(cISC4App* pSC4App)
+	{
+		cRZBaseString regionsDir;
+		const bool ok = pSC4App->GetRegionsDirectory(regionsDir);
+		regionFolder = std::filesystem::path(regionsync::savelock::WidenAcp(regionsDir.ToChar()))
+			/ regionsync::savelock::WidenAcp(regionDirectoryName);
+		std::error_code ec;
+		const bool regionIni = std::filesystem::exists(regionFolder / "region.ini", ec);
+		Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "RegionsDirectory: ok=%d '%s' folder '%s' regionIni=%d",
+			ok ? 1 : 0, regionsDir.ToChar(), regionFolder.string().c_str(), regionIni ? 1 : 0);
+		if (ok)
+		{
+			regionWatch.Open(regionFolder, FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_SIZE);
+		}
+	}
+
+	// Save-file size and mtime per established tile.
+	TileProbes ProbeTiles()
+	{
+		Logger& logger = Logger::GetInstance();
+		TileProbes probes;
+		for (const TileKey& key : EstablishedTiles(pRegion))
+		{
+			cISC4RegionalCity* p = regionsync::FindRegionalCity(pRegion, key.first, key.second);
+			if (!p)
+			{
+				continue;
+			}
+			cRZBaseString savePath;
+			p->GetCitySaveFilePath(savePath);
+			const bool firstTime = regionPathLogged.insert(key).second;
+			if (savePath.Strlen() == 0)
+			{
+				if (firstTime)
+				{
+					logger.WriteLineFormatted(LogLevel::Info, "RegionWatch: (%d,%d) has no save path, skipped.", key.first, key.second);
+				}
+				continue;
+			}
+			std::filesystem::path file(regionsync::savelock::WidenAcp(savePath.ToChar()));
+			if (file.is_relative())
+			{
+				file = regionFolder / file;
+			}
+			if (firstTime)
+			{
+				logger.WriteLineFormatted(LogLevel::Info, "RegionWatch: (%d,%d) save path '%s' -> %s",
+					key.first, key.second, savePath.ToChar(), file.string().c_str());
+			}
+			std::error_code sizeEc, timeEc;
+			const uintmax_t size = std::filesystem::file_size(file, sizeEc);
+			const auto time = std::filesystem::last_write_time(file, timeEc);
+			if (!sizeEc && !timeEc)
+			{
+				probes[key] = TileProbe{ size, time };
+			}
+		}
+		return probes;
+	}
+
+	// Region view entered: what is on disk now is what the game just loaded.
+	void SeedRegionSeen()
+	{
+		regionPending = false;
+		regionBusyLogged = false;
+		regionLastProbe.clear();
+		if (!regionWatch.IsOpen() || !pRegion)
+		{
+			regionSeen.clear();
+			return;
+		}
+		regionWatch.Signalled();
+		regionSeen = ProbeTiles();
+		Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "RegionWatch: seeded %zu tile(s).", regionSeen.size());
+	}
+
+	// Reload tiles a peer saved while we show the region view (Q17 step 4).
+	void OnIdle()
+	{
+		if (inIdle)
+		{
+			return;
+		}
+		InPullScope idleScope(inIdle);
+
+		if (regionsync::savehook641::InSave() || !regionViewReady || !pRegion)
+		{
+			return;
+		}
+		cISC4AppPtr pSC4App;
+		if (!pSC4App || pSC4App->GetRegion() != pRegion || pSC4App->GetCity())
+		{
+			return;
+		}
+
+		const ULONGLONG now = GetTickCount64();
+		if (regionWatch.Signalled())
+		{
+			regionSignalTick = now;
+			regionPending = true;
+		}
+		if (!regionPending || now - regionSignalTick < kWatchQuietMs)
+		{
+			return;
+		}
+
+		Logger& logger = Logger::GetInstance();
+		if (settings.saveLock && !regionsync::savelock::IsOpen())
+		{
+			if (!regionNoMutexLogged)
+			{
+				regionNoMutexLogged = true;
+				logger.WriteLine(LogLevel::Info, "RegionWatch: no save mutex, region reload disabled");
+				logger.Flush();
+			}
+			regionPending = false;
+			return;
+		}
+
+		// Due: changed since seen, equal to a probe at least kWatchQuietMs old, non-empty.
+		const TileProbes probes = ProbeTiles();
+		const bool lastIsOld = now - regionLastProbeTick >= kWatchQuietMs;
+		std::vector<TileKey> due;
+		size_t changed = 0;
+		for (const auto& [key, probe] : probes)
+		{
+			const auto seen = regionSeen.find(key);
+			if (seen != regionSeen.end() && seen->second == probe)
+			{
+				continue;
+			}
+			changed++;
+			const auto last = regionLastProbe.find(key);
+			if (probe.size > 0 && lastIsOld && last != regionLastProbe.end() && last->second == probe)
+			{
+				due.push_back(key);
+			}
+		}
+		regionLastProbe = probes;
+		regionLastProbeTick = now;
+		if (changed == 0)
+		{
+			regionPending = false;
+			regionBusyLogged = false;
+			return;
+		}
+		if (due.empty())
+		{
+			regionSignalTick = now;
+			return;
+		}
+
+		if (!regionBusyLogged)
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "RegionWatch: %zu tile(s) due", due.size());
+			logger.Flush();
+		}
+		const int reloaded = ReloadTiles(pRegion, due, false);
+		if (reloaded < 0)
+		{
+			if (!regionBusyLogged)
+			{
+				regionBusyLogged = true;
+				logger.WriteLineFormatted(LogLevel::Info, "RegionWatch: busy, %zu tile(s) due, retrying on idle.", due.size());
+				logger.Flush();
+			}
+			return;
+		}
+		for (const TileKey& key : due)
+		{
+			regionSeen[key] = probes.at(key);
+		}
+		regionPending = due.size() < changed;
+		regionBusyLogged = false;
+		logger.WriteLineFormatted(LogLevel::Info, "RegionWatch: reloaded %d of %zu (recordPtrChanged)", reloaded, due.size());
+		logger.Flush();
 	}
 
 	// ---------------------------------------------------------------
@@ -1502,6 +1939,8 @@ private:
 	void Pull(const char* reason)
 	{
 		Logger& logger = Logger::GetInstance();
+		// Before any read, so a peer write during this pull signals a new change.
+		storeSeen = ScanPeerSnapshots();
 
 		if (!pRegion || !pOwnRegionalCity)
 		{
@@ -1656,62 +2095,130 @@ private:
 		// tiles other than ours. Adjacency is not checked.
 		int32_t ownX = -1, ownZ = -1;
 		pOwnRegionalCity->GetPosition(ownX, ownZ);
-		SC4Vector<cISC4Region::cLocation> locations;
-		pRegion->GetCityLocations(locations);
-		std::vector<cISC4RegionalCity*> adjacent;
-		for (size_t i = 0; i < locations.size(); i++)
-		{
-			const int32_t x = static_cast<int32_t>(locations[i].x);
-			const int32_t z = static_cast<int32_t>(locations[i].z);
-			if (x == ownX && z == ownZ) continue;
-			cISC4RegionalCity* p = regionsync::FindRegionalCity(pRegion, x, z);
-			if (p && p->GetEstablished()) adjacent.push_back(p);
-		}
+		std::vector<TileKey> tiles = EstablishedTiles(pRegion);
+		std::erase(tiles, TileKey{ ownX, ownZ });
 
-		std::optional<regionsync::savelock::Guard> lock;
-		if (settings.saveLock)
-		{
-			lock.emplace(LockTimeoutMs(), "reload");
-		}
-
-		int reloaded = 0;
-		for (cISC4RegionalCity* pAdj : adjacent)
-		{
-			int32_t x = -1, z = -1;
-			pAdj->GetPosition(x, z);
-			const int32_t popBefore = pAdj->GetPopulation();
-
-			cRZAutoRefCount<cISC4RegionalCity>* pSlot = pRegion->GetCity(x, z);
-			if (!pSlot)
-			{
-				continue;
-			}
-
-			const bool ok = pRegion->ReloadCity(pSlot);
-			cISC4RegionalCity* pAfter = regionsync::FindRegionalCity(pRegion, x, z);
-
-			logger.WriteLineFormatted(
-				LogLevel::Info,
-				"Reload (%d,%d): ok=%d popBefore=%d popAfter=%d recordPtrChanged=%d",
-				x, z,
-				ok ? 1 : 0,
-				popBefore,
-				pAfter ? pAfter->GetPopulation() : -1,
-				(pAfter != pAdj) ? 1 : 0);
-
-			if (ok)
-			{
-				reloaded++;
-			}
-		}
-		lock.reset();
-
+		const int reloaded = ReloadTiles(pRegion, tiles, true);
 		if (reloaded > 0)
 		{
 			pNeighborsSim->MarkDealsDirty();
 		}
 
-		logger.WriteLineFormatted(LogLevel::Info, "Reload: %d of %zu adjacent tiles reloaded.", reloaded, static_cast<size_t>(adjacent.size()));
+		logger.WriteLineFormatted(LogLevel::Info, "Reload: reloaded %d of %zu adjacent tiles (recordPtrChanged).", reloaded, tiles.size());
+	}
+
+	// ok is not a success flag (Q3); recordPtrChanged is.
+	bool ReloadTile(cISC4Region* region, int32_t x, int32_t z)
+	{
+		cISC4RegionalCity* pBefore = regionsync::FindRegionalCity(region, x, z);
+		const int32_t popBefore = pBefore ? pBefore->GetPopulation() : -1;
+		const std::string nameBefore = GetRegionalCityName(pBefore);
+
+		cRZAutoRefCount<cISC4RegionalCity>* pSlot = region->GetCity(x, z);
+		if (!pSlot)
+		{
+			return false;
+		}
+
+		const bool ok = region->ReloadCity(pSlot);
+		cISC4RegionalCity* pAfter = regionsync::FindRegionalCity(region, x, z);
+		const bool changed = pAfter != pBefore;
+
+		Logger::GetInstance().WriteLineFormatted(
+			LogLevel::Info,
+			"Reload (%d,%d): ok=%d popBefore=%d popAfter=%d recordPtrChanged=%d name='%s'->'%s'",
+			x, z,
+			ok ? 1 : 0,
+			popBefore,
+			pAfter ? pAfter->GetPopulation() : -1,
+			changed ? 1 : 0,
+			nameBefore.c_str(),
+			GetRegionalCityName(pAfter).c_str());
+		return changed;
+	}
+
+	// Under the save lock: blocking (wait, the in-city cheat) or zero wait.
+	// Returns tiles whose record changed, or -1 when the zero wait was busy.
+	int ReloadTiles(cISC4Region* region, const std::vector<TileKey>& tiles, bool wait)
+	{
+		std::optional<regionsync::savelock::Guard> lock;
+		if (settings.saveLock)
+		{
+			if (wait)
+			{
+				lock.emplace(LockTimeoutMs(), "reload");
+			}
+			else
+			{
+				lock.emplace("watch");
+				if (!lock->Held())
+				{
+					return -1;
+				}
+			}
+		}
+		int changed = 0;
+		for (const auto& [x, z] : tiles)
+		{
+			if (ReloadTile(region, x, z))
+			{
+				changed++;
+			}
+		}
+		return changed;
+	}
+
+	std::vector<TileKey> EstablishedTiles(cISC4Region* region) const
+	{
+		std::vector<TileKey> tiles;
+		SC4Vector<cISC4Region::cLocation> locations;
+		region->GetCityLocations(locations);
+		for (size_t i = 0; i < locations.size(); i++)
+		{
+			const int32_t x = static_cast<int32_t>(locations[i].x);
+			const int32_t z = static_cast<int32_t>(locations[i].z);
+			cISC4RegionalCity* p = regionsync::FindRegionalCity(region, x, z);
+			if (p && p->GetEstablished())
+			{
+				tiles.push_back({ x, z });
+			}
+		}
+		return tiles;
+	}
+
+	// Adjacent tiles with a city open, else every established tile (Q17 step 3).
+	void ReloadCheat()
+	{
+		if (pCity)
+		{
+			ReloadAdjacent();
+			return;
+		}
+		Logger& logger = Logger::GetInstance();
+		cISC4AppPtr pSC4App;
+		cISC4Region* region = pSC4App ? pSC4App->GetRegion() : nullptr;
+		logger.WriteLineFormatted(LogLevel::Info, "Reload: cheat fired in the region view. region=%p (ours %p) regionViewReady=%d",
+			static_cast<void*>(region), static_cast<void*>(pRegion), regionViewReady ? 1 : 0);
+		logger.Flush();
+		if (!region || pSC4App->GetCity() || regionsync::savehook641::InSave())
+		{
+			logger.WriteLine(LogLevel::Info, "Reload: no region, a city is open, or a save is running; nothing reloaded.");
+			return;
+		}
+		if (settings.saveLock && !regionsync::savelock::IsOpen())
+		{
+			logger.WriteLine(LogLevel::Info, "Reload: no save mutex, nothing reloaded.");
+			return;
+		}
+
+		const std::vector<TileKey> tiles = EstablishedTiles(region);
+		const int reloaded = ReloadTiles(region, tiles, false);
+		if (reloaded < 0)
+		{
+			logger.WriteLine(LogLevel::Info, "Reload: save lock busy, retry the cheat.");
+			return;
+		}
+		logger.WriteLineFormatted(LogLevel::Info, "Reload: reloaded %d of %zu established tiles (recordPtrChanged, region view).", reloaded, tiles.size());
 	}
 
 	// Plugin saves only; a save of a conflicting city would overwrite the first opener's.
@@ -2212,7 +2719,7 @@ private:
 		case kCheatDumpID:    Dump(); break;
 		case kCheatPublishID: Publish("cheat"); break;
 		case kCheatPullID:    Pull("cheat"); break;
-		case kCheatReloadID:  ReloadAdjacent(); break;
+		case kCheatReloadID:  ReloadCheat(); break;
 		case kCheatStatusID:  Status(); break;
 		case kCheatSaveID:    Save("cheat"); break;
 		case kCheatUnlockID:  Unlock("cheat"); break;
@@ -2275,6 +2782,27 @@ private:
 	cISC4City* guardCity = nullptr;     // city and tile the guard last ran for
 	int32_t guardX = -1;
 	int32_t guardZ = -1;
+
+	bool reloadCheat = false;   // RegionSyncReload and the cheat notification registered
+
+	// Q17. Slice A: store watch; slice B: region watch on idle.
+	ChangeWatch storeWatch{ "StoreWatch" };
+	std::map<std::string, std::filesystem::file_time_type> storeSeen;
+	regionsync::IdleService idleService{ kIdleServiceID };
+	bool idleAdded = false;
+	bool onIdleAdded = false;
+	ChangeWatch regionWatch{ "RegionWatch" };
+	std::filesystem::path regionFolder;
+	bool regionViewReady = false;   // set only by the PostRegionInit message
+	bool regionPending = false;
+	bool regionBusyLogged = false;
+	ULONGLONG regionSignalTick = 0;
+	TileProbes regionSeen;
+	TileProbes regionLastProbe;
+	ULONGLONG regionLastProbeTick = 0;
+	bool regionNoMutexLogged = false;
+	bool inIdle = false;
+	std::set<TileKey> regionPathLogged;
 };
 
 cRZCOMDllDirector* RZGetCOMDllDirector()

@@ -43,8 +43,10 @@ SRCS = \
 	src/SaveLock.cpp \
 	src/TileLock.cpp \
 	src/SaveHook641.cpp \
+	src/IdleService.cpp \
 	src/RegionSyncDllDirector.cpp \
 	$(GZCOM)/src/cRZBaseString.cpp \
+	$(GZCOM)/src/cRZBaseSystemService.cpp \
 	$(GZCOM)/src/cRZBaseUnknown.cpp \
 	$(GZCOM)/src/cRZCellMap.cpp \
 	$(GZCOM)/src/cRZCOMDllDirector.cpp \
