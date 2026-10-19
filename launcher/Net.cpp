@@ -269,7 +269,7 @@ namespace
 			std::span<const uint8_t> context, std::vector<uint8_t>* raw = nullptr);
 		void SendDiscover(uint32_t addr);
 		void BeginResolve(const std::string& text, const std::string& code);
-		void EndResolve();
+		void EndResolve(INT syncResult = WSA_IO_PENDING);
 		void CancelResolve();
 		void ConnectTo(uint32_t addr, const std::string& text, const std::string& code);
 		void Read(Conn& c);
@@ -324,6 +324,7 @@ namespace
 		AbandonDownloads();
 		ClearHostStaging();
 		CancelResolve();
+		crypto_wipe(code_.data(), code_.size());
 		code_.clear();
 		crypto_wipe(cfg_.peerKey.data(), cfg_.peerKey.size());
 		cfg_.hasKey = false;
@@ -489,14 +490,14 @@ namespace
 			Emit(LanEvent::Kind::Status, "resolving " + text);
 			return;
 		}
-		resolve_.active = true;   // completed at once: finish now
-		EndResolve();
+		resolve_.active = true;   // completed at once: finish now with its own result
+		EndResolve(r);
 	}
 
-	void Net::EndResolve()
+	void Net::EndResolve(INT syncResult)
 	{
 		if (!resolve_.active) return;
-		const INT r = GetAddrInfoExOverlappedResult(&resolve_.ov);
+		const INT r = syncResult == WSA_IO_PENDING ? GetAddrInfoExOverlappedResult(&resolve_.ov) : syncResult;
 		uint32_t addr = 0;
 		if (r == NO_ERROR && resolve_.result && resolve_.result->ai_addr)
 		{
@@ -519,7 +520,7 @@ namespace
 	{
 		if (!resolve_.active) return;
 		GetAddrInfoExCancel(&resolve_.cancel);
-		WaitForSingleObject(resolve_.ov.hEvent, 1000);   // the OVERLAPPED must outlive the call
+		WaitForSingleObject(resolve_.ov.hEvent, INFINITE);   // the cancel completes promptly; the OVERLAPPED must outlive the call
 		if (resolve_.result) FreeAddrInfoExW(resolve_.result);
 		CloseHandle(resolve_.ov.hEvent);
 		resolve_ = Resolving{};

@@ -115,6 +115,9 @@ namespace
 		std::deque<LanEvent> backlog;   // Manifest, Downloaded, SyncFailed held while a dialog is up
 		ULONGLONG lastNotSent = 0;
 		bool gameRunning = false;       // refreshed once per LAN timer tick
+		uint64_t sessionSeq = 0;        // bumped per session; prompts compare it afterwards
+		size_t peerSnapshots = 0;       // peer snapshots in the mirror region; recounted every 5 s
+		ULONGLONG lastRecount = 0;
 		std::wstring lastArchive;
 		size_t reapFailures = 0;
 	} S;
@@ -526,6 +529,7 @@ namespace
 		c.kind = LanCmd::Kind::Start;
 		c.config = Config(role);
 		S.worker.Post(std::move(c));
+		crypto_wipe(c.config.peerKey.data(), c.config.peerKey.size());   // moved-from copy
 	}
 
 	void NewCodeNow()
@@ -836,6 +840,8 @@ namespace
 		if (S.chSaves == INVALID_HANDLE_VALUE) S.chSaves = Watch(S.storeBase + L"\\_saves\\" + Widen(S.mirrorRegion));
 	}
 
+	size_t PeerSnapshotCount();
+
 	void StartMirror(const std::string& region)
 	{
 		if (S.mirroring && lan::EqualsNoCase(S.mirrorRegion, region)) return;
@@ -850,6 +856,8 @@ namespace
 		ReadRegionSize(S.regionsDir + L"\\" + Widen(region));
 		OpenWatches();
 		Log("Mirroring " + region + " with " + S.peerSite);
+		S.peerSnapshots = PeerSnapshotCount();
+		S.lastRecount = GetTickCount64();
 		Scan(true);
 		S.lastScan = GetTickCount64();
 	}
@@ -979,12 +987,14 @@ namespace
 		std::string local;
 		if (!(ReadSharedFile(target, local, kMaxSnapshot) && local == text))
 		{
-			if (!Exists(target) && PeerSnapshotCount() + 1 > kMaxPeerSnapshots)
+			const bool isNew = !Exists(target);
+			if (isNew && S.peerSnapshots + 1 > kMaxPeerSnapshots)
 			{
 				Cap("more than " + std::to_string(kMaxPeerSnapshots) + " snapshots from " + S.peerSite + " in " + S.mirrorRegion);
 				return true;
 			}
 			if (!WriteAtomic(target, p.bytes.data(), p.bytes.size())) return false;
+			if (isNew) S.peerSnapshots++;
 		}
 		if (S.openBoth.erase(t)) Bump();
 		return true;
@@ -1104,6 +1114,7 @@ namespace
 		std::map<std::string, std::string> local = std::move(e.localHashes);
 		if (exists && !known && !local.empty() && !S.resync)
 		{
+			const uint64_t session = S.sessionSeq;
 			const bool yes = ConfirmYesNo(S.main, L"This PC already has a region folder \"" + S.localFolder + L"\" that was never synced with "
 				+ Widen(S.peerSite) + L".\n\nMove it to RegionSyncLAN\\archive and download the host's copy?");
 			if (!yes)
@@ -1111,10 +1122,10 @@ namespace
 				Post(LanCmd::Kind::Close, "declined");
 				return FailSync("sync declined; the local region was left as it is");
 			}
+			if (S.sessionSeq != session || !S.connected) return;   // a new session came up during the prompt; it diffs again
 			S.archiveFolder = true;
 			local.clear();
 		}
-		if (!S.connected) return;   // dropped while the prompt was up; the next session diffs again
 		const bool full = S.archiveFolder || S.resync;
 		const auto saves = full ? std::map<Tile, regionsync::SaveCounter>{} : ReadSaves(region);
 		const auto failed = full ? std::set<Tile>{} : SaveCountFailed(region);
@@ -1339,13 +1350,16 @@ namespace
 				DropStaging();
 				if (result == SwapResult::RollbackFailed)
 				{
+					// State first: handlers run while the box is up.
+					S.swapBroken = "the last sync was not fully undone: compare the region with " + Utf8(S.lastArchive);
+					FailSync(S.swapBroken);
 					ShowMessage(S.main, L"The sync failed and some originals could not be put back. Check the region folder against "
 						+ S.lastArchive + L" before playing.\n\n" + Widen(error), MB_ICONERROR);
-					S.swapBroken = "the last sync was not fully undone: compare the region with " + Utf8(S.lastArchive);
-					return FailSync(S.swapBroken);
+					return;
 				}
+				FailSync("swap rolled back: " + error);
 				ShowMessage(S.main, L"The sync could not replace the region files, so every original was put back.\n\n" + Widen(error));
-				return FailSync("swap rolled back: " + error);
+				return;
 			}
 		}
 		FinishSync();
@@ -1382,6 +1396,7 @@ namespace
 
 	void OnSession(LanEvent& e)
 	{
+		S.sessionSeq++;
 		S.connected = true;
 		S.peer = e.hello;
 		S.peerAddrText = e.address;
@@ -1706,6 +1721,11 @@ namespace launcher
 				OpenWatches();
 				Scan(false);
 			}
+			if (now - S.lastRecount > kRescanMs)
+			{
+				S.lastRecount = now;
+				S.peerSnapshots = PeerSnapshotCount();   // deletes and reaps are not tracked one by one
+			}
 			for (auto it = S.pending.begin(); it != S.pending.end();)
 			{
 				it = ApplyPut(it->second) ? S.pending.erase(it) : std::next(it);
@@ -1808,6 +1828,7 @@ namespace launcher
 	void LanController::Resync()
 	{
 		if (!CanResync()) return;
+		const uint64_t session = S.sessionSeq;
 		std::wstring tiles;
 		for (const Tile& t : S.notSent) tiles += L" (" + std::to_wstring(t.x) + L"," + std::to_wstring(t.z) + L")";
 		if (!ConfirmYesNo(S.main, L"Re-sync replaces this PC's copy of " + Widen(S.region) + L" with the host's."
@@ -1815,6 +1836,8 @@ namespace launcher
 		{
 			return;
 		}
+		S.gameRunning = AnyGameProcess();
+		if (S.sessionSeq != session || !CanResync()) return;   // handlers ran during the prompt
 		Log("Re-sync requested");
 		S.resync = true;   // FinishSync writes a fresh journal
 		SelectRegion();
