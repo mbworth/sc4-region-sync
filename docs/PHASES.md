@@ -41,7 +41,7 @@ Exit criterion: growth in instance B visibly changes regional demand in instance
 
 ## Phase 3: nice to have
 
-- [ ] Region view redraws a reloaded tile's picture (Q17: record reloads, picture does not). Needs the region view's texture rebuild path from Ghidra.
+- [x] Region view tile pictures: parked 2026-10-19. The screen rebuilds them on every region-view entry; an automatic redraw would blink the screen and a per-tile refresh needs raw screen addresses (`docs/research/region-view-thumbnail-641.md`). `RegionSyncRedraw` rebuilds on demand.
 
 - [x] Region view reloads a peer's tile record when the peer saves (`ReloadOnPeerSave`, Q17 step 4, observed 2026-10-19: hover population updated live). Steps 5 to 7 observed the same day; default 1 since then.
 - [x] Coordinator slice 1 (`docs/PLAN-LAUNCHER.md`): status file, same-tile guard (tile mutex, second opener stops writing), Win32 launcher with list, raise, launch gate and resource estimate. Observed 2026-10-18 (Q14).

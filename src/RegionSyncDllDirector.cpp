@@ -116,6 +116,7 @@ static constexpr uint32_t kCheatPullID = 0x7A3C9E54;
 static constexpr uint32_t kCheatReloadID = 0x7A3C9E55;
 static constexpr uint32_t kCheatStatusID = 0x7A3C9E56;
 static constexpr uint32_t kCheatSaveID = 0x7A3C9E57;
+static constexpr uint32_t kCheatRedrawID = 0x6B2E91D7;
 static constexpr uint32_t kCheatUnlockID = 0x7A3C9E58;
 static constexpr uint32_t kCheatSetterTestID = 0x7A3C9E59;
 static constexpr uint32_t kCheatProbeID = 0x7A3C9E5A;
@@ -134,6 +135,7 @@ static constexpr std::string_view kCheatPull = "RegionSyncPull";
 static constexpr std::string_view kCheatReload = "RegionSyncReload";
 static constexpr std::string_view kCheatStatus = "RegionSyncStatus";
 static constexpr std::string_view kCheatSave = "RegionSyncSave";
+static constexpr std::string_view kCheatRedraw = "RegionSyncRedraw";
 static constexpr std::string_view kCheatUnlock = "RegionSyncUnlock";
 static constexpr std::string_view kCheatSetterTest = "RegionSyncSetterTest";
 static constexpr std::string_view kCheatProbe = "RegionSyncProbe";
@@ -753,8 +755,8 @@ private:
 		RegisterReloadCheat();
 	}
 
-	// RegionSyncReload also runs in the region view, so it and the cheat
-	// notification outlive the city cheats.
+	// RegionSyncReload and RegionSyncRedraw both run in the region view, so they
+	// and the cheat notification outlive the city cheats.
 	void RegisterReloadCheat()
 	{
 		if (!pCheatCodeManager || reloadCheat)
@@ -762,6 +764,7 @@ private:
 			return;
 		}
 		pCheatCodeManager->RegisterCheatCode(kCheatReloadID, cRZBaseString(kCheatReload));
+		pCheatCodeManager->RegisterCheatCode(kCheatRedrawID, cRZBaseString(kCheatRedraw));
 		pCheatCodeManager->AddNotification2(this, 0);
 		reloadCheat = true;
 	}
@@ -773,6 +776,7 @@ private:
 			return;
 		}
 		pCheatCodeManager->UnregisterCheatCode(kCheatReloadID);
+		pCheatCodeManager->UnregisterCheatCode(kCheatRedrawID);
 		pCheatCodeManager->RemoveNotification2(this, 0);
 		reloadCheat = false;
 	}
@@ -2221,6 +2225,37 @@ private:
 		logger.WriteLineFormatted(LogLevel::Info, "Reload: reloaded %d of %zu established tiles (recordPtrChanged, region view).", reloaded, tiles.size());
 	}
 
+	// Region view only: the game's own region screen rebuild reloads tile pictures.
+	void RedrawCheat()
+	{
+		Logger& logger = Logger::GetInstance();
+		if (pCity)
+		{
+			logger.WriteLine(LogLevel::Info, "Redraw: a city is open; use it from the region view.");
+			return;
+		}
+		cISC4AppPtr pSC4App;
+		cISC4Region* region = pSC4App ? pSC4App->GetRegion() : nullptr;
+		logger.WriteLineFormatted(LogLevel::Info, "Redraw: cheat fired in the region view. region=%p regionViewReady=%d",
+			static_cast<void*>(region), regionViewReady ? 1 : 0);
+		logger.Flush();
+		if (!region || pSC4App->GetCity() || regionsync::savehook641::InSave())
+		{
+			logger.WriteLine(LogLevel::Info, "Redraw: no region, a city is open, or a save is running; nothing done.");
+			return;
+		}
+		try
+		{
+			const bool ok = pSC4App->RequestGoToRegionView(false);
+			logger.WriteLineFormatted(LogLevel::Info, "Redraw: RequestGoToRegionView(false) returned %d", ok ? 1 : 0);
+			logger.Flush();
+		}
+		catch (...)
+		{
+			logger.WriteLine(LogLevel::Error, "Redraw: exception in RequestGoToRegionView.");
+		}
+	}
+
 	// Plugin saves only; a save of a conflicting city would overwrite the first opener's.
 	void Save(const char* reason)
 	{
@@ -2720,6 +2755,7 @@ private:
 		case kCheatPublishID: Publish("cheat"); break;
 		case kCheatPullID:    Pull("cheat"); break;
 		case kCheatReloadID:  ReloadCheat(); break;
+		case kCheatRedrawID:  RedrawCheat(); break;
 		case kCheatStatusID:  Status(); break;
 		case kCheatSaveID:    Save("cheat"); break;
 		case kCheatUnlockID:  Unlock("cheat"); break;

@@ -66,6 +66,7 @@ Open the cheat box with Ctrl+X.
 | `RegionSyncPublish` | Refresh own regional record from the live city and write the snapshot. |
 | `RegionSyncPull` | Read every other tile's snapshot and apply it. |
 | `RegionSyncReload` | Experimental: ask the region to reload adjacent tiles' records from their save files. |
+| `RegionSyncRedraw` | Region view only: rebuild the region screen so tile pictures reload from the save files (the game refreshes them on its own each time the region view is entered). |
 | `RegionSyncSave` | Fast-save the current city. |
 | `RegionSyncMirror` | Create other instances' published connections and deals in this city now, ignoring `SyncConnections`/`SyncDeals` (otherwise this happens on the sim day after each pull), and lay the 3-cell edge network piece under each mirrored connection (a 2 by 3 block for avenue and highway lane pairs; demolishing what is on those cells, as the game does at load), ignoring `LayEdgeNetwork`. Ferry connections are logged, not mirrored. Also removes connections and deals a live neighbor no longer lists (no demolition), ignoring `SyncRemovals`. |
 | `RegionSyncOffer` | Diagnostic: logs each neighbor/deal-type check behind a deal offer, then what `ProposeDeals` (not added to the sim) returns. |
