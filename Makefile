@@ -5,6 +5,8 @@
 #   make            -> build/SC4RegionSync.dll (Release)
 #   make debug      -> build/SC4RegionSync.debug.dll
 #   make launcher   -> build/SC4RegionSyncLauncher.exe
+#   make test       -> host-side snapshot and status test
+#   make test-launcher -> host-side test of the launcher's LAN core
 #   make clean
 #
 # Override XWIN if you put the splat somewhere else:
@@ -125,7 +127,7 @@ LAUNCHER_SRCS = launcher/main.cpp launcher/Status.cpp launcher/Settings.cpp \
 	launcher/Frame.cpp launcher/Handshake.cpp launcher/Manifest.cpp launcher/Journal.cpp \
 	src/InstanceStatus.cpp src/NeighborSnapshot.cpp
 # Both PCs must run the same build (docs/PLAN-LAN.md section 3).
-BUILD_ID := 0.2.0+$(shell git rev-parse --short=7 HEAD 2>/dev/null || echo 0000000)
+BUILD_ID := $(shell sed -n 's/.*PLUGIN_VERSION_STR[[:space:]]*"\(.*\)"/\1/p' src/version.h)+$(shell git rev-parse --short=7 HEAD 2>/dev/null || echo 0000000)
 LAUNCHER_FLAGS = -target i386-pc-windows-msvc -fuse-ld=lld-link -ferror-limit=20 \
 	/std:c++20 /EHsc /W3 /Gy /Gd /MT /O2 /Oi \
 	/D WIN32 /D _UNICODE /D UNICODE /D NDEBUG /D NOMINMAX \
@@ -178,6 +180,8 @@ SC4_USERDIR ?= C:/Users/user
 SC4_PLUGINS ?= $(SC4_USERDIR)/Documents/SimCity 4/Plugins
 SC4_INSTANCES ?= $(SC4_USERDIR)/Documents/SimCity 4 Instances
 SC4_LAUNCHER ?= $(SC4_USERDIR)/SC4RegionSyncLauncher
+SC4_LAUNCHER_GUEST ?= $(SC4_LAUNCHER)-Guest
+SC4_LANLOG  ?= $(SC4_USERDIR)/Documents/SimCity 4/RegionSyncLAN/lan.log
 -include local.mk
 
 deploy: release launcher
@@ -187,10 +191,18 @@ deploy: release launcher
 	@ssh -o BatchMode=yes $(SC4_HOST) 'New-Item -ItemType Directory -Force -Path "$(SC4_LAUNCHER)" | Out-Null'
 	scp -o BatchMode=yes -q $(LAUNCHER_EXE) "$(SC4_HOST):$(SC4_LAUNCHER)/"
 	@echo "Deployed launcher to $(SC4_HOST):$(SC4_LAUNCHER)"
+	@# Loopback guest copy (docs/PLAN-LAN.md section 7), only when its folder exists.
+	@if ssh -o BatchMode=yes $(SC4_HOST) 'if (Test-Path -PathType Container "$(SC4_LAUNCHER_GUEST)") { exit 0 } else { exit 1 }'; then \
+		scp -o BatchMode=yes -q $(LAUNCHER_EXE) "$(SC4_HOST):$(SC4_LAUNCHER_GUEST)/" && echo "Deployed launcher to $(SC4_HOST):$(SC4_LAUNCHER_GUEST)"; fi
 
 logs:
 	@mkdir -p ingame_tests
 	@# scp from this box truncates at 200 KB and ReadAllBytes cannot share the game's open log,
 	@# so a helper script on the box streams each log as base64.
 	@scp -O -o BatchMode=yes -q scripts/Read-Log.ps1 "$(SC4_HOST):$(SC4_USERDIR)/Read-Log.ps1"
+	@# lan.log: the host's next to Regions, a loopback guest's under its instance.
+	@for p in "$(SC4_LANLOG)|lan" "$(SC4_INSTANCES)/Instance2/RegionSyncLAN/lan.log|lan-instance2" "$(SC4_INSTANCES)/Instance3/RegionSyncLAN/lan.log|lan-instance3"; do \
+		path=$${p%%|*}; out=ingame_tests/$${p##*|}.log; \
+		ssh -o BatchMode=yes "$(SC4_HOST)" "powershell -NoProfile -ExecutionPolicy Bypass -File $(SC4_USERDIR)/Read-Log.ps1 -Path '$$path'" 2>/dev/null | tr -d '\r\n' | base64 -d > $$out.tmp 2>/dev/null; \
+		if [ -s $$out.tmp ]; then mv $$out.tmp $$out; echo "$$out ($$(wc -c < $$out) bytes)"; else rm -f $$out.tmp; fi; done
 	@for i in 1 2 3; do ssh -o BatchMode=yes "$(SC4_HOST)" "powershell -NoProfile -ExecutionPolicy Bypass -File $(SC4_USERDIR)/Read-Log.ps1 -Path '$(SC4_INSTANCES)/Instance$$i/SC4RegionSync.log'" 2>/dev/null | tr -d '\r\n' | base64 -d > ingame_tests/instance$$i.log.tmp 2>/dev/null; if [ -s ingame_tests/instance$$i.log.tmp ]; then mv ingame_tests/instance$$i.log.tmp ingame_tests/instance$$i.log; echo "ingame_tests/instance$$i.log ($$(wc -c < ingame_tests/instance$$i.log) bytes)"; else rm -f ingame_tests/instance$$i.log.tmp; echo "Instance$$i: no log"; fi; done

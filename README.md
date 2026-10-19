@@ -55,6 +55,19 @@ Setup makes a private user dir per instance under `Documents\SimCity 4 Instances
 
 `build/SC4RegionSyncLauncher.exe` (`make launcher`, deployed to `C:\Users\<you>\SC4RegionSyncLauncher\`) lists every running instance with its state and open tile, raises an instance's window on click, and starts the next free `InstanceN` with **Launch**. Run `Setup-MultiInstance.ps1 -Setup -Instances 16` once to create the user dirs it picks from. The status bar estimates how many more instances fit (free RAM and commit against the largest running instance, physical cores minus one per instance); red refuses a launch, amber only warns. The per-instance floor defaults to 1.5 GB; a large city measured higher should raise `PerInstanceRamMb`. **Grid** on the toolbar shows every instance as a live thumbnail (composited by Windows, no cost to the games); click a cell to raise it. **Settings** on the toolbar sets the game exe, resolution, windowed, skip intro, single CPU, renderer, extra arguments and the resource limits; it writes `launcher.ini` next to the exe. A game process with no plugin status (a hung exit, or a copy running without the plugin) is listed as an orphan after 90 s and can be ended with **End Task**; rows with a status file never get that button. Each instance writes `Plugins\RegionSync\_instances\<pid>-<start>.status` for the launcher; instances started any other way show up too.
 
+## Two PCs
+
+The launcher can keep one region live across two PCs on the same network. One PC is the **host** (it has the region), the other the **guest**. Both need the same launcher build and plugin version.
+
+- **Host.** Click **Host** on the toolbar. Windows asks about the firewall once, at the first Host: allow it on Private networks. The launcher uses TCP 47641 and UDP 47642 by default (`Port` in `launcher.ini` `[Lan]`). The status strip shows a 6-digit code.
+- **Join.** On the guest click **Join**. The dialog lists the hosts it found, or type an address. Enter the code shown on the host and pick the region.
+- **Pairing.** The code is used once and is burned after one attempt or 10 minutes. A burned code is not replaced on its own: click **New code** on the host for another. After pairing, the two launchers reconnect on their own without a code. Pairing again replaces the old peer.
+- **On connect** the host's region is copied to the guest. Guest files are replaced only when no SimCity 4 runs on the guest, and the originals are archived to `RegionSyncLAN\archive` next to `Regions`. Launch stays disabled until the sync is done.
+- **Then** snapshots and instance status files are mirrored live both ways, so each PC's cities see the other's growth, connections and deals.
+- **Guest saves are not sent in slice 1.** A save on the guest stays on the guest and the launcher flags the tile "not sent". **Re-sync** replaces it with the host's copy after archiving the guest's.
+
+**Security.** Pair only with your own PC, on a network you trust. Traffic is signed but not encrypted: anyone on the LAN can read region files and snapshots. A paired PC is trusted with your region and your game: its snapshots change your cities' edges and deals, and a paired host's `.sc4` files are loaded by the game on the guest, so treat pairing like running that PC's files. Only private addresses are accepted and there is no UPnP; a router port forward that rewrites the source address, or a VPN, can still let a remote PC through, so do not forward the ports. The stored pairing key is protected for your Windows account: any program running as you can read it.
+
 ## Cheat console commands
 
 Open the cheat box with Ctrl+X.

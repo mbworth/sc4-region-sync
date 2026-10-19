@@ -47,7 +47,7 @@ The exe has two roles: **Host** (listens) and **Join** (connects). A host serves
 | LAN folder | `<resolved Regions parent>\RegionSyncLAN\` | `staging\<session>\`, `archive\`, `journal\`, `lan.log`. Host and Join are refused with a banner when its volume serial differs from Regions' |
 
 The **worker thread** (the launcher's first thread) owns everything below:
-- sockets, `getaddrinfo`, the frame codec, MAC and CPace;
+- sockets, name resolution (`GetAddrInfoExW`, overlapped), the frame codec, MAC and CPace;
 - hashing;
 - copying region files into host staging (section 4);
 - hashing the guest's local region files.
@@ -60,7 +60,7 @@ It may open files in Regions read-only for those two jobs only. It never writes 
   - worker to UI: push, then `PostMessageW(WM_APP_LAN)`.
   The UI drains the whole queue on every `WM_APP_LAN` and on the 250 ms LAN timer, so a lost post costs at most 250 ms.
 - **Ownership.** A staging file has one owner at a time and changes owner only through a queue item.
-- **Modal dialogs.** While a dialog or message box is up, a `modal` flag makes the LAN timer and the queue handlers return early (items stay queued) and defers `WM_CLOSE`. `WM_APP_LAN` handling sits inside the WndProc try/catch.
+- **Modal dialogs.** While a dialog or message box is up, a `modal` flag holds back only the events that can prompt (`MANIFEST` ready, downloads done, sync failed) and the swap; mirror frames, logs and progress are still handled, queued `PUT`s are coalesced by name, and the worker stops reading sockets while more than 32 MiB of events wait for the UI. `WM_CLOSE` is deferred. `WM_APP_LAN` handling sits inside the WndProc try/catch.
 - **Shutdown.** `WM_CLOSE` sets stop, signals and joins the worker (3 s), then `DestroyWindow`. If the join times out, the UI saves `launcher.ini` and calls `ExitProcess`.
 
 | Step | Thread |
@@ -76,7 +76,7 @@ It may open files in Regions read-only for those two jobs only. It never writes 
 
 The save mutex `Local\SC4RegionSync.SaveLock.<region>` is used only by the guest's UI thread, only around the swap renames:
 - opened with `CreateMutexW`;
-- taken only with `WaitForSingleObject(m, 0)`, retried on a 100 ms timer;
+- taken only with `WaitForSingleObject(m, 0)`, retried on the 250 ms LAN timer;
 - held for milliseconds.
 
 The launcher's open makes the plugin log `SaveLock: opened ... peer=1` with a single instance. `lan.log` records the launcher's own open, and Q4 gets a note.
@@ -87,10 +87,10 @@ The launcher's open makes the plugin log `SaveLock: opened ... peer=1` with a si
 
 - TCP `Port` (default 47641) and UDP `Port+1`, both bound to `INADDR_ANY`. IPv4 only, no UPnP.
 - The boundary is the peer address check: at `accept` and on every UDP datagram, the peer must be in 10/8, 172.16/12 or 192.168/16, or be 127.0.0.1 when `AllowLoopback=1`.
-- Why `INADDR_ANY`: per-address binds break whenever DHCP, a VPN or a Wi-Fi roam changes the adapters. A public NIC with a manual port forward is still refused at `accept`.
+- Why `INADDR_ANY`: per-address binds break whenever DHCP, a VPN or a Wi-Fi roam changes the adapters. A manual port forward is refused at `accept` only when the router keeps the outside source address; a forward that source-NATs (hairpin, masquerade) arrives from the router's LAN address and passes, and so does a VPN peer in 10/8.
 - Guest `Join` sends `DISCOVER {magic=SC4RS, proto}` to 255.255.255.255 every 1 s while the dialog is open (unicast to 127.0.0.1 with `AllowLoopback`).
 - The host replies `{proto, site, siteId, build, port}`.
-- A typed name or address is resolved on the worker (`getaddrinfo`, `AF_INET`). It must be private, and gets the same `DISCOVER` by unicast.
+- A typed dotted address gets the same `DISCOVER` by unicast when the address box loses focus. A typed name is resolved only on Connect, on the worker, with `GetAddrInfoExW` (`AF_INET`, overlapped, 5 s timeout), so the loop never blocks on DNS. Either must be private.
 - Discovery is unauthenticated and only fills the list. The list shows an ID (the first 8 hex of `siteId`). It is an identifier, not a security check.
 - `PeerAddress` is updated only after an authenticated handshake, so a spoofed reply cannot redirect the reconnect loop.
 
@@ -129,7 +129,7 @@ u8[32] mac     keyed BLAKE2b-256(key, dir || version..data), dir = 'G' or 'H'
 | `Y` | 64 hex |
 | region names | printable ASCII, the section 4 name rules |
 
-**Pairing window.** The host accepts a new guest only while hosting with no paired guest, or after "New code".
+**Pairing window.** The host accepts a new guest only while hosting with no paired guest, or after "New code". A burned code is never replaced automatically: the strip shows "code burned (New code)" with the attempt's address, and only "New code" or a fresh Host issues another, so an attacker gets one guess per click.
 - The code is 6 digits from `BCryptGenRandom`, shown in the host's status strip.
 - It is burned after one attempt, failed or not, or after 10 minutes.
 - At most one pairing attempt per 2 s. The strip shows the address of each burned attempt.
@@ -168,9 +168,9 @@ Session key `Ks = BLAKE2b(K, "session" || nonceG || nonceH)`. A half-open old co
 
 | Type | Direction | Fields | Receiver |
 |---|---|---|---|
-| `HELLO` | both | `proto`, `role`, `site`, `siteId`, `nonce`, `pair`, `build`, `pluginsHash`. Host adds `result`, `reason`, `region.N`, `Y` (pairing) | as above |
+| `HELLO` | both | `proto`, `role`, `site`, `siteId`, `nonce`, `pair`, `build`, `pluginsHash`. Host adds `result`, `reason`, `Y` (pairing), and `region.N` on a paired reconnect only | as above |
 | `PAKE` | G to H | `Y`, `conf` | pairing only |
-| `CONFIRM` | both | `conf` (H to G when pairing), MAC (G to H when paired) | session starts |
+| `CONFIRM` | both | `conf` and `region.N` (H to G when pairing, regions after the code is proven), MAC (G to H when paired) | session starts |
 | `SELECT` | G to H | `region` (ASCII, else refused with a message) | host stages it and sends `MANIFEST`. One per connection plus 3 retries |
 | `MANIFEST` | H to G | `region`, `count`; the data part carries the `file.N=name\|size\|hash\|tile` lines (`tile` is optional and comes from the host's `_saves` `file`) | guest refuses an empty manifest, otherwise diffs (section 4) |
 | `GET` | G to H | `region`, `name` (must be in the manifest) | host streams `FILE` from staging |
@@ -195,7 +195,8 @@ Mirroring starts after `SYNCED`, or right after the handshake when the guest pos
 | Guest reconnect | 1, 2, 4, 8, 16, then every 30 s, plus or minus 20 % jitter. Resets only after `SYNCED` or 60 s connected |
 | Host | one guest; any other gets `refused reason=busy` |
 | Peer files after disconnect | kept 10 minutes. Then the launcher deletes the peer's status files, then that peer's snapshots |
-| Swap try-lock | 100 ms retries until it holds the lock or a game process starts (then postponed) |
+| Swap try-lock | retried every 250 ms (the LAN timer) until it holds the lock or a game process starts (then postponed) |
+| Name resolution (Connect) | 5 s (`GetAddrInfoExW` timeout) |
 
 ## 4. First sync and journal
 
@@ -258,7 +259,7 @@ On every connect the host copies to the guest the region the guest selects. The 
   - Skip the write when the bytes equal the local file.
   - **Refuse a snapshot for tile (x,z) when either holds:** the local snapshot for that tile has a live writer on our host (pid check), or a local status file (our host) shows that tile in `city` state.
   - On refusal, show "tile (x,z) is open on both PCs" and keep the latest bytes in one pending slot per tile, retried on the 250 ms timer.
-  - Otherwise write `<name>.tmp` and rename over (`WriteFileAtomic` rules, P6). Then check again: if a live local writer appeared, restore the local bytes.
+  - Otherwise write `<name>.tmp` and rename over (`WriteFileAtomic` rules, P6). No restore step after the rename: a local writer that starts in between publishes over it, and its publish wins.
 - **Inbound `DELETE`:** only when the local file's writer is `SameHost` with the peer.
 - **Reaping.**
   - The launcher reaps its own host's dead pids as today (`Discover`), and the mirror forwards those deletes.
@@ -322,10 +323,11 @@ It holds one peer record; pairing again replaces it. Every value written there i
 - **An attacker on the LAN can:**
   - read discovery replies and everything in transit (frames are signed, not encrypted): region names, region files, snapshots, status files;
   - reset connections (the guest reconnects);
-  - make one online guess per displayed code, which burns it. Repeated attempts can keep pairing from succeeding, so the strip shows each attempt's address.
+  - make one online guess per displayed code, which burns it; the next code needs a click on "New code". Repeated attempts can keep pairing from succeeding, so the strip shows each attempt's address;
+  - learn whether a guest is connected (a pairing `HELLO` with no code gets `busy` or `nocode`). Region names are sent only after `CONFIRM`.
 - **It cannot:**
   - test codes offline (CPace);
-  - reach the launcher from outside the LAN (peer address check, no UPnP; a manual port forward is still refused at `accept`);
+  - reach the launcher from outside the LAN (peer address check, no UPnP). Limits: a port forward that source-NATs, or a VPN peer with a private address, passes the check;
   - send anything that is acted on without `K` (the pairing `HELLO` only triggers a reply);
   - replay frames (fresh nonces in every session key, exact counters);
   - write outside the region folder, the store, `_instances` or the journal (name rules, fixed targets, staging names chosen locally);
@@ -337,6 +339,7 @@ It holds one peer record; pairing again replaces it. Every value written there i
   - A paired host hands the guest `.sc4` files for the 2003 game's loader. Assume a malicious one can run code on the guest.
   - An empty manifest is refused. A short manifest archives the guest's other files, never deletes them.
   - Before implementation, confirm that the snapshot parser's bounds (`kMaxListEntries`, deal amount and expiry ranges, connection cells) are tight enough for an untrusted source.
+- **PeerKey at rest.** DPAPI (current user, no extra entropy): any process running as the same Windows user can decrypt it.
 - **README** says this in plain words: pair only with your own PC on a network you trust, and confidentiality is not provided.
 
 ## 9. What must not break
@@ -364,7 +367,7 @@ Region New York: BumperVille (4,6) and TuggersVille (6,6). Back up the region fo
    - Fail: a connection served from a non-private peer.
 2. **S2 Discovery and pairing.**
    - Join lists the host within 2 s. If not, typed 127.0.0.1 works; record which.
-   - Wrong code: guest "wrong code", host shows a new code and the attempt's address; a second try within 2 s is refused.
+   - Wrong code: guest "wrong code", host shows "code burned (New code)" and the attempt's address; no new code until New code is clicked; a second try within 2 s is refused.
    - Right code: both show paired. `launcher.ini` has `PeerKey`, not the code.
    - Restart both: they reconnect without a code.
    - Re-pair: the host clears its peer and pairs a second guest copy. The old guest gets `unpaired` and after 3 refusals shows "pairing lost, Join again".

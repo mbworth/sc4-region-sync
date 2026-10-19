@@ -1,28 +1,19 @@
 /*
  * sc4-region-sync launcher
  *
- * Status.cpp - status file parsing. Same rules as LoadKeyValues in
- * src/NeighborSnapshot.cpp, hand-written because ifstream cannot open with
- * FILE_SHARE_DELETE.
+ * Status.cpp - status file reading. The read is hand-written because ifstream
+ * cannot open with FILE_SHARE_DELETE; parsing is the plugin's ParseInstanceStatus.
  */
 
 #include "Launcher.h"
-#include <charconv>
+#include "InstanceStatus.h"
 #include <cwctype>
 
-namespace
+namespace launcher
 {
-	template <typename T>
-	bool ParseNumber(const std::string& text, T& out)
+	bool ReadSharedFile(const std::wstring& path, std::string& out, size_t cap)
 	{
-		const char* first = text.data();
-		const char* last = first + text.size();
-		const auto [ptr, ec] = std::from_chars(first, last, out);
-		return ec == std::errc() && ptr == last;
-	}
-
-	bool ReadWholeFile(const std::wstring& path, std::string& out)
-	{
+		out.clear();
 		const HANDLE file = CreateFileW(path.c_str(), GENERIC_READ,
 			FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
 			nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -33,7 +24,7 @@ namespace
 		char buffer[4096];
 		DWORD read = 0;
 		bool ok = true;
-		while (out.size() < 65536)
+		while (true)
 		{
 			if (!ReadFile(file, buffer, sizeof(buffer), &read, nullptr))
 			{
@@ -44,46 +35,17 @@ namespace
 			{
 				break;
 			}
+			if (out.size() + read > cap)
+			{
+				ok = false;  // over the cap: never a valid file
+				break;
+			}
 			out.append(buffer, read);
 		}
 		CloseHandle(file);
 		return ok;
 	}
 
-	std::map<std::string, std::string> ParseKeyValues(const std::string& text)
-	{
-		std::map<std::string, std::string> kv;
-		size_t pos = 0;
-		while (pos < text.size())
-		{
-			size_t end = text.find('\n', pos);
-			if (end == std::string::npos)
-			{
-				end = text.size();
-			}
-			std::string line = text.substr(pos, end - pos);
-			pos = end + 1;
-			if (!line.empty() && line.back() == '\r')
-			{
-				line.pop_back();
-			}
-			if (line.empty() || line[0] == ';' || line[0] == '#')
-			{
-				continue;
-			}
-			const size_t eq = line.find('=');
-			if (eq == std::string::npos)
-			{
-				continue;
-			}
-			kv[line.substr(0, eq)] = line.substr(eq + 1);
-		}
-		return kv;
-	}
-}
-
-namespace launcher
-{
 	std::wstring Widen(const std::string& utf8)
 	{
 		if (utf8.empty())
@@ -136,31 +98,30 @@ namespace launcher
 	bool ReadStatusFile(const std::wstring& path, InstanceStatus& out)
 	{
 		std::string text;
-		if (!ReadWholeFile(path, text))
+		if (!ReadSharedFile(path, text, 65536))
 		{
 			return false;
 		}
-		const auto kv = ParseKeyValues(text);
-		const auto get = [&kv](const char* key) -> std::string
+		regionsync::KeyValues kv;
+		regionsync::ParseKeyValues(text, kv);
+		regionsync::InstanceStatus p;
+		regionsync::ParseInstanceStatus(kv, p);
+		if (kv["schemaVersion"] != "1" || !p.writer.Known())
 		{
-			const auto it = kv.find(key);
-			return it == kv.end() ? std::string() : it->second;
-		};
-
+			return false;
+		}
 		InstanceStatus s;
-		s.host = get("host");
-		if (get("schemaVersion") != "1" || !regionsync::IsValidWriterHost(s.host)
-			|| !ParseNumber(get("pid"), s.pid) || !ParseNumber(get("start"), s.start) || s.pid == 0 || s.start == 0)
-		{
-			return false;
-		}
-		s.userDir = Widen(get("userDir"));
-		s.state = Widen(get("state"));
-		s.region = Widen(get("region"));
-		ParseNumber(get("regionX"), s.regionX);
-		ParseNumber(get("regionZ"), s.regionZ);
-		s.cityName = Widen(get("cityName"));
-		s.conflict = get("conflict") == "1";
+		s.fileName = path.substr(path.find_last_of(L'\\') + 1);
+		s.host = p.writer.host;
+		s.pid = p.writer.pid;
+		s.start = p.writer.start;
+		s.userDir = Widen(p.userDir);
+		s.state = Widen(p.state);
+		s.region = Widen(p.region);
+		s.regionX = p.regionX;
+		s.regionZ = p.regionZ;
+		s.cityName = Widen(p.cityName);
+		s.conflict = p.conflict;
 		out = std::move(s);
 		return true;
 	}

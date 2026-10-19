@@ -37,6 +37,10 @@ namespace launcher
 		int maxInstances = 16;
 	};
 
+	// launcher.ini next to the exe.
+	std::wstring IniPath();
+	std::wstring DocumentsFolder();
+
 	// Creates launcher.ini next to the exe with defaults when missing.
 	Settings LoadSettings();
 
@@ -61,6 +65,10 @@ namespace launcher
 		std::wstring cityName;
 		bool conflict = false;
 	};
+
+	// Whole file with full sharing (the plugin renames over it). False on a
+	// read error or when it is larger than cap.
+	bool ReadSharedFile(const std::wstring& path, std::string& out, size_t cap);
 
 	// False when the file cannot be opened, is not schemaVersion 1, or lacks
 	// host, pid or start.

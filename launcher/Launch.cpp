@@ -6,6 +6,7 @@
  */
 
 #include "Launcher.h"
+#include "Lan.h"
 #include <TlHelp32.h>
 #include <algorithm>
 #include <cwctype>
@@ -90,6 +91,7 @@ namespace launcher
 
 	void ShowMessage(HWND owner, const std::wstring& text, UINT icon)
 	{
+		ModalScope modal;
 		MessageBoxW(owner, text.c_str(), L"SC4 Region Sync Launcher", MB_OK | icon);
 	}
 

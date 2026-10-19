@@ -3,10 +3,12 @@
  *
  * main.cpp - the window: instance list or grid of DWM thumbnails, Launch,
  * Refresh and End Task, resource line. Discovery every 1 s, resource
- * sampling every 5 s (docs/PLAN-LAUNCHER.md).
+ * sampling every 5 s (docs/PLAN-LAUNCHER.md). Host, Join, Re-sync, the LAN
+ * strip and banner (docs/PLAN-LAN.md section 6).
  */
 
 #include "Launcher.h"
+#include "Lan.h"
 #include <CommCtrl.h>
 #include <dwmapi.h>
 #include <windowsx.h>
@@ -26,6 +28,11 @@ namespace
 	constexpr int kCmdGrid = 104;
 	constexpr int kCmdSettings = 105;
 	constexpr int kCmdEndTask = 106;
+	constexpr int kCmdHost = 107;
+	constexpr int kCmdJoin = 108;
+	constexpr int kCmdResync = 109;
+	constexpr int kCmdNewCode = 110;
+	constexpr int kColumns = 5;
 	constexpr size_t kMaxCells = 16;
 	constexpr ULONGLONG kPendingTimeoutMs = 60000;
 	constexpr ULONGLONG kOrphanAgeMs = 90000;
@@ -33,10 +40,14 @@ namespace
 	struct Row
 	{
 		DWORD pid = 0;
+		uint64_t start = 0;
+		std::string host;     // empty for pending and orphan rows (this PC)
+		bool remote = false;  // the other PC's instance: read-only
 		HWND window = nullptr;
 		bool conflict = false;
 		bool orphan = false;  // game process with no status file and no pending launch
-		std::wstring label, state, tile, pidText;
+		std::wstring label, hostText, state, tile, pidText;
+		std::string Key() const { return host + "|" + std::to_string(pid) + "|" + std::to_string(start); }
 	};
 
 	struct Thumb
@@ -59,7 +70,10 @@ namespace
 
 	struct App
 	{
-		HWND main = nullptr, list = nullptr, toolbar = nullptr, status = nullptr, tooltip = nullptr;
+		HWND main = nullptr, list = nullptr, toolbar = nullptr, status = nullptr, tooltip = nullptr, banner = nullptr;
+		LanController lan;
+		LanStatusPart lanStatus;
+		uint64_t lanVersion = 0;
 		HFONT font = nullptr;
 		UINT dpi = 96;
 		Settings settings;
@@ -79,6 +93,72 @@ namespace
 	} app;
 
 	int Scale(int px) { return MulDiv(px, static_cast<int>(app.dpi), 96); }
+
+	// Tooltip text for a status part (uId 1, 2) or a window tool.
+	void SetTip(HWND owner, UINT_PTR id, std::wstring text)
+	{
+		TTTOOLINFOW ti{};
+		ti.cbSize = sizeof(ti);
+		ti.hwnd = owner;
+		ti.uId = id;
+		ti.lpszText = text.data();
+		SendMessageW(app.tooltip, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&ti));
+	}
+
+	// Part 0 is the LAN strip (hidden without a role), part 1 the resource line.
+	void LayoutStatusParts(int width)
+	{
+		int lan = 0;
+		if (!app.lanStatus.strip.empty())
+		{
+			const HDC dc = GetDC(app.status);
+			const HGDIOBJ old = SelectObject(dc, app.font);
+			SIZE size{};
+			GetTextExtentPoint32W(dc, app.lanStatus.strip.c_str(), static_cast<int>(app.lanStatus.strip.size()), &size);
+			SelectObject(dc, old);
+			ReleaseDC(app.status, dc);
+			lan = std::min<int>(size.cx + Scale(16), width / 2);
+		}
+		int parts[] = { lan, -1 };
+		SendMessageW(app.status, SB_SETPARTS, 2, reinterpret_cast<LPARAM>(parts));
+		for (UINT_PTR id = 1; id <= 2; ++id)
+		{
+			TTTOOLINFOW ti{};
+			ti.cbSize = sizeof(ti);
+			ti.hwnd = app.status;
+			ti.uId = id;
+			SendMessageW(app.status, SB_GETRECT, id - 1, reinterpret_cast<LPARAM>(&ti.rect));
+			SendMessageW(app.tooltip, TTM_NEWTOOLRECTW, 0, reinterpret_cast<LPARAM>(&ti));
+		}
+	}
+
+	void Layout();
+	void UpdateLaunchButton();
+
+	void UpdateLanUi(bool force = false)
+	{
+		const LanRole role = app.lan.Role();
+		SendMessageW(app.toolbar, TB_CHECKBUTTON, kCmdHost, MAKELONG(role == LanRole::Host, 0));
+		SendMessageW(app.toolbar, TB_ENABLEBUTTON, kCmdNewCode, MAKELONG(role == LanRole::Host, 0));
+		SendMessageW(app.toolbar, TB_ENABLEBUTTON, kCmdResync, MAKELONG(app.lan.CanResync(), 0));
+		UpdateLaunchButton();
+		if (!force && app.lan.StatusVersion() == app.lanVersion)
+		{
+			return;
+		}
+		app.lanVersion = app.lan.StatusVersion();
+		const LanStatusPart s = app.lan.Status();
+		const bool relayout = force || s.banner.empty() != app.lanStatus.banner.empty() || s.strip.size() != app.lanStatus.strip.size();
+		app.lanStatus = s;
+		SendMessageW(app.status, SB_SETTEXTW, 0, reinterpret_cast<LPARAM>(app.lanStatus.strip.c_str()));
+		SetWindowTextW(app.banner, app.lanStatus.banner.c_str());
+		SetTip(app.status, 1, app.lanStatus.stripTip);
+		SetTip(app.main, reinterpret_cast<UINT_PTR>(app.banner), app.lanStatus.bannerTip);
+		if (relayout)
+		{
+			Layout();
+		}
+	}
 
 	std::wstring LastComponent(const std::wstring& dir)
 	{
@@ -194,27 +274,35 @@ namespace
 		return pids;
 	}
 
-	// Unreadable creation time counts as old.
-	bool OlderThan(DWORD pid, ULONGLONG ms)
+	uint64_t CreationTime(DWORD pid)
 	{
 		const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
 		if (!process)
 		{
-			return true;
+			return 0;
 		}
-		FILETIME created{}, exited{}, kernel{}, user{}, now{};
+		FILETIME created{}, exited{}, kernel{}, user{};
 		const BOOL ok = GetProcessTimes(process, &created, &exited, &kernel, &user);
 		CloseHandle(process);
+		return ok ? (static_cast<uint64_t>(created.dwHighDateTime) << 32) | created.dwLowDateTime : 0;
+	}
+
+	// Unreadable creation time counts as old.
+	bool OlderThan(DWORD pid, ULONGLONG ms)
+	{
+		const uint64_t created = CreationTime(pid);
+		FILETIME now{};
 		GetSystemTimeAsFileTime(&now);
-		const auto u64 = [](const FILETIME& ft) { return (static_cast<ULONGLONG>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime; };
-		return !ok || u64(now) < u64(created) || (u64(now) - u64(created)) / 10000 >= ms;
+		const uint64_t n = (static_cast<uint64_t>(now.dwHighDateTime) << 32) | now.dwLowDateTime;
+		return created == 0 || n < created || (n - created) / 10000 >= ms;
 	}
 
 	std::vector<InstanceStatus> ReadStatuses()
 	{
 		std::vector<InstanceStatus> live;
 		std::set<std::wstring> seen;
-		const std::wstring dir = app.settings.statusDirectory;
+		std::wstring dir = app.settings.statusDirectory;
+		while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L'/')) dir.pop_back();
 		WIN32_FIND_DATAW fd{};
 		const HANDLE find = FindFirstFileW((dir + L"\\*.status").c_str(), &fd);
 		if (find != INVALID_HANDLE_VALUE)
@@ -267,10 +355,11 @@ namespace
 			{
 				for (const InstanceStatus& o : all)
 				{
-					if (o.pid != s.pid && !o.conflict && o.state == L"city" && o.regionX == s.regionX
+					if (!(o.pid == s.pid && o.start == s.start && regionsync::SameHost(o.host, s.host)) && !o.conflict
+						&& o.state == L"city" && o.regionX == s.regionX
 						&& o.regionZ == s.regionZ && _wcsicmp(o.region.c_str(), s.region.c_str()) == 0)
 					{
-						return L"CONFLICT, held by pid " + std::to_wstring(o.pid);
+						return L"CONFLICT, held by pid " + std::to_wstring(o.pid) + (app.lan.IsOwnHost(o.host) ? L"" : L" on " + Widen(o.host));
 					}
 				}
 				return L"CONFLICT";
@@ -442,6 +531,11 @@ namespace
 				c.kind = Strip::Grey;
 				detail = r.tile;
 			}
+			if (r.remote)
+			{
+				c.kind = r.conflict ? Strip::Conflict : Strip::Grey;
+				detail = L"on " + r.hostText + L"  " + (r.tile.empty() ? r.state : r.tile);
+			}
 			c.caption = r.label + L"  " + detail;
 			if (i == n - 1 && app.rows.size() > kMaxCells)
 			{
@@ -555,7 +649,13 @@ namespace
 
 	void UpdateLaunchButton()
 	{
-		SendMessageW(app.toolbar, TB_ENABLEBUTTON, kCmdLaunch, MAKELONG(!LaunchInFlight(app.pending), 0));
+		const bool allowed = !LaunchInFlight(app.pending) && app.lan.LaunchAllowed();
+		SendMessageW(app.toolbar, TB_ENABLEBUTTON, kCmdLaunch, MAKELONG(allowed, 0));
+	}
+
+	int LocalRowCount()
+	{
+		return static_cast<int>(std::count_if(app.rows.begin(), app.rows.end(), [](const Row& r) { return !r.remote; }));
 	}
 
 	void Discover()
@@ -568,7 +668,7 @@ namespace
 		{
 			PendingLaunch& p = it->second;
 			const bool reported = std::any_of(statuses.begin(), statuses.end(),
-				[&p](const InstanceStatus& s) { return s.pid == p.pid; });
+				[&p](const InstanceStatus& s) { return s.pid == p.pid && app.lan.IsOwnHost(s.host); });
 			const bool exited = WaitForSingleObject(p.process, 0) == WAIT_OBJECT_0;
 			if (!reported && !exited)
 			{
@@ -589,19 +689,28 @@ namespace
 			it = app.pending.erase(it);
 		}
 
-		std::set<DWORD> pids;
+		std::set<DWORD> pids;  // this PC's game processes only
 		for (const InstanceStatus& s : statuses)
 		{
-			pids.insert(s.pid);
+			if (app.lan.IsOwnHost(s.host))
+			{
+				pids.insert(s.pid);
+			}
 		}
 		for (const auto& [dir, p] : app.pending)
 		{
 			pids.insert(p.pid);
 		}
-		std::set<DWORD> orphans;  // no status row, no pending launch
+		// A process is claimed only by a status file naming its pid and its creation time
+		// (a remote status file can carry the same pid number).
+		std::set<DWORD> orphans;
 		for (const DWORD pid : GameProcesses())
 		{
-			if (!pids.count(pid))
+			const uint64_t created = CreationTime(pid);
+			const bool claimed = std::any_of(statuses.begin(), statuses.end(),
+				[pid, created](const InstanceStatus& s) { return s.pid == pid && s.start == created; })
+				|| std::any_of(app.pending.begin(), app.pending.end(), [pid](const auto& p) { return p.second.pid == pid; });
+			if (!claimed)
 			{
 				orphans.insert(pid);
 			}
@@ -615,18 +724,25 @@ namespace
 		{
 			Row r;
 			r.pid = s.pid;
+			r.start = s.start;
+			r.host = s.host;
+			r.remote = !app.lan.IsOwnHost(s.host);
+			r.hostText = Widen(s.host);
 			r.pidText = std::to_wstring(s.pid);
 			r.label = s.userDir.empty() ? r.pidText : LastComponent(s.userDir);
-			const auto w = app.windows.find(s.pid);
-			r.window = w == app.windows.end() ? nullptr : w->second;
-			r.state = r.window ? s.state : L"starting (no window)";
+			if (!r.remote)
+			{
+				const auto w = app.windows.find(s.pid);
+				r.window = w == app.windows.end() ? nullptr : w->second;
+			}
+			r.state = r.window || r.remote ? s.state : L"starting (no window)";
 			r.tile = TileText(s, statuses);
 			r.conflict = s.state == L"city" && s.conflict;
-			rows.push_back(std::move(r));
-			if (!s.userDir.empty())
+			if (!r.remote && !s.userDir.empty())
 			{
 				app.liveUserDirs.push_back(NormalizeDir(s.userDir));
 			}
+			rows.push_back(std::move(r));
 		}
 		for (const auto& [dir, p] : app.pending)
 		{
@@ -654,16 +770,17 @@ namespace
 		}
 		std::sort(rows.begin(), rows.end(), [](const Row& a, const Row& b)
 		{
+			if (a.remote != b.remote) return b.remote;  // this PC's rows first
 			return a.label.size() != b.label.size() ? a.label.size() < b.label.size() : a.label < b.label;
 		});
-		// Keep the selection on the same pid across the re-sort.
+		// Keep the selection on the same writer across the re-sort.
 		const int oldSel = ListView_GetNextItem(app.list, -1, LVNI_SELECTED);
-		const DWORD selPid = oldSel >= 0 && oldSel < static_cast<int>(app.rows.size()) ? app.rows[static_cast<size_t>(oldSel)].pid : 0;
+		const std::string selKey = oldSel >= 0 && oldSel < static_cast<int>(app.rows.size()) ? app.rows[static_cast<size_t>(oldSel)].Key() : "";
 		app.rows = std::move(rows);
 		int newSel = -1;
-		for (size_t i = 0; selPid && i < app.rows.size(); ++i)
+		for (size_t i = 0; !selKey.empty() && i < app.rows.size(); ++i)
 		{
-			if (app.rows[i].pid == selPid)
+			if (app.rows[i].Key() == selKey)
 			{
 				newSel = static_cast<int>(i);
 				break;
@@ -700,7 +817,10 @@ namespace
 		std::vector<DWORD> pids;
 		for (const Row& r : app.rows)
 		{
-			pids.push_back(r.pid);
+			if (!r.remote)
+			{
+				pids.push_back(r.pid);
+			}
 		}
 		app.resources = SampleResources(app.settings, pids);
 		for (const Row& r : app.rows)
@@ -723,15 +843,9 @@ namespace
 			app.resources.tooltip += L" source=" + std::to_wstring(source.cx) + L"x" + std::to_wstring(source.cy)
 				+ L" client=" + std::to_wstring(client.cx) + L"x" + std::to_wstring(client.cy);
 		}
-		SendMessageW(app.status, SB_SETTEXTW, SBT_OWNERDRAW, 0);
+		SendMessageW(app.status, SB_SETTEXTW, 1 | SBT_OWNERDRAW, 0);
 		InvalidateRect(app.status, nullptr, TRUE);
-
-		TTTOOLINFOW ti{};
-		ti.cbSize = sizeof(ti);
-		ti.hwnd = app.main;
-		ti.uId = reinterpret_cast<UINT_PTR>(app.status);
-		ti.lpszText = app.resources.tooltip.data();
-		SendMessageW(app.tooltip, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&ti));
+		SetTip(app.status, 2, app.resources.tooltip);
 	}
 
 	// Orphans only: a row with a status file has a live plugin, and the in-game
@@ -769,7 +883,12 @@ namespace
 		}
 		const std::wstring prompt = L"End task on pid " + std::to_wstring(pid) + L" (started " + started
 			+ L")? It has no plugin status, so any unsaved city is lost.";
-		if (MessageBoxW(app.main, prompt.c_str(), L"SC4 Region Sync Launcher", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) == IDYES)
+		int answer = IDNO;
+		{
+			ModalScope modal;
+			answer = MessageBoxW(app.main, prompt.c_str(), L"SC4 Region Sync Launcher", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
+		}
+		if (answer == IDYES)
 		{
 			// The box pumps the timer; re-check against a fresh read.
 			const std::vector<InstanceStatus> statuses = ReadStatuses();
@@ -810,7 +929,7 @@ namespace
 
 	void Raise(int index)
 	{
-		if (index >= 0 && index < static_cast<int>(app.rows.size()))
+		if (index >= 0 && index < static_cast<int>(app.rows.size()) && !app.rows[static_cast<size_t>(index)].remote)
 		{
 			RaiseWindow(app.rows[static_cast<size_t>(index)].window);
 		}
@@ -822,7 +941,7 @@ namespace
 		ncm.cbSize = sizeof(ncm);
 		SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0, app.dpi);
 		const HFONT font = CreateFontIndirectW(&ncm.lfMessageFont);
-		for (const HWND h : { app.list, app.toolbar, app.status })
+		for (const HWND h : { app.list, app.toolbar, app.status, app.banner })
 		{
 			SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
 		}
@@ -838,8 +957,8 @@ namespace
 		SelectObject(dc, old);
 		ReleaseDC(app.main, dc);
 		app.captionHeight = tm.tmHeight + Scale(6);
-		const int widths[] = { 110, 150, 260, 70 };
-		for (int i = 0; i < 4; ++i)
+		const int widths[] = { 110, 100, 150, 260, 70 };
+		for (int i = 0; i < kColumns; ++i)
 		{
 			ListView_SetColumnWidth(app.list, i, Scale(widths[i]));
 		}
@@ -856,8 +975,16 @@ namespace
 		RECT tb{}, sb{};
 		GetWindowRect(app.toolbar, &tb);
 		GetWindowRect(app.status, &sb);
-		const int top = tb.bottom - tb.top;
+		int top = tb.bottom - tb.top;
 		const int bottom = client.bottom - (sb.bottom - sb.top);
+		const bool banner = !app.lanStatus.banner.empty();
+		ShowWindow(app.banner, banner ? SW_SHOW : SW_HIDE);
+		if (banner)
+		{
+			MoveWindow(app.banner, Scale(4), top + Scale(2), client.right - Scale(8), app.captionHeight, TRUE);
+			top += app.captionHeight + Scale(4);
+		}
+		LayoutStatusParts(client.right);
 		MoveWindow(app.list, 0, top, client.right, std::max(0, bottom - top), TRUE);
 		app.gridRect = { 0, top, client.right, std::max(top, bottom) };
 		if (app.grid)
@@ -876,10 +1003,13 @@ namespace
 			0, 0, 0, 0, hwnd, nullptr, inst, nullptr);
 		SendMessageW(app.toolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
 		SendMessageW(app.toolbar, TB_SETBITMAPSIZE, 0, MAKELONG(0, 0));
-		TBBUTTON buttons[9]{};
-		const wchar_t* labels[] = { L"Launch", L"Refresh", nullptr, L"List", L"Grid", nullptr, L"Settings", nullptr, L"End Task" };
-		const int ids[] = { kCmdLaunch, kCmdRefresh, 0, kCmdList, kCmdGrid, 0, kCmdSettings, 0, kCmdEndTask };
-		for (int i = 0; i < 9; ++i)
+		constexpr int kButtons = 14;
+		TBBUTTON buttons[kButtons]{};
+		const wchar_t* labels[] = { L"Launch", L"Refresh", nullptr, L"List", L"Grid", nullptr, L"Settings", nullptr, L"End Task",
+			nullptr, L"Host", L"Join", L"Re-sync", L"New code" };
+		const int ids[] = { kCmdLaunch, kCmdRefresh, 0, kCmdList, kCmdGrid, 0, kCmdSettings, 0, kCmdEndTask,
+			0, kCmdHost, kCmdJoin, kCmdResync, kCmdNewCode };
+		for (int i = 0; i < kButtons; ++i)
 		{
 			if (!labels[i])
 			{
@@ -889,19 +1019,21 @@ namespace
 			buttons[i].iBitmap = I_IMAGENONE;
 			buttons[i].idCommand = ids[i];
 			buttons[i].fsState = TBSTATE_ENABLED;
-			buttons[i].fsStyle = (i == 3 || i == 4 ? BTNS_CHECKGROUP : BTNS_BUTTON) | BTNS_AUTOSIZE | BTNS_SHOWTEXT;
+			buttons[i].fsStyle = (i == 3 || i == 4 ? BTNS_CHECKGROUP : ids[i] == kCmdHost ? BTNS_CHECK : BTNS_BUTTON) | BTNS_AUTOSIZE | BTNS_SHOWTEXT;
 			buttons[i].iString = reinterpret_cast<INT_PTR>(labels[i]);
 		}
 		buttons[3].fsState |= TBSTATE_CHECKED;  // always starts in List
 		buttons[8].fsState = 0;  // End Task: enabled for a selected orphan
-		SendMessageW(app.toolbar, TB_ADDBUTTONSW, 9, reinterpret_cast<LPARAM>(buttons));
+		buttons[12].fsState = 0;  // Re-sync: guest, connected
+		buttons[13].fsState = 0;  // New code: hosting
+		SendMessageW(app.toolbar, TB_ADDBUTTONSW, kButtons, reinterpret_cast<LPARAM>(buttons));
 
 		app.list = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, nullptr,
 			WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_OWNERDATA | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
 			0, 0, 0, 0, hwnd, nullptr, inst, nullptr);
 		ListView_SetExtendedListViewStyle(app.list, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
-		const wchar_t* columns[] = { L"Instance", L"State", L"Tile", L"PID" };
-		for (int i = 0; i < 4; ++i)
+		const wchar_t* columns[] = { L"Instance", L"Host", L"State", L"Tile", L"PID" };
+		for (int i = 0; i < kColumns; ++i)
 		{
 			LVCOLUMNW col{};
 			col.mask = LVCF_TEXT | LVCF_SUBITEM;
@@ -912,19 +1044,32 @@ namespace
 
 		app.status = CreateWindowExW(0, STATUSCLASSNAMEW, nullptr, WS_CHILD | WS_VISIBLE,
 			0, 0, 0, 0, hwnd, nullptr, inst, nullptr);
-		int parts[] = { -1 };
-		SendMessageW(app.status, SB_SETPARTS, 1, reinterpret_cast<LPARAM>(parts));
+		int parts[] = { 0, -1 };
+		SendMessageW(app.status, SB_SETPARTS, 2, reinterpret_cast<LPARAM>(parts));
+		app.banner = CreateWindowExW(0, L"STATIC", nullptr, WS_CHILD | SS_NOTIFY | SS_LEFTNOWORDWRAP | SS_ENDELLIPSIS | SS_CENTERIMAGE,
+			0, 0, 0, 0, hwnd, nullptr, inst, nullptr);
 
 		app.tooltip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
 			WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
 			hwnd, nullptr, inst, nullptr);
-		TTTOOLINFOW ti{};
-		ti.cbSize = sizeof(ti);
-		ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
-		ti.hwnd = hwnd;
-		ti.uId = reinterpret_cast<UINT_PTR>(app.status);
-		ti.lpszText = const_cast<wchar_t*>(L"");
-		SendMessageW(app.tooltip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&ti));
+		// Status parts 1 (LAN) and 2 (resources) by rectangle; the banner by window.
+		for (UINT_PTR id = 1; id <= 2; ++id)
+		{
+			TTTOOLINFOW ti{};
+			ti.cbSize = sizeof(ti);
+			ti.uFlags = TTF_SUBCLASS;
+			ti.hwnd = app.status;
+			ti.uId = id;
+			ti.lpszText = const_cast<wchar_t*>(L"");
+			SendMessageW(app.tooltip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&ti));
+		}
+		TTTOOLINFOW bi{};
+		bi.cbSize = sizeof(bi);
+		bi.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+		bi.hwnd = hwnd;
+		bi.uId = reinterpret_cast<UINT_PTR>(app.banner);
+		bi.lpszText = const_cast<wchar_t*>(L"");
+		SendMessageW(app.tooltip, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&bi));
 		SendMessageW(app.tooltip, TTM_SETDELAYTIME, TTDT_AUTOPOP, 30000);
 
 		ApplyDpi();
@@ -965,8 +1110,8 @@ namespace
 			if ((item.mask & LVIF_TEXT) && item.iItem >= 0 && item.iItem < static_cast<int>(app.rows.size()))
 			{
 				const Row& r = app.rows[static_cast<size_t>(item.iItem)];
-				const std::wstring* cells[] = { &r.label, &r.state, &r.tile, &r.pidText };
-				const std::wstring& text = item.iSubItem >= 0 && item.iSubItem < 4 ? *cells[item.iSubItem] : r.label;
+				const std::wstring* cells[] = { &r.label, &r.hostText, &r.state, &r.tile, &r.pidText };
+				const std::wstring& text = item.iSubItem >= 0 && item.iSubItem < kColumns ? *cells[item.iSubItem] : r.label;
 				wcsncpy_s(item.pszText, static_cast<size_t>(item.cchTextMax), text.c_str(), _TRUNCATE);
 			}
 		}
@@ -1002,9 +1147,15 @@ namespace
 		}
 		case WM_TIMER:
 		case WM_COMMAND:
-			try  // keep the window alive; there is no log to report to
+		case WM_APP_LAN:
+			try  // keep the window alive; LAN errors go to lan.log
 			{
-				if (msg == WM_TIMER)
+				if (msg == WM_APP_LAN)
+				{
+					app.lan.OnWorkerMessage();
+					UpdateLanUi();
+				}
+				else if (msg == WM_TIMER)
 				{
 					if (wParam == kDiscoveryTimer)
 					{
@@ -1014,10 +1165,19 @@ namespace
 					{
 						Sample();
 					}
+					else if (wParam == kLanTimer)
+					{
+						app.lan.OnTimer();
+						UpdateLanUi();
+					}
 				}
 				else if (LOWORD(wParam) == kCmdLaunch)
 				{
-					if (Launch(hwnd, app.settings, app.resources, static_cast<int>(app.rows.size()), app.liveUserDirs, app.pending))
+					if (!app.lan.LaunchAllowed())
+					{
+						ShowMessage(hwnd, L"Launch waits until the sync with the host is done.");
+					}
+					else if (Launch(hwnd, app.settings, app.resources, LocalRowCount(), app.liveUserDirs, app.pending))
 					{
 						Discover();
 					}
@@ -1026,8 +1186,29 @@ namespace
 					|| (LOWORD(wParam) == kCmdSettings && EditSettings(hwnd, app.settings)))
 				{
 					app.settings = LoadSettings();
+					app.lan.SettingsChanged(app.settings);
 					Discover();
 					Sample();
+				}
+				else if (LOWORD(wParam) == kCmdHost)
+				{
+					app.lan.ToggleHost();
+					UpdateLanUi(true);
+				}
+				else if (LOWORD(wParam) == kCmdJoin)
+				{
+					app.lan.ShowJoin();
+					UpdateLanUi(true);
+				}
+				else if (LOWORD(wParam) == kCmdResync)
+				{
+					app.lan.Resync();
+					UpdateLanUi(true);
+				}
+				else if (LOWORD(wParam) == kCmdNewCode)
+				{
+					app.lan.NewCode();
+					UpdateLanUi(true);
 				}
 				else if (LOWORD(wParam) == kCmdEndTask)
 				{
@@ -1096,13 +1277,26 @@ namespace
 		case WM_DRAWITEM:
 		{
 			const auto* dis = reinterpret_cast<const DRAWITEMSTRUCT*>(lParam);
-			if (dis->hwndItem == app.status)
+			if (dis->hwndItem == app.status && dis->itemID == 1)
 			{
 				DrawStatus(*dis);
 				return TRUE;
 			}
 			break;
 		}
+		case WM_CLOSE:
+			if (InModal())
+			{
+				DeferClose();  // reposted when the last dialog closes
+				return 0;
+			}
+			// Stop flag, signal, join 3 s; a stuck worker must not keep the process alive.
+			if (!app.lan.Shutdown())
+			{
+				ExitProcess(0);  // launcher.ini is written as values change; nothing is pending
+			}
+			DestroyWindow(hwnd);
+			return 0;
 		case WM_DESTROY:
 			for (const auto& [dir, p] : app.pending)
 			{
@@ -1143,9 +1337,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show)
 	{
 		return 1;
 	}
-	SetWindowPos(hwnd, nullptr, 0, 0, Scale(640), Scale(360), SWP_NOMOVE | SWP_NOZORDER);
+	SetWindowPos(hwnd, nullptr, 0, 0, Scale(760), Scale(400), SWP_NOMOVE | SWP_NOZORDER);
 	ShowWindow(hwnd, show);
 
+	// Before the first Discover: HostAlias decides which status files are ours.
+	app.lan.Init(hwnd, app.settings);
+	UpdateLanUi(true);
 	Discover();
 	Sample();
 	SetTimer(hwnd, kDiscoveryTimer, 1000, nullptr);

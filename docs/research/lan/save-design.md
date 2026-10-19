@@ -4,6 +4,8 @@ Date 2026-10-19. Inputs: DESIGN.md, ARCHITECTURE.md, research/save-641.md, resea
 
 Player constraints: no shared network drive, no SMB setup, no junctions to UNC paths. One PC is the **host** and keeps the region on its local disk. The launcher on the **guest** points at the host, pulls the region, keeps it in sync and pushes the guest's saves back. The UX stays simple even if the code gets harder.
 
+> **What PLAN-LAN slice 1 changed (2026-10-19).** No Reclaim: the reconcile picker is deferred to slice 2, and slice 1 keeps and flags guest-saved tiles. The archive lives outside Regions (`RegionSyncLAN\archive`). CPace pairing replaces PBKDF2. No heartbeat. `SaveHook641` had no `onExit`, so there are two callbacks, `onSaving` and `onSaved`. The save counter lives in `_saves\<region>\x_z.saves`, not the status file. Where this study disagrees, `docs/PLAN-LAN.md` wins.
+
 ## 0. Summary
 
 - Live data (snapshots, status files) crosses between launchers over one TCP channel. Each PC keeps a local store; the plugin does not change for this part.

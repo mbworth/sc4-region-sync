@@ -25,6 +25,7 @@ git submodule update --init --recursive      # if vendor/ dirs are empty
 scripts/setup-toolchain.sh --prebuilt        # LLVM 20 into ~/.local/llvm-20 (no root), fetches MSVC/SDK via xwin (~1 GB, once)
 make                                         # -> build/SC4RegionSync.dll + .ini
 make test                                    # host-side snapshot round-trip test
+make test-launcher                           # host-side test of the launcher's LAN core (frames, CPace, manifest, journal)
 ```
 
 `--apt` instead of `--prebuilt` only works where apt ships clang 19+; the MSVC STL that xwin fetches refuses older compilers (Debian 12 apt has clang 14). The Makefile finds `~/.local/llvm-20` on its own. The build compiled clean on 2026-10-17 with zero warnings from our sources.
@@ -35,8 +36,9 @@ Test loop: `make deploy` copies DLL, INI and the launcher exe to the Windows box
 
 - **This repo is public.** Never commit personal, private, or sensitive information: hostnames, LAN addresses, usernames, real `C:\Users\<name>` paths, keys, screenshots, or raw in-game logs. Deploy targets live in gitignored `local.mk`. Log excerpts quoted in docs use `C:\Users\player`. Grep the diff for these before every commit.
 - **Vendored headers are the contract.** Every `cISC4*` interface is reverse-engineered. Never reorder, insert, or remove virtual methods. If a header is wrong, the fix is a local wrapper or a documented upstream change, not an edit under `vendor/`.
-- **`vendor/` is submodules.** Do not edit. `vendor/xwin/` is generated and gitignored.
-- **`NeighborSnapshot.{h,cpp}` stays game-free and Windows-free.** It is the one piece that can be unit-tested on any machine. Keep `make test` (tests/snapshot_roundtrip.cpp) passing.
+- **`vendor/` is submodules, except `vendor/monocypher/`.** Do not edit. `vendor/monocypher/` is a plain copy of Monocypher 4.0.2, not a submodule. `vendor/xwin/` is generated and gitignored.
+- **Windows-free and game-free files stay that way:** `src/NeighborSnapshot`, `src/InstanceStatus`, `launcher/Frame`, `Handshake`, `Manifest`, `Journal`. They are the pieces that can be unit-tested on any machine. Keep `make test` (tests/snapshot_roundtrip.cpp) and `make test-launcher` (tests/launcher_lan.cpp) passing.
+- **The launcher may replace whole files in Regions only on the guest, from verified staging, originals archived first, under the save-mutex try-lock, with no game process running.**
 - **Only the director talks to the game's message system and cheat manager.** Game-object plumbing lives there; logic lives in the bridge, settings, and snapshot files.
 - **Log first, infer second.** When a code path touches a game method we have not exercised before, log inputs and outputs at Info, not Debug. If an experiment's conclusion depends on it, it is Info.
 - **Record observations.** Finishing an experiment means writing what happened into the matching "Observed" slot in `docs/OPEN-QUESTIONS.md`, including the negative result and the log excerpt that shows it. An experiment without a recorded observation is not done.

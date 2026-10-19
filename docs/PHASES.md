@@ -37,7 +37,9 @@ Exit criterion: growth in instance B visibly changes regional demand in instance
 - [x] Dual-lane networks (avenue, highway, ground highway) mirrored as pairs with a 2 by 3 stub: observed 2026-10-18 for all three types (`docs/PLAN-DUAL-FERRY.md`, Q12).
 - [x] Ferry: not mirrored by design (each city's terrain scan makes its own; deals never use it); logged from the cheat.
 - [x] Replace the monthly file poll with a change notification: `FindFirstChangeNotification` on the store polled on the sim-day tick, observed 2026-10-19 (Q17 step 2, `docs/PLAN-WATCH.md`). Monthly pull stays as fallback.
-- [ ] Two PCs on one region: research done 2026-10-19 (`docs/research/lan-two-pcs.md`): host-authoritative replication through the launchers, no shared drive. Next: `docs/PLAN-LAN.md` slice 1, then Q18.
+- [ ] Two PCs, slice 1 (live only: pairing, first sync host to guest, live mirroring of snapshots and status files; guest saves stay local and are flagged): built, awaiting Q18. Research 2026-10-19 (`docs/research/lan-two-pcs.md`), plan `docs/PLAN-LAN.md`.
+- [ ] Two PCs, slice 2: tile leases, push of guest saves with commit on the host, reconnect picker, host-side journal.
+- [ ] Two PCs, slice 3: what remains of the "Not in slice 1" list in `docs/PLAN-LAN.md`: more than one guest, launching instances on the other PC, cross-PC same-tile guard, suppression of foreign neighbor writes, Plugins diff, encryption.
 
 ## Phase 3: nice to have
 

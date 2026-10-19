@@ -6,6 +6,7 @@
  */
 
 #include "Launcher.h"
+#include "Lan.h"
 #include "resource.h"
 #include <ShlObj.h>
 #include <algorithm>
@@ -18,14 +19,7 @@ namespace
 	constexpr wchar_t kSection[] = L"Launcher";
 	constexpr const wchar_t* kRenderers[] = { L"DirectX", L"Software", L"OpenGL" };
 
-	std::wstring IniPath()
-	{
-		wchar_t exe[MAX_PATH]{};
-		const DWORD n = GetModuleFileNameW(nullptr, exe, MAX_PATH);
-		std::wstring path(exe, n);
-		const size_t slash = path.find_last_of(L'\\');
-		return (slash == std::wstring::npos ? std::wstring() : path.substr(0, slash + 1)) + L"launcher.ini";
-	}
+	using launcher::IniPath;
 
 	std::wstring Documents()
 	{
@@ -278,6 +272,20 @@ namespace
 
 namespace launcher
 {
+	std::wstring IniPath()
+	{
+		wchar_t exe[MAX_PATH]{};
+		const DWORD n = GetModuleFileNameW(nullptr, exe, MAX_PATH);
+		std::wstring path(exe, n);
+		const size_t slash = path.find_last_of(L'\\');
+		return (slash == std::wstring::npos ? std::wstring() : path.substr(0, slash + 1)) + L"launcher.ini";
+	}
+
+	std::wstring DocumentsFolder()
+	{
+		return Documents();
+	}
+
 	Settings LoadSettings()
 	{
 		const std::wstring docs = Documents();
@@ -344,6 +352,7 @@ namespace launcher
 
 	bool EditSettings(HWND owner, const Settings& current)
 	{
+		ModalScope modal;
 		const INT_PTR result = DialogBoxParamW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDD_SETTINGS), owner,
 			SettingsProc, reinterpret_cast<LPARAM>(&current));
 		if (result == -1)

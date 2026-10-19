@@ -43,6 +43,10 @@ Saving a city writes this tile's `.sc4` file and also writes updated connection 
 
 Phase 1 sidesteps it: autosave is off by default and the snapshot store carries the cross-tile data instead of the save files. The player saves each instance by hand as usual. Saves are serialized by a region-wide named mutex (`Local\SC4RegionSync.SaveLock.<region>`) held across the game's whole save routine: the plugin wraps App vtable slot 15 (`SaveCity(path, fast)`, which every save path reaches), so a save waits for the other instance's save or reload to finish, up to `SaveLockTimeoutMs`, then goes ahead unlocked and logs it. The kernel abandons the mutex if an instance dies, so there is no stale lock. See PLAN-SAVE-LOCK.md. See OPEN-QUESTIONS.md, Q4, for the open question of whether the neighbor-file write on save can be suppressed entirely while our store is active.
 
+## Two PCs
+
+With two PCs each keeps its own store and its own Regions folder. The launchers, one per PC, carry snapshots and status files between the stores over a paired LAN channel. The host's Regions folder is authoritative at rest: it is copied to the guest on connect. The plugin has no network code. See PLAN-LAN.md.
+
 ## What is still a guess
 
 See OPEN-QUESTIONS.md. The big one: whether the demand simulator reads the headline population and jobs values from the regional record on each tick, or copies them once at city load. If it copies once, a pull will not move demand until the next city load and Phase 1b (`cISC4Region::ReloadCity`) or a deeper hook is needed. The `RegionSyncDump` cheat before and after a pull is the experiment that answers this.

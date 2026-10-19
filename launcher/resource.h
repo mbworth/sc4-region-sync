@@ -1,4 +1,4 @@
-// Control ids shared by launcher.rc and Settings.cpp.
+// Control ids shared by launcher.rc, Settings.cpp and LanUi.cpp.
 #pragma once
 
 #define IDD_SETTINGS       100
@@ -16,3 +16,12 @@
 #define IDC_RESERVE_RAM    1012
 #define IDC_RESERVE_CORES  1013
 #define IDC_MAX_INSTANCES  1014
+
+#define IDD_JOIN           200
+#define IDC_JOIN_HOSTS     2001
+#define IDC_JOIN_ADDRESS   2002
+#define IDC_JOIN_CODE      2003
+#define IDC_JOIN_CONNECT   2004
+#define IDC_JOIN_MESSAGE   2005
+#define IDC_JOIN_REGION    2006
+#define IDC_JOIN_LEAVE     2007
