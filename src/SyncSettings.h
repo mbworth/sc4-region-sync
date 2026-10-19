@@ -94,7 +94,7 @@ namespace regionsync
 		bool pullOnStoreChange = true;
 
 		// Region view: reload a tile when its save file changes (Q17 slice B).
-		bool reloadOnPeerSave = false;
+		bool reloadOnPeerSave = true;
 
 		// Where snapshots live. Empty means "<DLL folder>\RegionSync\<region dir>".
 		// Both game instances share the install, so the default is already a
