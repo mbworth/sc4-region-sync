@@ -307,12 +307,12 @@ It holds one peer record; pairing again replaces it. Every value written there i
 `scripts/Setup-MultiInstance.ps1 -LoopbackGuest 2`:
 - Asserts `(Get-Item Instance2\Regions).LinkType -eq 'Junction'`.
 - Removes the junction non-recursively (`[IO.Directory]::Delete($path)`) and creates an empty real folder.
-- Writes `Instance2\SC4RegionSync.local.ini` with `HostAlias=<PC>-GUEST` and `StoreDirectory=<Instance2>\RegionSyncStore`.
+- Writes `Instance2\SC4RegionSync.local.ini` with `HostAlias=<PC>-GUEST` (or `LOOPBACK-GUEST` when that exceeds 15 characters) and `StoreDirectory=<Instance2>\RegionSyncStore`.
 
 `-RestoreLoopback` moves the guest folder to the LAN `archive\` (never deletes it) and recreates the junction. Plugins stays a junction, so the build and Plugins checks match by construction.
 
 - **Host launcher:** the normal install, with `AllowLoopback=1`.
-- **Guest launcher:** a copy in `SC4RegionSyncLauncher-Guest\` whose `[Lan]` has `HostAlias=<PC>-GUEST`, `RegionsDirectory=<Instance2>\Regions` and `AllowLoopback=1`. Its `StatusDirectory` is `<Instance2>\RegionSyncStore\_instances`. It joins 127.0.0.1.
+- **Guest launcher:** a copy in `SC4RegionSyncLauncher-Guest\` whose `[Lan]` has `HostAlias=<PC>-GUEST` (or `LOOPBACK-GUEST` when that exceeds 15 characters), `RegionsDirectory=<Instance2>\Regions` and `AllowLoopback=1`. Its `StatusDirectory` is `<Instance2>\RegionSyncStore\_instances`. It joins 127.0.0.1.
 - **Instances** start from the `SC4Instance1` and `SC4Instance2` tasks.
 - **Limits:**
   - Both sides share a session, so they share the save and tile mutexes.

@@ -181,10 +181,9 @@ if ($LoopbackGuest -ge 1 -and -not $RestoreLoopback) {
     if ((Get-Item $regions -Force).LinkType -ne 'Junction') {
         throw "$regions is not a junction (already a loopback guest?)."
     }
+    # Site names are 1 to 15 of A-Z a-z 0-9 -; a long computer name falls back to a fixed alias.
     $alias = "$env:COMPUTERNAME-GUEST"
-    if ($alias -notmatch '^[A-Za-z0-9-]{1,15}$') {
-        Write-Warning "HostAlias '$alias' is not a valid site name (max 15 chars of A-Z a-z 0-9 -). Edit it by hand."
-    }
+    if ($alias -notmatch '^[A-Za-z0-9-]{1,15}$') { $alias = 'LOOPBACK-GUEST' }
     # Non-recursive: removes the junction only, never the real Regions behind it.
     [IO.Directory]::Delete($regions)
     New-Item -ItemType Directory -Force -Path $regions | Out-Null
