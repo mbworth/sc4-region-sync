@@ -83,31 +83,46 @@ namespace
 namespace regionsync
 {
 	// Only non-empty, non-comment lines of the form key=value are kept.
+	void ParseKeyValues(std::string_view text, KeyValues& out)
+	{
+		size_t pos = 0;
+		while (pos < text.size())
+		{
+			size_t end = text.find('\n', pos);
+			if (end == std::string_view::npos)
+			{
+				end = text.size();
+			}
+			std::string_view line = text.substr(pos, end - pos);
+			pos = end + 1;
+			if (!line.empty() && line.back() == '\r')
+			{
+				line.remove_suffix(1);
+			}
+			if (line.empty() || line[0] == ';' || line[0] == '#')
+			{
+				continue;
+			}
+			const size_t eq = line.find('=');
+			if (eq == std::string_view::npos)
+			{
+				continue;
+			}
+			out[std::string(line.substr(0, eq))] = std::string(line.substr(eq + 1));
+		}
+	}
+
 	bool LoadKeyValues(const std::filesystem::path& path, KeyValues& out, std::string& error)
 	{
-		std::ifstream stream(path);
+		std::ifstream stream(path, std::ios::binary);
 		if (!stream)
 		{
 			error = "Unable to open " + path.string();
 			return false;
 		}
-
-		for (std::string line; std::getline(stream, line);)
-		{
-			if (line.empty() || line[0] == ';' || line[0] == '#')
-			{
-				continue;
-			}
-
-			const size_t eq = line.find('=');
-			if (eq == std::string::npos)
-			{
-				continue;
-			}
-
-			out[line.substr(0, eq)] = line.substr(eq + 1);
-		}
-
+		std::stringstream buffer;
+		buffer << stream.rdbuf();
+		ParseKeyValues(buffer.str(), out);
 		return true;
 	}
 

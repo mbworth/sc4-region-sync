@@ -37,4 +37,7 @@ namespace regionsync
 
 	bool WriteInstanceStatus(const std::filesystem::path& path, const InstanceStatus& status, std::string& error);
 	bool ReadInstanceStatus(const std::filesystem::path& path, InstanceStatus& status, std::string& error);
+	// Text form, shared with the launcher (which reads the file itself with share-delete).
+	void ParseInstanceStatus(std::string_view text, InstanceStatus& status);
+	void ParseInstanceStatus(const KeyValues& kv, InstanceStatus& status);
 }

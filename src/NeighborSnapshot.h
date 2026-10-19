@@ -312,6 +312,8 @@ namespace regionsync
 	using KeyValues = std::map<std::string, std::string>;
 
 	// Non-empty, non-comment key=value lines. Values keep everything after the first '='.
+	// CR before LF is dropped. ParseKeyValues is the text form the launcher shares.
+	void ParseKeyValues(std::string_view text, KeyValues& out);
 	bool LoadKeyValues(const std::filesystem::path& path, KeyValues& out, std::string& error);
 	// False when the key is absent or does not parse. Instantiated for int32_t, uint32_t, int64_t, uint64_t.
 	template <typename T>

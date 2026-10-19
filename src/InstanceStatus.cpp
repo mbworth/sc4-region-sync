@@ -99,7 +99,19 @@ namespace regionsync
 		{
 			return false;
 		}
+		ParseInstanceStatus(kv, s);
+		return true;
+	}
 
+	void ParseInstanceStatus(std::string_view text, InstanceStatus& s)
+	{
+		KeyValues kv;
+		ParseKeyValues(text, kv);
+		ParseInstanceStatus(kv, s);
+	}
+
+	void ParseInstanceStatus(const KeyValues& kv, InstanceStatus& s)
+	{
 		s = InstanceStatus{};
 		ReadKeyValue(kv, "schemaVersion", s.schemaVersion);
 		// All three or none, as for snapshots.
@@ -121,6 +133,5 @@ namespace regionsync
 		int32_t conflict = 0;
 		s.conflict = ReadKeyValue(kv, "conflict", conflict) && conflict != 0;
 		ReadKeyValue(kv, "writtenUnixTime", s.writtenUnixTime);
-		return true;
 	}
 }
