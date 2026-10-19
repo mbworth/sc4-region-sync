@@ -383,10 +383,10 @@ The study's Q18 steps 6, 7 and 14 are covered by S1, S3, S4 and S10. Its steps 1
 
 **Observed.** (empty, one slot per step)
 
-- S1:
-- S2:
+- S1: 2026-10-19, build `c78a06d`, loopback. First Host: `Hosting: TCP 47641, UDP 47642 on all addresses`; the firewall prompt appeared once (network profile Private). Non-private refusal not yet exercised.
+- S2: Join listed the host twice within 2 s (LAN address and 127.0.0.1, one row per address by design). Wrong code: guest `Refused: wrong code`, host `Pairing attempt from 127.0.0.1 failed; code burned`; `New code requested`; right code: `Paired with LOOPBACK-GUEST at 127.0.0.1` on both. `launcher.ini` holds `PeerKey`, no code. Restart and re-pair cases not yet run.
 - S3:
-- S4:
+- S4: Guest picked Berlin (87 files, 27 MiB): host `Stage done: MANIFEST sent` 2 s after SELECT, guest `Downloads verified: 87 files staged`, `Save mutex ... held for the swap`, `Synced Berlin: 87 downloaded` 3 s after SELECT; all 87 hashes equal on both sides. "Downloads" (a stray folder without `region.ini`) was listed as a region: fixed, the list now needs `region.ini`. Game-running, unknown-folder and rollback cases not yet run.
 - S5:
 - S6:
 - S7:

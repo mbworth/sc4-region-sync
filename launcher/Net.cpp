@@ -708,7 +708,10 @@ namespace
 		for (const auto& [name, isDir] : ListDir(cfg_.regionsDir))
 		{
 			const std::string n = launcher::Utf8(name);
-			if (isDir && launcher::IsSyncableRegion(n)) out.push_back(n);
+			if (!isDir || !launcher::IsSyncableRegion(n)) continue;
+			// A region folder has a region.ini; stray folders under Regions do not.
+			const std::wstring ini = cfg_.regionsDir + L"\\" + name + L"\\region.ini";
+			if (GetFileAttributesW(ini.c_str()) != INVALID_FILE_ATTRIBUTES) out.push_back(n);
 		}
 		return out;
 	}

@@ -1416,7 +1416,6 @@ namespace
 				if (ParseIpv4(e.address, addr)) S.peerAddress = addr;
 			}
 			SavePeer();
-			Log("Paired with " + S.peerSite + " (" + e.address + ")");
 			if (S.role == LanRole::Host) ClearCode();
 		}
 		S.pluginsDiffer = e.hello.pluginsHash != S.pluginsHash;
