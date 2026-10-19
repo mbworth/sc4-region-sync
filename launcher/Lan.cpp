@@ -1326,7 +1326,12 @@ namespace
 	void TrySwap()
 	{
 		if (S.sync != Sync::SwapPending || Blocked()) return;
-		if (S.gameRunning)
+		const bool needsLock = S.archiveFolder || std::any_of(S.diff.items.begin(), S.diff.items.end(), [](const lan::DiffItem& i)
+		{
+			return i.action == lan::DiffAction::Download || i.action == lan::DiffAction::Archive;
+		}) || !IsDir(S.regionsDir + L"\\" + S.localFolder);
+		// A diff with nothing to write needs neither the mutex nor a closed game.
+		if (S.gameRunning && needsLock)
 		{
 			if (!S.gameBlocksSwap)
 			{
@@ -1337,10 +1342,6 @@ namespace
 			if (S.connected && !S.mirroring) StartMirror(Utf8(S.localFolder));
 			return;
 		}
-		const bool needsLock = S.archiveFolder || std::any_of(S.diff.items.begin(), S.diff.items.end(), [](const lan::DiffItem& i)
-		{
-			return i.action == lan::DiffAction::Download || i.action == lan::DiffAction::Archive;
-		}) || !IsDir(S.regionsDir + L"\\" + S.localFolder);
 		if (needsLock)
 		{
 			// The plugin's name; the game passes its region folder name through the ANSI code page.
