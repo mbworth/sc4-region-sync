@@ -150,6 +150,7 @@ namespace
 		const LanStatusPart s = app.lan.Status();
 		const bool relayout = force || s.banner.empty() != app.lanStatus.banner.empty() || s.strip.size() != app.lanStatus.strip.size();
 		app.lanStatus = s;
+		SetWindowTextW(app.main, (L"SC4 Region Sync Launcher" + (s.title.empty() ? L"" : L" (" + s.title + L")")).c_str());
 		SendMessageW(app.status, SB_SETTEXTW, 0, reinterpret_cast<LPARAM>(app.lanStatus.strip.c_str()));
 		SetWindowTextW(app.banner, app.lanStatus.banner.c_str());
 		SetTip(app.status, 1, app.lanStatus.stripTip);

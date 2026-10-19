@@ -1921,6 +1921,8 @@ namespace launcher
 			p.stripTip = (S.notSent.empty() ? L"All tiles sent." : tip) + L"\r\nPeer build: " + (S.peer.build.empty() ? L"unknown" : Widen(S.peer.build))
 				+ L"\r\nThis build: " + Widen(S.build);
 		}
+		if (S.role == LanRole::Host) p.title = S.connected ? L"Host, " + peer + L" joined" : L"Host";
+		else if (S.role == LanRole::Join) p.title = L"Guest of " + (peer.empty() ? L"host" : peer);
 		if (S.role == LanRole::Host) p.stripTip = L"Peer build: " + (S.peer.build.empty() ? L"unknown" : Widen(S.peer.build)) + L"\r\nThis build: " + Widen(S.build);
 
 		std::vector<std::wstring> banners;

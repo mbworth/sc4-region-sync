@@ -142,6 +142,7 @@ namespace launcher
 	struct LanStatusPart
 	{
 		std::wstring strip, stripTip, banner, bannerTip;
+		std::wstring title;   // window title suffix: the role and peer, empty when neither Host nor Join is on
 	};
 
 	// UI-thread controller (Lan.cpp). One instance, owned by main.cpp.
