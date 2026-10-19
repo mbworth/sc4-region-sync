@@ -11,6 +11,7 @@
 #include "monocypher.h"
 #include "version.h"
 #include <objbase.h>
+#include <shlobj.h>
 #include <netlistmgr.h>
 #include <tlhelp32.h>
 #include <algorithm>
@@ -220,17 +221,38 @@ namespace
 
 
 	// Binary tmp plus rename (WriteFileAtomic rules): a failed write never replaces the file.
+	// Creates every missing level; CreateDirectoryW alone fails when the parent is absent.
+	bool EnsureDir(const std::wstring& dir)
+	{
+		const int r = SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);
+		return r == ERROR_SUCCESS || r == ERROR_ALREADY_EXISTS || r == ERROR_FILE_EXISTS;
+	}
+
+	void LogWriteFailure(const std::wstring& path, DWORD err)
+	{
+		static std::map<std::wstring, ULONGLONG> last;
+		const ULONGLONG now = GetTickCount64();
+		if (now - last[path] < 30000) return;
+		last[path] = now;
+		Log("Write failed: " + Utf8(path) + " error " + std::to_string(err));
+	}
+
 	bool WriteAtomic(const std::wstring& path, const void* data, size_t size)
 	{
 		const std::wstring tmp = path + L".tmp";
 		const HANDLE f = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-		if (f == INVALID_HANDLE_VALUE) return false;
+		if (f == INVALID_HANDLE_VALUE)
+		{
+			LogWriteFailure(path, GetLastError());
+			return false;
+		}
 		DWORD written = 0;
 		const bool ok = (size == 0 || (WriteFile(f, data, static_cast<DWORD>(size), &written, nullptr) && written == size))
 			&& FlushFileBuffers(f);
 		const bool closed = CloseHandle(f) != FALSE;
 		if (!ok || !closed || !MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
 		{
+			LogWriteFailure(path, GetLastError());
 			DeleteFileW(tmp.c_str());
 			return false;
 		}
@@ -465,14 +487,14 @@ namespace
 			return false;
 		}
 		S.lanDir = Parent(S.regionsDir) + L"\\RegionSyncLAN";
-		CreateDirectoryW(S.lanDir.c_str(), nullptr);
+		EnsureDir(S.lanDir);
 		std::wstring resolvedLan;
 		if (!ResolveDir(S.lanDir, resolvedLan, lanVolume) || lanVolume != regionsVolume)
 		{
 			S.setupError = "RegionSyncLAN is not on the same volume as Regions";
 			return false;
 		}
-		for (const wchar_t* sub : { L"\\staging", L"\\archive", L"\\journal" }) CreateDirectoryW((S.lanDir + sub).c_str(), nullptr);
+		for (const wchar_t* sub : { L"\\staging", L"\\archive", L"\\journal" }) EnsureDir(S.lanDir + sub);
 		wchar_t exe[MAX_PATH]{};
 		GetModuleFileNameW(nullptr, exe, MAX_PATH);
 		uint64_t own = 0, dll = 0;
@@ -828,7 +850,7 @@ namespace
 
 	HANDLE Watch(const std::wstring& dir)
 	{
-		CreateDirectoryW(dir.c_str(), nullptr);
+		if (!EnsureDir(dir)) Log("Cannot create " + Utf8(dir));
 		return FindFirstChangeNotificationW(dir.c_str(), FALSE, FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE);
 	}
 
@@ -836,7 +858,7 @@ namespace
 	{
 		if (S.chStore == INVALID_HANDLE_VALUE) S.chStore = Watch(StoreDir());
 		if (S.chStatus == INVALID_HANDLE_VALUE) S.chStatus = Watch(S.statusDir);
-		CreateDirectoryW((S.storeBase + L"\\_saves").c_str(), nullptr);
+		EnsureDir(S.storeBase + L"\\_saves");
 		if (S.chSaves == INVALID_HANDLE_VALUE) S.chSaves = Watch(S.storeBase + L"\\_saves\\" + Widen(S.mirrorRegion));
 	}
 
@@ -1249,7 +1271,7 @@ namespace
 		bool known = false;
 		lan::Journal j = (S.archiveFolder || S.resync) ? lan::Journal{} : LoadJournal(region, known);
 		lan::UpdateJournalAfterSwap(j, S.manifest, ReadSaves(region), S.diff.keptTiles);
-		CreateDirectoryW((S.lanDir + L"\\journal\\" + Widen(S.peerSiteId)).c_str(), nullptr);
+		EnsureDir(S.lanDir + L"\\journal\\" + Widen(S.peerSiteId));
 		const std::string text = lan::BuildJournalText(j);
 		if (!WriteAtomic(JournalPath(region), text.data(), text.size()))
 		{
