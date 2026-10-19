@@ -391,5 +391,5 @@ The study's Q18 steps 6, 7 and 14 are covered by S1, S3, S4 and S10. Its steps 1
 - S6:
 - S7:
 - S8:
-- S9:
+- S9: 2026-10-19, build `bf11f02`. From PowerShell against the hosting launcher on 127.0.0.1: 100 random bytes and a frame declaring 8192 bytes before the handshake both logged `Dropped 127.0.0.1: bad frame: bad-length`; a well-formed PUT frame with a zero MAC and counter 0 logged `Dropped 127.0.0.1: expected HELLO`; a pairing HELLO whose `site` carried CR/LF and a `GameExe=` line logged `Dropped 127.0.0.1: bad HELLO: malformed text`. No file written, `launcher.ini` untouched (mtime unchanged, no injected key), and the paired guest kept mirroring throughout (snapshots on both stores updated during the test). Non-private source address not exercised (none handy).
 - S10:
