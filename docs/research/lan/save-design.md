@@ -196,3 +196,15 @@ Plan: `docs/PLAN-LAN.md` (to write). Host GAMEBOX, guest a second PC. Region New
 14. **Live latency.** Both PCs in city at normal speed for 10 minutes. Pass: every peer month tick produces `Pull (store change)` on the other PC within one sim day, with no Warning lines. Write down the end-to-end time from publish on one PC to apply on the other.
 
 **Observed.** (empty)
+
+## 10. Decision 2026-10-19: reconcile on connect replaces Reclaim
+
+Player direction: both PCs may play alone while apart, and divergence is settled by a person when they reconnect, not by a Reclaim button.
+
+- **Offline play is allowed on both PCs on any tile.** Leases apply only while connected. While apart, each PC plays its local copy.
+- **A tile counts as changed on a PC only if that PC saved it with the city open.** The plugin stamps a per-tile save counter (the save hook sees every save) into the status file; the launcher keeps a per-tile `(playedGen, hash)` journal from that. File mtime and hash alone never decide, because the host's own saves rewrite its copies of neighbor tiles (Q4) and would look like divergence.
+- **On connect, per tile:** identical, nothing. Changed on one side only, fast-forward: the other PC pulls it, no question asked, a line in the launcher log. Changed on both sides, the picker.
+- **Picker:** one row per divergent tile with both sides: city name, population, sim date, last save time, which PC. Default suggestion is the later sim date. Buttons: pick per row, "keep all from host", "keep all from guest". The losing copy is archived under `Conflicts\<date>\` on both PCs, never deleted. After the choice the winner becomes the host's generation and the other PC pulls it.
+- **While the picker is open,** no leases are granted for the divergent tiles and the plugin's tile guard shows them as held, so neither game opens one mid-decision.
+- **Reclaim is removed.** The host never takes a tile back by itself. An offline guest's lease simply lapses to "offline, changed on guest" and goes through the picker on reconnect.
+- **Replaces** the T2 and T9 timelines in section 3: a Reclaim-then-return case becomes a two-sided change and lands in the picker; region edits while apart are two-sided changes to `region.ini` and `config.bmp`, shown as one extra picker row ("region layout") rather than unsupported.
