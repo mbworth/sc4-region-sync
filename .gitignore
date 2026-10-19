@@ -4,7 +4,6 @@ src/.vs/
 src/*.user
 src/x64/
 *.log
-!ingame_tests/*.log
 RegionSync/
 vendor/xwin/
 .xwin-cache/
@@ -13,3 +12,6 @@ build/
 ingame_tests/*.exe
 ingame_tests/*.dll
 ingame_tests/ghidra/
+local.mk
+ingame_tests/*.log
+ingame_tests/*.png

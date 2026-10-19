@@ -150,10 +150,13 @@ test:
 # Windows game box over SSH (OpenSSH server on the Windows side, key auth).
 #   make deploy   -> copy build/ DLL + INI into the game's Documents Plugins
 #   make logs     -> pull each instance's SC4RegionSync.log into ingame_tests/
+# Override these in a gitignored local.mk (or the environment) for your box.
 SC4_HOST    ?= user@gamebox
-SC4_PLUGINS ?= C:/Users/player/Documents/SimCity 4/Plugins
-SC4_INSTANCES ?= C:/Users/player/Documents/SimCity 4 Instances
-SC4_LAUNCHER ?= C:/Users/player/SC4RegionSyncLauncher
+SC4_USERDIR ?= C:/Users/user
+SC4_PLUGINS ?= $(SC4_USERDIR)/Documents/SimCity 4/Plugins
+SC4_INSTANCES ?= $(SC4_USERDIR)/Documents/SimCity 4 Instances
+SC4_LAUNCHER ?= $(SC4_USERDIR)/SC4RegionSyncLauncher
+-include local.mk
 
 deploy: release launcher
 	@ssh -o BatchMode=yes $(SC4_HOST) 'if (Get-Process "SimCity 4" -ErrorAction SilentlyContinue) { Write-Error "SimCity 4 is running; close it first"; exit 1 }; if (Get-Process "SC4RegionSyncLauncher" -ErrorAction SilentlyContinue) { Write-Error "SC4RegionSyncLauncher is running; close it first"; exit 1 }'
@@ -167,5 +170,5 @@ logs:
 	@mkdir -p ingame_tests
 	@# scp from this box truncates at 200 KB and ReadAllBytes cannot share the game's open log,
 	@# so a helper script on the box streams each log as base64.
-	@scp -O -o BatchMode=yes -q scripts/Read-Log.ps1 "$(SC4_HOST):C:/Users/player/Read-Log.ps1"
-	@for i in 1 2 3; do ssh -o BatchMode=yes "$(SC4_HOST)" "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\player\\Read-Log.ps1 -Path '$(SC4_INSTANCES)/Instance$$i/SC4RegionSync.log'" 2>/dev/null | tr -d '\r\n' | base64 -d > ingame_tests/instance$$i.log.tmp 2>/dev/null; if [ -s ingame_tests/instance$$i.log.tmp ]; then mv ingame_tests/instance$$i.log.tmp ingame_tests/instance$$i.log; echo "ingame_tests/instance$$i.log ($$(wc -c < ingame_tests/instance$$i.log) bytes)"; else rm -f ingame_tests/instance$$i.log.tmp; echo "Instance$$i: no log"; fi; done
+	@scp -O -o BatchMode=yes -q scripts/Read-Log.ps1 "$(SC4_HOST):$(SC4_USERDIR)/Read-Log.ps1"
+	@for i in 1 2 3; do ssh -o BatchMode=yes "$(SC4_HOST)" "powershell -NoProfile -ExecutionPolicy Bypass -File $(SC4_USERDIR)/Read-Log.ps1 -Path '$(SC4_INSTANCES)/Instance$$i/SC4RegionSync.log'" 2>/dev/null | tr -d '\r\n' | base64 -d > ingame_tests/instance$$i.log.tmp 2>/dev/null; if [ -s ingame_tests/instance$$i.log.tmp ]; then mv ingame_tests/instance$$i.log.tmp ingame_tests/instance$$i.log; echo "ingame_tests/instance$$i.log ($$(wc -c < ingame_tests/instance$$i.log) bytes)"; else rm -f ingame_tests/instance$$i.log.tmp; echo "Instance$$i: no log"; fi; done
