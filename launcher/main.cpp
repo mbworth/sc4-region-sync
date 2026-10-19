@@ -704,9 +704,11 @@ namespace
 		// A process is claimed only by a status file naming its pid and its creation time
 		// (a remote status file can carry the same pid number).
 		std::set<DWORD> orphans;
+		std::set<std::pair<DWORD, uint64_t>> running;  // this PC's game processes by (pid, creation time)
 		for (const DWORD pid : GameProcesses())
 		{
 			const uint64_t created = CreationTime(pid);
+			running.emplace(pid, created);
 			const bool claimed = std::any_of(statuses.begin(), statuses.end(),
 				[pid, created](const InstanceStatus& s) { return s.pid == pid && s.start == created; })
 				|| std::any_of(app.pending.begin(), app.pending.end(), [pid](const auto& p) { return p.second.pid == pid; });
@@ -738,7 +740,8 @@ namespace
 			r.state = r.window || r.remote ? s.state : L"starting (no window)";
 			r.tile = TileText(s, statuses);
 			r.conflict = s.state == L"city" && s.conflict;
-			if (!r.remote && !s.userDir.empty())
+			// A remote row whose writer runs here (loopback guest) still holds its folder.
+			if ((!r.remote || running.count({ s.pid, s.start })) && !s.userDir.empty())
 			{
 				app.liveUserDirs.push_back(NormalizeDir(s.userDir));
 			}

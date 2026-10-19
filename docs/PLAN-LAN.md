@@ -299,7 +299,7 @@ It holds one peer record; pairing again replaces it. Every value written there i
 - **Rows:**
   - A `Host` column; rows are keyed by the triple.
   - Remote rows are read-only: no raise, List only, no End Task.
-  - Remote rows are excluded from the resource sample, from `liveUserDirs` and from pending-launch matching (audit 22, 23).
+  - Remote rows are excluded from the resource sample, from `liveUserDirs` and from pending-launch matching (audit 22, 23). Exception: a remote row whose pid and `start` match a game process on this PC (loopback only) still holds its `userDir`, so neither launcher picks a folder the other's game is using.
   - The orphan scan skips a pid named by any status file whose `start` equals that local process's creation time.
 
 ## 7. Loopback mode (test-only, one Windows box)
