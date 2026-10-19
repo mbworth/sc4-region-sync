@@ -290,6 +290,8 @@ Experiment: steps 1 to 5 in the plan (three launches through the launcher with t
 
 Slice 3 check (Q14 step 7): Settings set to 1920x1080, OK, Launch: the new instance's command line reads `-UserDir:"...Instance2\" -w -CustomResolution:enabled -r1920x1080x32 -intro:off`, the ini holds `Width=1920 Height=1080 Depth=32 Windowed=1 SkipIntro=1 ExtraArgs=` (the old ExtraArgs line migrated on first load), the window came up at that size and the earlier instance kept 1600x900. Slice 4 check (launcher `4141a82`): with two instances up, one status file deleted by hand (pid 19864, already older than 90 s); the launcher showed the orphan row, End Task prompted, the row disappeared and the game closed; the other instance was untouched.
 
+Second soak note (same evening, build `181bf27`): TuggersVille showed exactly zero R$ and R$$ demand after a 20k population jump. `RegionSyncDemand` in both cities showed identical regional totals (R$ demand 112k against supply 92k from either side) with BumperVille's R demand open and TuggersVille's at zero, so the cause was local; placing the city's pending reward lots (demand cap relief) brought the demand back. Not a sync effect. The dump's `cap` field is the demand object's cap percentage and does not zero active demand on its own (BumperVille CS$ had cap 0 with 14k active).
+
 Instrument lesson: the first read of these logs showed none of the 18:05 saves because `scp` from the Linux box truncates at exactly 200 KB (noted in memory, never hit before today's 500 KB logs); `make logs` now fetches over base64 and prints the byte count.
 
 ## Q16. Why does demand saw-tooth by about 2000 every few months with live pulls?
