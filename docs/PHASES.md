@@ -41,6 +41,8 @@ Exit criterion: growth in instance B visibly changes regional demand in instance
 
 ## Phase 3: nice to have
 
+- [ ] Region view redraws a reloaded tile's picture (Q17: record reloads, picture does not). Needs the region view's texture rebuild path from Ghidra.
+
 - [x] Region view reloads a peer's tile record when the peer saves (`ReloadOnPeerSave`, Q17 step 4, observed 2026-10-19: hover population updated live). Steps 5 to 7 observed the same day; default 1 since then.
 - [x] Coordinator slice 1 (`docs/PLAN-LAUNCHER.md`): status file, same-tile guard (tile mutex, second opener stops writing), Win32 launcher with list, raise, launch gate and resource estimate. Observed 2026-10-18 (Q14).
 - [x] Coordinator slice 2: grid of live DWM thumbnails, observed 2026-10-18 (Q14 step 6). No Close button: the game ignores WM_CLOSE (Q14 step 5).
