@@ -676,7 +676,17 @@ private:
 		{
 			SC4String* pDirName = pRegion->GetDirectoryName();
 			regionDirectoryName = pDirName ? pDirName->ToChar() : "";
-			storeDirectory = settings.ResolveStoreDirectory(regionDirectoryName);
+			// "_" names are reserved for _instances and _saves: no store for such a region.
+			if (!regionDirectoryName.empty() && regionDirectoryName[0] == '_')
+			{
+				storeDirectory.clear();
+				Logger::GetInstance().WriteLineFormatted(LogLevel::Error, "Region '%s': name starts with '_', no store; publish, pull and save count are off.",
+					regionDirectoryName.c_str());
+			}
+			else
+			{
+				storeDirectory = settings.ResolveStoreDirectory(regionDirectoryName);
+			}
 
 			Logger::GetInstance().WriteLineFormatted(
 				LogLevel::Info,
@@ -692,7 +702,7 @@ private:
 			status.region = AcpToUtf8(regionDirectoryName);
 			SetStatus("region", "region init");
 
-			if (settings.enabled && settings.pullOnStoreChange)
+			if (settings.enabled && settings.pullOnStoreChange && !storeDirectory.empty())
 			{
 				std::error_code ec;
 				std::filesystem::create_directories(storeDirectory, ec);
@@ -1103,7 +1113,7 @@ private:
 				pOwnRegionalCity->GetPosition(x, z);
 				std::error_code ec;
 				const std::filesystem::path path = storeDirectory / regionsync::SnapshotFileName(x, z);
-				const bool removed = std::filesystem::remove(path, ec);
+				const bool removed = !storeDirectory.empty() && std::filesystem::remove(path, ec);
 				Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "Shutdown: snapshot %s %s", path.string().c_str(), removed ? "removed" : "not present");
 			}
 		}
@@ -1647,9 +1657,9 @@ private:
 		pendingSave.reset();
 		try
 		{
-			if (!pOwnRegionalCity || regionDirectoryName.empty())
+			if (!pOwnRegionalCity || regionDirectoryName.empty() || storeDirectory.empty())
 			{
-				logger.WriteLine(LogLevel::Info, "SaveCount: no city or region, not counted.");
+				logger.WriteLine(LogLevel::Info, "SaveCount: no city, region or store, not counted.");
 				return;
 			}
 			PendingSave p;
@@ -1852,6 +1862,11 @@ private:
 			snapshot.dealsComplete = false;
 		}
 
+		if (storeDirectory.empty())
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "Publish (%s): no store directory, skipped.", reason);
+			return;
+		}
 		const std::filesystem::path path =
 			storeDirectory / regionsync::SnapshotFileName(snapshot.regionX, snapshot.regionZ);
 

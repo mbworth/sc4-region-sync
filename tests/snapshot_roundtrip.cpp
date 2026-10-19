@@ -29,7 +29,7 @@ int main(int argc, char** argv)
 		a.commodities[i] = { 1.5f * i, 2.5f * i, 3.5f * i, 4.5f * i, 0.125f * i };
 	}
 	a.rciGroupCount = 3;
-	a.rciGroups[0] = { 0x1010, 100 }; a.rciGroups[1] = { 0x3110, 200 }; a.rciGroups[2] = { 0x4400, -1 };
+	a.rciGroups[0] = { 0x1010, 100 }; a.rciGroups[1] = { 0x3110, 200 }; a.rciGroups[2] = { 0x4400, 300 };
 	a.connectionsKnown = true;
 	a.connections = { { 2, 0, 17, -1, 17, true, 2, 7 }, { 4, 127, 0, 127, -1, true, 3, 6 }, { 5, 3, 0, 0, 0, false, 3, 6 } };
 	a.connectionsComplete = true;
@@ -353,6 +353,24 @@ int main(int argc, char** argv)
 
 		CHECK(!ReadInstanceStatus(dir / "missing.status", rt, error));
 		CHECK(!error.empty());
+	}
+
+	// Untrusted snapshot values are clamped, not refused.
+	{
+		const std::filesystem::path ap = dir / "absurd.snapshot";
+		std::ofstream(ap) << "population=2000000000\ncommercialJobs=-5\nindustrialJobs=60000000\nworkforcePercentage=1e30\n"
+			"mayorRating=1000\nbudget=-1e20\nincome=3e15\ncommodity.2.demanded=1e38\nrciGroupCount=2\nrci.0.population=-1\n"
+			"rci.1.population=99999999\ncityName=" << std::string(1000, 'n') << "\n";
+		NeighborSnapshot x;
+		CHECK(ReadSnapshotFile(ap, x, error) && !error.empty());
+		CHECK(x.population == 50000000 && x.commercialJobs == 0 && x.industrialJobs == 50000000);
+		CHECK(x.workforcePercentage == 100.0f && x.mayorRating == 100 && x.budget == -1e10f && x.income == 1e10f);
+		CHECK(x.commodities[2].demanded == 1e10f && x.rciGroups[0].population == 0 && x.rciGroups[1].population == 50000000);
+		CHECK(x.cityName.size() == 255);
+		std::ofstream(ap) << "population=-1\nmayorRating=500\nconnectionCount=0\nconnectionsComplete=1\ndealCount=0\ndealsComplete=1\n";
+		CHECK(ReadSnapshotFile(ap, x, error) && !error.empty() && x.population == 0 && x.mayorRating == 100 && x.connectionsComplete && x.dealsComplete);
+		std::ofstream(ap) << "population=100\nmayorRating=-100\nworkforcePercentage=0\n";
+		CHECK(ReadSnapshotFile(ap, x, error) && error.empty() && x.population == 100 && x.mayorRating == -100);
 	}
 
 	// P1: key=value text form.

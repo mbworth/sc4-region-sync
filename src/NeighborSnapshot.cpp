@@ -25,6 +25,19 @@
 
 namespace
 {
+	constexpr size_t kMaxCityNameLength = 255;
+
+	// Out-of-range values are clamped and noted in the non-fatal error text.
+	template <typename T>
+	void Clamp(const char* name, T& value, T lo, T hi, std::string& error)
+	{
+		if (value < lo || value > hi)
+		{
+			value = value < lo ? lo : hi;
+			error += std::string(name) + " clamped; ";
+		}
+	}
+
 	template <typename T>
 	bool ParseNumber(const std::string& text, T& out)
 	{
@@ -324,7 +337,6 @@ namespace regionsync
 		Read(kv, "workforcePercentage", s.workforcePercentage);
 		int32_t rating = 0;
 		Read(kv, "mayorRating", rating);
-		s.mayorRating = static_cast<int8_t>(rating);
 		Read(kv, "budget", s.budget);
 		Read(kv, "income", s.income);
 
@@ -347,6 +359,7 @@ namespace regionsync
 			Read(kv, prefix + "groupId", s.rciGroups[i].groupId);
 			Read(kv, prefix + "population", s.rciGroups[i].population);
 		}
+
 
 		s.connectionsKnown = kv.count("connectionCount") != 0;
 		s.connections.clear();
@@ -396,6 +409,34 @@ namespace regionsync
 		{
 			s.connectionsComplete = false;
 			s.dealsComplete = false;
+		}
+
+		// Snapshots may come from another PC: bound what reaches the game record.
+		constexpr int32_t kMaxCount = 50000000;
+		constexpr float kMaxMoney = 1e10f;
+		Clamp("population", s.population, 0, kMaxCount, error);
+		Clamp("commercialJobs", s.commercialJobs, 0, kMaxCount, error);
+		Clamp("industrialJobs", s.industrialJobs, 0, kMaxCount, error);
+		for (size_t i = 0; i < s.rciGroupCount; i++)
+		{
+			Clamp("rci population", s.rciGroups[i].population, 0, kMaxCount, error);
+		}
+		Clamp("mayorRating", rating, -100, 100, error);
+		s.mayorRating = static_cast<int8_t>(rating);
+		Clamp("workforcePercentage", s.workforcePercentage, 0.0f, 100.0f, error);
+		Clamp("budget", s.budget, -kMaxMoney, kMaxMoney, error);
+		Clamp("income", s.income, -kMaxMoney, kMaxMoney, error);
+		for (CommodityStats& c : s.commodities)
+		{
+			for (float* v : { &c.exported, &c.imported, &c.produced, &c.demanded, &c.costPerUnit })
+			{
+				Clamp("commodity", *v, -kMaxMoney, kMaxMoney, error);
+			}
+		}
+		if (s.cityName.size() > kMaxCityNameLength)
+		{
+			s.cityName.resize(kMaxCityNameLength);
+			error += "cityName truncated; ";
 		}
 
 		return true;
