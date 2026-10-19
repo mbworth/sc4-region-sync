@@ -327,4 +327,16 @@ RegionalDemand (pull): 0x4200 regional 12745 -> 12529, AddToSupplyValue(-216); .
 Pull (store change): files=2 dead=0 applied=1 changedFields=20 mirrorPending=1
 ```
 
-Later cycles in both logs: `Pull (store change)` carries the deltas (changedFields 20, 9, 7, 10 in instance 1; 7, 10 in instance 2) and the `Pull (month tick)` that follows finds `changedFields=0`. Each instance's own publish produces two `StoreWatch: signal, no peer change` lines at Debug (the `.tmp` write and the rename), no pull. No Warning or Error lines. Step 2 confirmed; the monthly pull is now the fallback it was meant to be. Steps 3 to 8 pending.
+Later cycles in both logs: `Pull (store change)` carries the deltas (changedFields 20, 9, 7, 10 in instance 1; 7, 10 in instance 2) and the `Pull (month tick)` that follows finds `changedFields=0`. Each instance's own publish produces two `StoreWatch: signal, no peer change` lines at Debug (the `.tmp` write and the rename), no pull. No Warning or Error lines. Step 2 confirmed; the monthly pull is now the fallback it was meant to be. Steps 4 to 8 pending.
+
+**Observed (2026-10-19, build `6df167c`, step 3).** Exiting BumperVille to the region view logged `Status (city shutdown): state=region`, `RegionWatch: PostCityShutdown, regionViewReady=0 until a PostRegionInit message.`, then `Status (region init)` and `RegionWatch: PostRegionInit message, regionViewReady=1 watch=0`: the game does send a region-init message after a city exit, so the timer gate arms. The cheat box opens in the region view and `RegionSyncReload` fired twice:
+
+```
+Reload: cheat fired in the region view. region=02E45E94 (ours 02E45E94) regionViewReady=1
+Reload (4,4): ok=0 popBefore=21065 popAfter=21065 recordPtrChanged=1 name='DumpsVille'->'DumpsVille'
+Reload (4,6): ok=0 popBefore=29089 popAfter=29089 recordPtrChanged=1 name='BumperVille'->'BumperVille'
+Reload (6,6): ok=0 popBefore=64608 popAfter=64608 recordPtrChanged=1 name='TuggersVille'->'TuggersVille'
+Reload: reloaded 3 of 3 established tiles (recordPtrChanged, region view).
+```
+
+Hover, select and opening a tile afterwards worked; no crash, nothing at Warning. Populations did not change because no peer saved in between. `ReloadCity` in the region view is safe to call by hand.
