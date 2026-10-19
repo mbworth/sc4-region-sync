@@ -1294,6 +1294,7 @@ namespace
 		S.staged.clear();
 		S.sync = Sync::Synced;
 		S.guestSynced = true;
+		if (S.mirroring) ReadRegionSize(S.regionsDir + L"\\" + Widen(S.mirrorRegion));
 		S.resync = false;
 		S.failed.clear();
 		S.swapBroken.clear();
@@ -1740,6 +1741,7 @@ namespace launcher
 			{
 				S.lastScan = now;
 				OpenWatches();
+				if (!S.sizeKnown) ReadRegionSize(S.regionsDir + L"\\" + Widen(S.mirrorRegion));   // absent until the first swap
 				Scan(false);
 			}
 			if (now - S.lastRecount > kRescanMs)
