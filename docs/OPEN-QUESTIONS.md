@@ -327,7 +327,20 @@ RegionalDemand (pull): 0x4200 regional 12745 -> 12529, AddToSupplyValue(-216); .
 Pull (store change): files=2 dead=0 applied=1 changedFields=20 mirrorPending=1
 ```
 
-Later cycles in both logs: `Pull (store change)` carries the deltas (changedFields 20, 9, 7, 10 in instance 1; 7, 10 in instance 2) and the `Pull (month tick)` that follows finds `changedFields=0`. Each instance's own publish produces two `StoreWatch: signal, no peer change` lines at Debug (the `.tmp` write and the rename), no pull. No Warning or Error lines. Step 2 confirmed; the monthly pull is now the fallback it was meant to be. Steps 4 to 8 pending.
+Later cycles in both logs: `Pull (store change)` carries the deltas (changedFields 20, 9, 7, 10 in instance 1; 7, 10 in instance 2) and the `Pull (month tick)` that follows finds `changedFields=0`. Each instance's own publish produces two `StoreWatch: signal, no peer change` lines at Debug (the `.tmp` write and the rename), no pull. No Warning or Error lines. Step 2 confirmed; the monthly pull is now the fallback it was meant to be. Steps 5, 6 and 8 pending.
+
+**Observed (2026-10-19, build `6df167c`, steps 4 and 7, `ReloadOnPeerSave=1`).** Instance 1 at startup: `IdleService: added=1 onIdle=1`, `RegionsDirectory: ok=140 '...\Instance1\Regions\' folder '...\Regions\New York' regionIni=1` (the bool comes back as a non-zero byte, 140 and later 204; treat as true), `RegionWatch: opened`, three `save path` lines, `seeded 3 tile(s)`. BumperVille exited to the region view, TuggersVille saved in instance 2 (`save: released held=1844 ms` at 09:26:25.768). Instance 1, 1.5 s later:
+
+```
+RegionWatch: 2 tile(s) due
+SaveLock: 09:26:27.266 watch: acquired (try) depth=1
+Reload (4,6): ok=0 popBefore=29128 popAfter=29089 recordPtrChanged=1 name='BumperVille'->'BumperVille'
+Reload (6,6): ok=0 popBefore=64557 popAfter=64589 recordPtrChanged=1 name='TuggersVille'->'TuggersVille'
+SaveLock: 09:26:27.267 watch: released held=0 ms ok=1
+RegionWatch: reloaded 2 of 2 (recordPtrChanged)
+```
+
+The player saw TuggersVille's hover population change to the live value without leaving the region view. Two tiles, not one: the peer's save also rewrote `City - BumperVille.sc4` with its view of our record (Q4 neighbor write, lands because our city was closed), so our own tile reloaded to the peer's copy (29089, our last publish) instead of the unsaved in-memory 29128. Harmless in the region view and correct once we reopen the city from disk anyway. Step 7: instance 2 (city open) logged no `RegionWatch` reload on its own save.
 
 **Observed (2026-10-19, build `6df167c`, step 3).** Exiting BumperVille to the region view logged `Status (city shutdown): state=region`, `RegionWatch: PostCityShutdown, regionViewReady=0 until a PostRegionInit message.`, then `Status (region init)` and `RegionWatch: PostRegionInit message, regionViewReady=1 watch=0`: the game does send a region-init message after a city exit, so the timer gate arms. The cheat box opens in the region view and `RegionSyncReload` fired twice:
 
