@@ -33,6 +33,7 @@ Test loop: `make deploy` copies DLL, INI and the launcher exe to the Windows box
 
 ## Ground rules
 
+- **This repo is public.** Never commit personal, private, or sensitive information: hostnames, LAN addresses, usernames, real `C:\Users\<name>` paths, keys, screenshots, or raw in-game logs. Deploy targets live in gitignored `local.mk`. Log excerpts quoted in docs use `C:\Users\player`. Grep the diff for these before every commit.
 - **Vendored headers are the contract.** Every `cISC4*` interface is reverse-engineered. Never reorder, insert, or remove virtual methods. If a header is wrong, the fix is a local wrapper or a documented upstream change, not an edit under `vendor/`.
 - **`vendor/` is submodules.** Do not edit. `vendor/xwin/` is generated and gitignored.
 - **`NeighborSnapshot.{h,cpp}` stays game-free and Windows-free.** It is the one piece that can be unit-tested on any machine. Keep `make test` (tests/snapshot_roundtrip.cpp) passing.
