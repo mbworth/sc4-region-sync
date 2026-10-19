@@ -10,12 +10,15 @@ Review round 1 (2026-10-19, security, threading and game safety, simplicity) mad
 
 The plugin gains no network code, no thread and no new game call.
 
-- **P1. Shared parsing.** `regionsync::ParseKeyValues(std::string_view)` comes out of `LoadKeyValues`, and `ParseInstanceStatus(std::string_view, InstanceStatus&)` out of `ReadInstanceStatus`. The launcher's `Status.cpp` keeps its share-delete read and calls these. Schema stays 1. The one new key is the optional `saveCountFailed=1` (P2); unknown keys already parse, so older launchers keep working.
+- **P1. Shared parsing.** `regionsync::ParseKeyValues(std::string_view)` comes out of `LoadKeyValues`, and `ParseInstanceStatus(std::string_view, InstanceStatus&)` out of `ReadInstanceStatus`. The launcher's `Status.cpp` keeps its share-delete read and calls these. Schema stays 1. The one new key is the optional `saveCountFailed=<x>_<z>[,...]` (P2); unknown keys already parse, so older launchers keep working.
 - **P2. Per-tile save counter.** `SaveHook641` gains two callbacks set by the director. `onSaving(path)` runs after `Scope` has taken the lock and before the original `SaveCity`. `onSaved(ok)` runs after the original returns. Both are inside try/catch.
   - In `onSaving` the director writes `<store base>\_saves\<region>\<x>_<z>.saves` through `WriteFileAtomic` with `count+1`. The other keys are `file` (basename of the save path), `prevFile` (the basename the city was loaded from, via `GetCitySaveFilePath` at load, written only when different), `lastSaveUnix`, `simDateNumber`, `population`, `cityName` and the writer triple.
   - `onSaved` rewrites the file with `lastOk`.
   - Every attempt counts, failed ones included, because the file may have changed.
-  - On a write failure: Error line, and the sticky `saveCountFailed=1` goes into the status file. The launcher then treats that writer's tile as "not sent".
+  - On a write failure, or an existing `.saves` whose `count` does not parse (left alone): Error line, and the tile joins the sticky `saveCountFailed=<x>_<z>[,<x>_<z>...]` list in the status file, kept for the process lifetime. The launcher then treats those tiles as "not sent".
+  - Callbacks run for the outermost save only (depth 1); a re-entered save is not counted again.
+  - The hook is installed whatever `SaveLock` says; only the mutex is gated by it, so the counter exists with `SaveLock=0`. The log shows `SaveHook: installed, lock=N`.
+  - A save that runs without the lock (timeout or `SaveLock=0`) is counted and its `SaveCount` lines carry `unlocked=1`. Accepted: a same-tile conflict could then lose an increment.
   - Info line: `SaveCount: (x,z) count=N file='...' ok=1`.
   - The counter lives in the store, so saves made with no launcher running are counted (offline play, study section 10). `_saves` sits beside `_instances`, outside the region store, so the Q17 store watch never sees it.
   - This is the only "changed here" signal.
@@ -169,7 +172,7 @@ Session key `Ks = BLAKE2b(K, "session" || nonceG || nonceH)`. A half-open old co
 | `PAKE` | G to H | `Y`, `conf` | pairing only |
 | `CONFIRM` | both | `conf` (H to G when pairing), MAC (G to H when paired) | session starts |
 | `SELECT` | G to H | `region` (ASCII, else refused with a message) | host stages it and sends `MANIFEST`. One per connection plus 3 retries |
-| `MANIFEST` | H to G | `region`, `count`, `file.N=name\|size\|hash\|tile` (`tile` is optional and comes from the host's `_saves` `file`) | guest refuses an empty manifest, otherwise diffs (section 4) |
+| `MANIFEST` | H to G | `region`, `count`; the data part carries the `file.N=name\|size\|hash\|tile` lines (`tile` is optional and comes from the host's `_saves` `file`) | guest refuses an empty manifest, otherwise diffs (section 4) |
 | `GET` | G to H | `region`, `name` (must be in the manifest) | host streams `FILE` from staging |
 | `FILE` | H to G | `name`, `offset`, `last`; data up to 256 KiB | `offset` must equal the bytes received and `offset+len` must be <= the manifest size. Hash checked on `last`; a mismatch discards the file and sends `SELECT` again |
 | `SYNCED` | G to H | `region`, `downloaded`, `kept`, `notSent` | host shows "synced" and deletes the session staging |
@@ -210,10 +213,10 @@ On every connect the host copies to the guest the region the guest selects. The 
    - Hash the local region files.
    - Pass the manifest and the local hashes to the UI.
 3. **Guest, UI: diff by tile.** It is game-free and unit-tested. The inputs are the guest's `_saves` (`count`, `file`, `prevFile`), the journal and the manifest.
-   - **Kept tile.** `count > baseCount`, or `saveCountFailed=1` for that writer's tile. The tile's current local file is kept and flagged "not sent". No manifest file that belongs to the tile is ever downloaded. A file belongs to a tile when it is named by the journal's `file`, the `.saves` `file` or `prevFile`, or the manifest's `tile`.
+   - **Kept tile.** `count > baseCount`, or the tile is in that writer's `saveCountFailed` list. The tile's current local file is kept and flagged "not sent". No manifest file that belongs to the tile is ever downloaded. A file belongs to a tile when it is named by the journal's `file`, the `.saves` `file` or `prevFile`, or the manifest's `tile`.
    - **Any other file** (the other tiles, `region.ini`, `config.bmp`): hash equal is the same file, hash different is downloaded. This includes the guest's own neighbor writes into host tiles: only the counter means "changed here" (smb.md).
    - **Local file not in the manifest:** kept if it belongs to a kept tile, otherwise archived.
-   - **Free space:** checked against the downloads plus the archive moves.
+   - **Free space:** checked against the downloads (archive moves are same-volume renames).
 4. **Guest, worker:** `GET` each download into `staging\<session>\` and verify it.
 5. **Guest, UI: swap.**
    - Only when no SC4 game process runs on the guest at all. Otherwise the strip says "close SimCity 4 on this PC to finish the sync"; live mirroring runs anyway.
@@ -226,7 +229,7 @@ On every connect the host copies to the guest the region the guest selects. The 
    - An existing unknown folder (compared case-insensitively) is moved to `archive\` after a Yes/No, then a full download follows.
    - Region names are compared case-insensitively in the launcher.
 
-**Journal** (guest only): `journal\<peerSiteId>\<region>.txt`, key=value, one line per tile `x_z`: `file`, `baseHash`, `baseCount`. After a swap, every tile with a local `.saves` gets `baseCount = count`, and `file` and `baseHash` are set from the swapped file. The UI refreshes the counters when the `_saves\<region>` change handle fires and at start.
+**Journal** (guest only): `journal\<peerSiteId>\<region>.txt`, key=value, one line per tile `x_z`: `file`, `baseHash`, `baseCount`. After a swap, every tile with a local `.saves`, except kept tiles, gets `baseCount = count`, and `file` and `baseHash` are set from the swapped file. The UI refreshes the counters when the `_saves\<region>` change handle fires and at start.
 
 **Name rules** (`Manifest.cpp`, unit-tested):
 - **Region names:** printable ASCII, 1 to 120 characters, none of `<>:"/\|?*~` or control characters, no leading or trailing space or dot, not `.` or `..`, no reserved device name with any extension.

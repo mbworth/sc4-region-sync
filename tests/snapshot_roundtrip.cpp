@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <sstream>
 
 using namespace regionsync;
 
@@ -352,6 +353,121 @@ int main(int argc, char** argv)
 
 		CHECK(!ReadInstanceStatus(dir / "missing.status", rt, error));
 		CHECK(!error.empty());
+	}
+
+	// P1: key=value text form.
+	{
+		KeyValues kv;
+		ParseKeyValues("; comment\r\n# also\r\n[Sync]\r\na=1\r\nb=x=y\r\n\r\nnoequals\r\nc=\r\nd=last", kv);
+		CHECK(kv.size() == 4);
+		CHECK(kv["a"] == "1" && kv["b"] == "x=y" && kv["c"].empty() && kv["d"] == "last");
+		CHECK(kv.find("[Sync]") == kv.end() && kv.find("; comment") == kv.end());
+	}
+
+	// P1/P2: status text; saveCountFailed is optional and schema stays 1.
+	{
+		InstanceStatus st;
+		ParseInstanceStatus("schemaVersion=1\r\nhost=PC1\r\npid=7\r\nstart=9\r\nstate=city\r\nregion=R\r\nregionX=1\r\nregionZ=2\r\nfutureKey=5\r\n", st);
+		CHECK(st.schemaVersion == 1 && st.writer.host == "PC1" && st.writer.pid == 7 && st.writer.start == 9);
+		CHECK(st.state == "city" && st.region == "R" && st.regionX == 1 && st.regionZ == 2 && st.saveCountFailedTiles.empty());
+		ParseInstanceStatus("schemaVersion=1\nsaveCountFailed=6_6,-1_x,3_-2,junk,4_5_6\n", st);
+		CHECK(!st.writer.Known());
+		CHECK((st.saveCountFailedTiles == std::vector<std::pair<int32_t, int32_t>>{ { 6, 6 }, { 3, -2 } }));
+
+		InstanceStatus w;
+		w.writer = { "PC1", 7, 9 };
+		w.state = "region";
+		const std::filesystem::path sp = dir / "flag.status";
+		CHECK(WriteInstanceStatus(sp, w, error));
+		{
+			std::ifstream in(sp);
+			std::stringstream text;
+			text << in.rdbuf();
+			CHECK(text.str().find("saveCountFailed") == std::string::npos);
+		}
+		w.saveCountFailedTiles = { { 6, 6 }, { 0, 12 } };
+		CHECK(WriteInstanceStatus(sp, w, error));
+		{
+			std::ifstream in(sp);
+			std::stringstream text;
+			text << in.rdbuf();
+			CHECK(text.str().find("saveCountFailed=6_6,0_12\n") != std::string::npos);
+		}
+		InstanceStatus r;
+		CHECK(ReadInstanceStatus(sp, r, error) && r.saveCountFailedTiles == w.saveCountFailedTiles && r.schemaVersion == 1 && r.state == "region");
+	}
+
+	// P4: identity.
+	{
+		CHECK(SameHost("GameBox", "GAMEBOX") && SameHost("pc-1", "PC-1") && SameHost("", ""));
+		CHECK(!SameHost("PC1", "PC2") && !SameHost("PC1", "PC10") && !SameHost("\xC4", "\xE4"));
+		const WriterIdentity a{ "GameBox", 10, 20 };
+		CHECK(SameWriter(a, { "GAMEBOX", 10, 20 }));
+		CHECK(!SameWriter(a, { "GAMEBOX", 11, 20 }) && !SameWriter(a, { "GAMEBOX", 10, 21 }) && !SameWriter(a, { "OTHER", 10, 20 }));
+		CHECK(!SameWriter({ "", 10, 20 }, { "", 10, 20 }));
+		CHECK(IsReapable("29420-134368212816162474.status", InstanceStatus{ 1, { "pc1", 29420, 134368212816162474ULL } }, "PC1"));
+	}
+
+	// P2: save counter text.
+	{
+		CHECK(SaveCounterFileName(6, -1) == "6_-1.saves");
+		SaveCounter c;
+		c.count = 42;
+		c.file = "City - Tuggers Ville.sc4";
+		c.prevFile = "City - Old.sc4";
+		c.lastSaveUnix = 1792345678;
+		c.simDateNumber = 731000;
+		c.population = 12345;
+		c.cityName = "Tuggers\nVille";
+		c.writer = { "PC1", 7, 9 };
+		SaveCounter r;
+		ParseSaveCounter(FormatSaveCounter(c), r);
+		CHECK(r.count == 42 && r.file == c.file && r.prevFile == c.prevFile && r.lastSaveUnix == c.lastSaveUnix);
+		CHECK(r.simDateNumber == c.simDateNumber && r.population == c.population && r.cityName == "Tuggers Ville");
+		CHECK(SameWriter(r.writer, c.writer) && r.lastOk == -1);
+		CHECK(FormatSaveCounter(c).find("lastOk") == std::string::npos);
+		c.lastOk = 0;
+		c.prevFile = c.file;
+		ParseSaveCounter(FormatSaveCounter(c), r);
+		CHECK(r.lastOk == 0 && r.prevFile.empty());
+		c.lastOk = 1;
+		ParseSaveCounter(FormatSaveCounter(c), r);
+		CHECK(r.lastOk == 1);
+		ParseSaveCounter("count=x\r\nfile=a.sc4\r\n", r);
+		CHECK(r.count == 0 && r.file == "a.sc4" && !r.writer.Known());
+
+		const std::filesystem::path cp = dir / SaveCounterFileName(6, 6);
+		r.count = 99;
+		CHECK(ReadSaveCounter(cp, r, error) && r.count == 0 && error.empty());   // missing: count 0
+		c.lastOk = 1;
+		CHECK(WriteFileAtomic(cp, FormatSaveCounter(c), error));
+		CHECK(ReadSaveCounter(cp, r, error) && r.count == 42 && r.lastOk == 1 && r.file == c.file);
+		std::ofstream(cp) << "count=abc\nfile=a.sc4\n";
+		CHECK(!ReadSaveCounter(cp, r, error) && !error.empty());                 // unparsable count
+		std::ofstream(cp) << "file=a.sc4\n";
+		CHECK(!ReadSaveCounter(cp, r, error));                                    // absent count
+	}
+
+	// P6: a failed write leaves the target and no .tmp.
+	{
+		const std::filesystem::path target = dir / "atomic.txt";
+		CHECK(WriteFileAtomic(target, "good\n", error));
+		std::error_code ec;
+		if (std::filesystem::exists("/dev/full", ec))
+		{
+			const std::filesystem::path tmp = target.string() + ".tmp";
+			std::filesystem::create_symlink("/dev/full", tmp, ec);
+			CHECK(!ec);
+			CHECK(!WriteFileAtomic(target, std::string(1 << 16, 'x'), error) && !error.empty());
+			CHECK(!std::filesystem::exists(tmp) && !std::filesystem::is_symlink(tmp));
+			std::filesystem::create_symlink("/dev/full", tmp, ec);   // small: fails only at flush or close
+			CHECK(!ec);
+			CHECK(!WriteFileAtomic(target, "abc", error) && !error.empty());
+			CHECK(!std::filesystem::exists(tmp) && !std::filesystem::is_symlink(tmp));
+			CHECK(std::filesystem::is_regular_file(std::filesystem::symlink_status(target)) && std::filesystem::file_size(target) == 5);
+		}
+		std::ofstream(dir / "notadir") << "x";
+		CHECK(!WriteFileAtomic(dir / "notadir" / "f.txt", "y", error));
 	}
 
 	std::filesystem::remove_all(dir);

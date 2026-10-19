@@ -88,7 +88,7 @@ LIBS = version.lib ole32.lib user32.lib
 
 RES = $(BUILD)/version.res
 
-.PHONY: all release debug launcher clean check-toolchain test deploy logs
+.PHONY: all release debug launcher clean check-toolchain test test-launcher deploy logs
 
 all: release
 
@@ -120,23 +120,34 @@ debug: check-toolchain $(RES)
 
 # Launcher: a plain Win32 exe, static CRT, its own flags (no /LD, no plugin defines).
 LAUNCHER_SRCS = launcher/main.cpp launcher/Status.cpp launcher/Settings.cpp \
-	launcher/Resources.cpp launcher/Launch.cpp src/WriterIdentity.cpp
+	launcher/Resources.cpp launcher/Launch.cpp src/WriterIdentity.cpp \
+	launcher/Lan.cpp launcher/LanUi.cpp launcher/LanCrypto.cpp launcher/Net.cpp \
+	launcher/Frame.cpp launcher/Handshake.cpp launcher/Manifest.cpp launcher/Journal.cpp \
+	src/InstanceStatus.cpp src/NeighborSnapshot.cpp
+# Both PCs must run the same build (docs/PLAN-LAN.md section 3).
+BUILD_ID := 0.2.0+$(shell git rev-parse --short=7 HEAD 2>/dev/null || echo 0000000)
 LAUNCHER_FLAGS = -target i386-pc-windows-msvc -fuse-ld=lld-link -ferror-limit=20 \
 	/std:c++20 /EHsc /W3 /Gy /Gd /MT /O2 /Oi \
 	/D WIN32 /D _UNICODE /D UNICODE /D NDEBUG /D NOMINMAX \
-	/D _WIN32_WINNT=0x0A00 /D WINVER=0x0A00 \
-	/I launcher /I src $(MSVC_INCLUDES)
-LAUNCHER_LIBS = kernel32.lib user32.lib gdi32.lib comctl32.lib shell32.lib psapi.lib dwmapi.lib
+	/D _WIN32_WINNT=0x0A00 /D WINVER=0x0A00 '/DBUILD_ID="$(BUILD_ID)"' \
+	/I launcher /I src /I vendor/monocypher $(MSVC_INCLUDES)
+LAUNCHER_LIBS = kernel32.lib user32.lib gdi32.lib comctl32.lib shell32.lib psapi.lib dwmapi.lib \
+	ws2_32.lib bcrypt.lib crypt32.lib version.lib ole32.lib
 LAUNCHER_RES = $(BUILD)/launcher.res
 LAUNCHER_EXE = $(BUILD)/SC4RegionSyncLauncher.exe
+MONOCYPHER_OBJ = $(BUILD)/monocypher.obj
+
+# Monocypher is C: compiled on its own, without the C++ flags.
+$(MONOCYPHER_OBJ): vendor/monocypher/monocypher.c vendor/monocypher/monocypher.h | $(BUILD)
+	$(CLANG_CL) -target i386-pc-windows-msvc /c /W3 /MT /O2 /D NDEBUG $(MSVC_INCLUDES) /Fo$@ vendor/monocypher/monocypher.c
 
 # launcher.rc is UTF-8, so no iconv step.
 $(LAUNCHER_RES): launcher/launcher.rc launcher/launcher.manifest launcher/resource.h src/version.h | $(BUILD)
 	$(LLVM_RC) /I launcher /I src /FO $@ launcher/launcher.rc
 
-launcher: check-toolchain $(LAUNCHER_RES)
+launcher: check-toolchain $(LAUNCHER_RES) $(MONOCYPHER_OBJ)
 	$(CLANG_CL) $(LAUNCHER_FLAGS) /o $(LAUNCHER_EXE) $(LAUNCHER_SRCS) \
-		/link $(MSVC_LIBPATHS) $(LAUNCHER_LIBS) $(LAUNCHER_RES) /SUBSYSTEM:WINDOWS /OUT:$(LAUNCHER_EXE)
+		/link $(MSVC_LIBPATHS) $(LAUNCHER_LIBS) $(LAUNCHER_RES) $(MONOCYPHER_OBJ) /SUBSYSTEM:WINDOWS /OUT:$(LAUNCHER_EXE)
 	@echo "Built $(LAUNCHER_EXE)"
 
 clean:
@@ -147,6 +158,15 @@ test:
 	mkdir -p $(BUILD)
 	g++ -std=c++20 -Wall -I src tests/snapshot_roundtrip.cpp src/NeighborSnapshot.cpp src/InstanceStatus.cpp -o $(BUILD)/snapshot_roundtrip
 	$(BUILD)/snapshot_roundtrip $(BUILD)/snapshot-test
+
+# Host-side unit test for the launcher's Windows-free LAN core.
+test-launcher:
+	mkdir -p $(BUILD)
+	gcc -c -O2 -Wall vendor/monocypher/monocypher.c -o $(BUILD)/monocypher.o
+	g++ -std=c++20 -Wall -I src -I launcher -I vendor/monocypher tests/launcher_lan.cpp launcher/Frame.cpp \
+		launcher/Manifest.cpp launcher/Journal.cpp launcher/Handshake.cpp src/InstanceStatus.cpp src/NeighborSnapshot.cpp \
+		$(BUILD)/monocypher.o -o $(BUILD)/launcher_lan
+	$(BUILD)/launcher_lan
 
 # ---------------------------------------------------------------------------
 # Windows game box over SSH (OpenSSH server on the Windows side, key auth).

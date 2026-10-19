@@ -38,6 +38,14 @@ namespace
 		return out;
 	}
 
+	std::string hostAlias;
+
+	std::string OwnHost()
+	{
+		static const std::string computerName = ComputerName();
+		return hostAlias.empty() ? computerName : hostAlias;
+	}
+
 	class ProcessHandle
 	{
 	public:
@@ -53,10 +61,15 @@ namespace
 
 namespace regionsync::writer
 {
+	void SetHostAlias(const std::string& alias)
+	{
+		hostAlias = alias;
+	}
+
 	WriterIdentity Current()
 	{
 		WriterIdentity id;
-		id.host = ComputerName();
+		id.host = OwnHost();
 		id.pid = GetCurrentProcessId();
 		id.start = CreationTime(GetCurrentProcess());
 		return id;
@@ -64,8 +77,8 @@ namespace regionsync::writer
 
 	Liveness IsAlive(const WriterIdentity& id)
 	{
-		static const std::string ownHost = ComputerName();
-		if (!id.Known() || ownHost.empty() || id.host != ownHost)
+		const std::string ownHost = OwnHost();
+		if (!id.Known() || ownHost.empty() || !SameHost(id.host, ownHost))
 		{
 			return Liveness::Unknown;
 		}

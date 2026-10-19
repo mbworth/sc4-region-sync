@@ -23,8 +23,32 @@ namespace regionsync
 		int32_t regionZ = -1;
 		std::string cityName;
 		bool conflict = false;
+		// Sticky for the process: tiles whose .saves write failed. Key saveCountFailed=<x>_<z>[,...].
+		std::vector<std::pair<int32_t, int32_t>> saveCountFailedTiles;
 		int64_t writtenUnixTime = 0;
 	};
+
+	// <store base>\_saves\<region>\<x>_<z>.saves, one per tile, rewritten on every save attempt.
+	struct SaveCounter
+	{
+		uint32_t count = 0;
+		std::string file;          // save file basename, UTF-8
+		std::string prevFile;      // basename the city was loaded from, when different
+		int64_t lastSaveUnix = 0;
+		int32_t simDateNumber = 0;
+		int32_t population = 0;
+		std::string cityName;
+		WriterIdentity writer;
+		int32_t lastOk = -1;       // 1 ok, 0 failed, -1 absent (save in progress or interrupted)
+	};
+
+	// "<x>_<z>.saves"
+	std::string SaveCounterFileName(int32_t regionX, int32_t regionZ);
+	std::string FormatSaveCounter(const SaveCounter& c);
+	void ParseSaveCounter(std::string_view text, SaveCounter& c);
+	void ParseSaveCounter(const KeyValues& kv, SaveCounter& c);
+	// Missing file: count 0, true. False on a read error or an unparsable count.
+	bool ReadSaveCounter(const std::filesystem::path& path, SaveCounter& c, std::string& error);
 
 	// "<pid>-<start>.status"
 	std::string InstanceStatusFileName(uint32_t pid, uint64_t start);

@@ -94,6 +94,25 @@ namespace regionsync
 
 	constexpr size_t kMaxWriterHostLength = 255;
 
+	// Case-insensitive ASCII; Windows computer names ignore case.
+	constexpr bool SameHost(std::string_view a, std::string_view b)
+	{
+		if (a.size() != b.size()) return false;
+		for (size_t i = 0; i < a.size(); i++)
+		{
+			const char x = (a[i] >= 'A' && a[i] <= 'Z') ? static_cast<char>(a[i] - 'A' + 'a') : a[i];
+			const char y = (b[i] >= 'A' && b[i] <= 'Z') ? static_cast<char>(b[i] - 'A' + 'a') : b[i];
+			if (x != y) return false;
+		}
+		return true;
+	}
+
+	// Both known, SameHost, same pid and start.
+	inline bool SameWriter(const WriterIdentity& a, const WriterIdentity& b)
+	{
+		return a.Known() && b.Known() && SameHost(a.host, b.host) && a.pid == b.pid && a.start == b.start;
+	}
+
 	// Non-empty, bounded, no control characters (keeps the line format intact).
 	constexpr bool IsValidWriterHost(std::string_view host)
 	{
@@ -319,6 +338,7 @@ namespace regionsync
 	template <typename T>
 	bool ReadKeyValue(const KeyValues& kv, const std::string& key, T& out);
 
-	// Writes "<path>.tmp" then renames it over path (retried briefly).
+	// Writes "<path>.tmp" then renames it over path (retried briefly). A failed
+	// write, flush or close deletes the .tmp and leaves path untouched.
 	bool WriteFileAtomic(const std::filesystem::path& path, const std::string& text, std::string& error);
 }

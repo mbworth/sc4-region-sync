@@ -233,6 +233,12 @@ namespace
 		return ToUtf8(regionsync::savelock::WidenAcp(s));
 	}
 
+	// Basename of an ANSI save path, UTF-8.
+	std::string SaveFileBasename(const char* acpPath)
+	{
+		return acpPath ? ToUtf8(std::filesystem::path(regionsync::savelock::WidenAcp(acpPath)).filename().wstring()) : std::string();
+	}
+
 	bool IsStatusFile(const std::filesystem::path& p)
 	{
 		return p.extension() == ".status" || (p.extension() == ".tmp" && p.stem().extension() == ".status");
@@ -352,6 +358,11 @@ public:
 		}
 
 		settings.Load(FileSystem::GetDllIniFilePath());
+		if (const std::wstring userDir = UserDirFromCommandLine(); !userDir.empty())
+		{
+			settings.LoadLocal(std::filesystem::path(userDir) / L"SC4RegionSync.local.ini");
+		}
+		regionsync::writer::SetHostAlias(settings.hostAlias);
 		Logger::GetInstance().SetLogLevel(settings.logLevel);
 
 		cIGZFrameWork* const pFramework = pCOM->FrameWork();
@@ -377,11 +388,14 @@ public:
 		}
 
 		bool hookInstalled = false;
-		if (settings.saveLock && pSC4App)
+		if (pSC4App)
 		{
 			try
 			{
-				hookInstalled = regionsync::savehook641::Install(pSC4App, LockTimeoutMs());
+				regionsync::savehook641::SetCallbacks(
+					[this](const char* path, bool held) { OnSaving(path, held); },
+					[this](bool ok, bool held) { OnSaved(ok, held); });
+				hookInstalled = regionsync::savehook641::Install(pSC4App, settings.saveLock, LockTimeoutMs());
 			}
 			catch (const std::exception& e)
 			{
@@ -431,7 +445,7 @@ public:
 
 		logger.WriteLineFormatted(
 			LogLevel::Info,
-			"Initialized. instanceId=%u enabled=%d publishEveryMonths=%d pullEveryMonths=%d autoSaveEveryMonths=%d syncConnections=%d syncDeals=%d layEdgeNetwork=%d syncRemovals=%d saveLock=%d saveLockTimeoutMs=%d hook=%d pullOnStoreChange=%d reloadOnPeerSave=%d",
+			"Initialized. instanceId=%u enabled=%d publishEveryMonths=%d pullEveryMonths=%d autoSaveEveryMonths=%d syncConnections=%d syncDeals=%d layEdgeNetwork=%d syncRemovals=%d saveLock=%d saveLockTimeoutMs=%d hook=%d pullOnStoreChange=%d reloadOnPeerSave=%d%s",
 			instanceId,
 			settings.enabled ? 1 : 0,
 			settings.publishEveryMonths,
@@ -445,7 +459,8 @@ public:
 			settings.saveLockTimeoutMs,
 			hookInstalled ? 1 : 0,
 			settings.pullOnStoreChange ? 1 : 0,
-			settings.reloadOnPeerSave ? 1 : 0);
+			settings.reloadOnPeerSave ? 1 : 0,
+			settings.hostAlias.empty() ? "" : (" hostAlias=" + settings.hostAlias).c_str());
 
 		ownWriter = regionsync::writer::Current();
 		logger.WriteLineFormatted(LogLevel::Info, "Writer: host=%s pid=%u start=%llu checkWriterLiveness=%d",
@@ -723,6 +738,8 @@ private:
 		mirrorPending.clear();
 		publishDirty = false;
 		connectionsReady = false;
+		loadedSaveFile.clear();
+		pendingSave.reset();
 	}
 
 	void PostCityInit(cIGZMessage2Standard* pStandardMsg)
@@ -845,6 +862,13 @@ private:
 			{
 				LogConflict(x, z, cityName);
 			}
+		}
+		if (pOwnRegionalCity)
+		{
+			cRZBaseString savePath;
+			pOwnRegionalCity->GetCitySaveFilePath(savePath);
+			loadedSaveFile = SaveFileBasename(savePath.ToChar());
+			logger.WriteLineFormatted(LogLevel::Info, "SaveCount: (%d,%d) loaded from '%s'", x, z, loadedSaveFile.c_str());
 		}
 		status.regionX = x;
 		status.regionZ = z;
@@ -1590,8 +1614,8 @@ private:
 		}
 	}
 
-	// Another live instance whose status shows this tile open; 0 when none.
-	uint32_t FindTileHolderPid(int32_t x, int32_t z) const
+	// Another live instance whose status shows this tile open; unknown when none.
+	regionsync::WriterIdentity FindTileHolder(int32_t x, int32_t z) const
 	{
 		const std::string region = AcpToUtf8(regionDirectoryName);
 		std::error_code ec;
@@ -1603,33 +1627,134 @@ private:
 			}
 			regionsync::InstanceStatus s;
 			std::string error;
-			if (regionsync::ReadInstanceStatus(entry.path(), s, error) && s.writer.pid != ownWriter.pid && s.state == "city" && !s.conflict
-				&& s.region == region && s.regionX == x && s.regionZ == z && SafeIsAlive(s.writer) != regionsync::writer::Liveness::Dead)
+			if (regionsync::ReadInstanceStatus(entry.path(), s, error) && s.writer.Known() && !regionsync::SameWriter(s.writer, ownWriter)
+				&& s.state == "city" && !s.conflict && s.region == region && s.regionX == x && s.regionZ == z
+				&& SafeIsAlive(s.writer) != regionsync::writer::Liveness::Dead)
 			{
-				return s.writer.pid;
+				return s.writer;
 			}
 		}
-		return 0;
+		return {};
+	}
+
+	// ---------------------------------------------------------------
+	// Save counter (docs/PLAN-LAN.md P2). Runs inside the save hook.
+	// ---------------------------------------------------------------
+
+	void OnSaving(const char* path, bool held)
+	{
+		Logger& logger = Logger::GetInstance();
+		pendingSave.reset();
+		try
+		{
+			if (!pOwnRegionalCity || regionDirectoryName.empty())
+			{
+				logger.WriteLine(LogLevel::Info, "SaveCount: no city or region, not counted.");
+				return;
+			}
+			PendingSave p;
+			pOwnRegionalCity->GetPosition(p.x, p.z);
+			p.path = settings.ResolveStoreDirectory("") / "_saves" / regionDirectoryName / regionsync::SaveCounterFileName(p.x, p.z);
+
+			regionsync::SaveCounter previous;
+			std::string error;
+			if (!regionsync::ReadSaveCounter(p.path, previous, error))
+			{
+				SaveCountFailed(p.x, p.z, error);
+				return;
+			}
+
+			regionsync::SaveCounter& c = p.counter;
+			c.count = previous.count + 1;
+			c.file = SaveFileBasename(path);
+			c.prevFile = loadedSaveFile != c.file ? loadedSaveFile : std::string();
+			c.lastSaveUnix = static_cast<int64_t>(std::time(nullptr));
+			c.simDateNumber = pSimulator ? pSimulator->GetSimDateNumber() : 0;
+			c.population = regionsync::rc641::GetPopulation(pOwnRegionalCity);
+			c.cityName = AcpToUtf8(GetRegionalCityName(pOwnRegionalCity));
+			c.writer = ownWriter;
+
+			if (!regionsync::WriteFileAtomic(p.path, regionsync::FormatSaveCounter(c), error))
+			{
+				SaveCountFailed(p.x, p.z, error);
+				return;
+			}
+			logger.WriteLineFormatted(LogLevel::Info, "SaveCount: (%d,%d) count=%u file='%s' prevFile='%s'%s saving -> %s",
+				p.x, p.z, c.count, c.file.c_str(), c.prevFile.c_str(), held ? "" : " unlocked=1", p.path.string().c_str());
+			pendingSave = std::move(p);
+		}
+		catch (const std::exception& e)
+		{
+			logger.WriteLineFormatted(LogLevel::Error, "SaveCount: saving threw: %s", e.what());
+		}
+		catch (...)
+		{
+			logger.WriteLine(LogLevel::Error, "SaveCount: saving threw a non-standard exception.");
+		}
+	}
+
+	void OnSaved(bool ok, bool held)
+	{
+		Logger& logger = Logger::GetInstance();
+		try
+		{
+			if (!pendingSave)
+			{
+				return;
+			}
+			PendingSave p = std::move(*pendingSave);
+			pendingSave.reset();
+			p.counter.lastOk = ok ? 1 : 0;
+			std::string error;
+			if (!regionsync::WriteFileAtomic(p.path, regionsync::FormatSaveCounter(p.counter), error))
+			{
+				SaveCountFailed(p.x, p.z, error);
+				return;
+			}
+			logger.WriteLineFormatted(LogLevel::Info, "SaveCount: (%d,%d) count=%u file='%s' ok=%d%s",
+				p.x, p.z, p.counter.count, p.counter.file.c_str(), ok ? 1 : 0, held ? "" : " unlocked=1");
+		}
+		catch (const std::exception& e)
+		{
+			logger.WriteLineFormatted(LogLevel::Error, "SaveCount: saved threw: %s", e.what());
+		}
+		catch (...)
+		{
+			logger.WriteLine(LogLevel::Error, "SaveCount: saved threw a non-standard exception.");
+		}
+	}
+
+	// Sticky per tile for the process: the launcher treats these tiles as not sent.
+	void SaveCountFailed(int32_t x, int32_t z, const std::string& error)
+	{
+		Logger::GetInstance().WriteLineFormatted(LogLevel::Error, "SaveCount: (%d,%d) not written: %s", x, z, error.c_str());
+		auto& tiles = status.saveCountFailedTiles;
+		if (std::find(tiles.begin(), tiles.end(), std::make_pair(x, z)) == tiles.end())
+		{
+			tiles.emplace_back(x, z);
+			WriteStatus("save count failed");
+		}
 	}
 
 	// The once-per-load Error line. Holder pid from its status file, else the
 	// snapshot writer. 'since' from the snapshot when its writer is that pid.
 	void LogConflict(int32_t x, int32_t z, const std::string& cityName)
 	{
-		uint32_t pid = 0;
+		regionsync::WriterIdentity holder;
 		std::string since = "unknown";
 		try
 		{
-			pid = FindTileHolderPid(x, z);
+			holder = FindTileHolder(x, z);
 			regionsync::NeighborSnapshot snapshot;
 			std::string error;
-			if (regionsync::ReadSnapshotFile(storeDirectory / regionsync::SnapshotFileName(x, z), snapshot, error) && snapshot.writer.pid != ownWriter.pid)
+			if (regionsync::ReadSnapshotFile(storeDirectory / regionsync::SnapshotFileName(x, z), snapshot, error) && snapshot.writer.Known()
+				&& !regionsync::SameWriter(snapshot.writer, ownWriter))
 			{
-				if (pid == 0 && SafeIsAlive(snapshot.writer) != regionsync::writer::Liveness::Dead)
+				if (!holder.Known() && SafeIsAlive(snapshot.writer) != regionsync::writer::Liveness::Dead)
 				{
-					pid = snapshot.writer.pid;
+					holder = snapshot.writer;
 				}
-				if (pid != 0 && snapshot.writer.pid == pid && snapshot.cityLoadedAt != 0)
+				if (regionsync::SameWriter(snapshot.writer, holder) && snapshot.cityLoadedAt != 0)
 				{
 					since = FormatFileTime(snapshot.cityLoadedAt);
 				}
@@ -1638,6 +1763,7 @@ private:
 		catch (...)
 		{
 		}
+		const uint32_t pid = holder.pid;
 		const std::string pidText = pid ? std::to_string(pid) : "unknown";
 		Logger::GetInstance().WriteLineFormatted(LogLevel::Error,
 			"Conflict: tile (%d,%d) '%s' is open in pid %s since %s. No publish, pull, mirror or plugin save for this city until it closes.",
@@ -1751,16 +1877,69 @@ private:
 	}
 
 	// Exceptions read as Unknown: a liveness failure must not drop a file.
-	static regionsync::writer::Liveness SafeIsAlive(const regionsync::WriterIdentity& id)
+	// Our host: the pid check. Another host: its mirrored status file.
+	regionsync::writer::Liveness SafeIsAlive(const regionsync::WriterIdentity& id) const
 	{
 		try
 		{
+			if (id.Known() && !ownWriter.host.empty() && !regionsync::SameHost(id.host, ownWriter.host))
+			{
+				return ForeignLiveness(id);
+			}
 			return regionsync::writer::IsAlive(id);
 		}
 		catch (...)
 		{
 			return regionsync::writer::Liveness::Unknown;
 		}
+	}
+
+	// Alive when _instances\<pid>-<start>.status names the same writer, Dead
+	// when absent, Unknown on a read error or a mismatch. Logged on change.
+	regionsync::writer::Liveness ForeignLiveness(const regionsync::WriterIdentity& id) const
+	{
+		using L = regionsync::writer::Liveness;
+		L result = L::Unknown;
+		const char* why = "no status directory";
+		if (!statusDirectory.empty())
+		{
+			const std::filesystem::path path = statusDirectory / regionsync::InstanceStatusFileName(id.pid, id.start);
+			std::error_code ec;
+			const bool exists = std::filesystem::exists(path, ec);
+			regionsync::InstanceStatus s;
+			std::string error;
+			if (ec)
+			{
+				why = "exists failed";
+			}
+			else if (!exists)
+			{
+				result = L::Dead;
+				why = "no status file";
+			}
+			else if (!regionsync::ReadInstanceStatus(path, s, error))
+			{
+				why = "read failed";
+			}
+			else if (regionsync::SameWriter(s.writer, id))
+			{
+				result = L::Alive;
+				why = "status file";
+			}
+			else
+			{
+				why = "status file names another writer";
+			}
+		}
+		const std::string key = id.host + "/" + std::to_string(id.pid) + "/" + std::to_string(id.start);
+		if (const auto it = foreignLiveness.find(key); it == foreignLiveness.end() || it->second != result)
+		{
+			foreignLiveness[key] = result;
+			Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "Liveness: host=%s pid=%u start=%llu -> %s (%s)",
+				id.host.c_str(), id.pid, static_cast<unsigned long long>(id.start),
+				result == L::Alive ? "alive" : result == L::Dead ? "dead" : "unknown", why);
+		}
+		return result;
 	}
 
 	regionsync::writer::Liveness WriterLiveness(const regionsync::NeighborSnapshot& snapshot) const
@@ -2820,6 +2999,12 @@ private:
 	int32_t guardZ = -1;
 
 	bool reloadCheat = false;   // RegionSyncReload and the cheat notification registered
+
+	// Save counter (docs/PLAN-LAN.md P2).
+	std::string loadedSaveFile;   // basename at city load, UTF-8
+	struct PendingSave { std::filesystem::path path; int32_t x = -1, z = -1; regionsync::SaveCounter counter; };
+	std::optional<PendingSave> pendingSave;
+	mutable std::map<std::string, regionsync::writer::Liveness> foreignLiveness;
 
 	// Q17. Slice A: store watch; slice B: region watch on idle.
 	ChangeWatch storeWatch{ "StoreWatch" };

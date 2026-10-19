@@ -12,7 +12,10 @@ namespace regionsync::writer
 {
 	enum class Liveness { Alive, Dead, Unknown };
 
-	// This process: computer name, pid, creation time.
+	// Replaces the computer name as our host (test-only loopback). Call before Current().
+	void SetHostAlias(const std::string& alias);
+
+	// This process: host alias or computer name, pid, creation time.
 	WriterIdentity Current();
 
 	// Unknown when the identity is incomplete or from another host. Dead when

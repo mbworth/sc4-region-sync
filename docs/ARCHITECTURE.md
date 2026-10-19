@@ -45,6 +45,7 @@ The important distinction is **city** versus **regional city**. `cISC4City` is t
                        ┌───────────▼─▼────────────────────────▼─▼───────────┐
                        │ <install>\Plugins\RegionSync\<region dir>\          │
                        │ <install>\Plugins\RegionSync\_instances\<pid>-<start>.status │
+                       │ <install>\Plugins\RegionSync\_saves\<region dir>\<x>_<z>.saves │
                        │   2_3.snapshot   3_3.snapshot   4_3.snapshot ...    │
                        └─────────────────────────────────────────────────────┘
                                          shared store (filesystem, phase 1)
@@ -56,6 +57,32 @@ The important distinction is **city** versus **regional city**. `cISC4City` is t
 Each instance is an ordinary copy of the game with its own user directory (preferences, thumbnails, Albums) so the two do not fight over config files, and a junction pointing `Regions` back at the real folder so both see the same region and the same save files. `scripts/Setup-MultiInstance.ps1` builds this layout.
 
 The install's `Plugins` folder is shared by construction, which is why the snapshot store defaults to living under it: zero configuration for the common case.
+
+### Two PCs
+
+```
+ HOST PC                                                 GUEST PC
+ instances ... plugin ... local store                    instances ... plugin ... local store
+   <store>\<region>\*.snapshot                            <store>\<region>\*.snapshot
+   <store>\_instances\*.status                            <store>\_instances\*.status
+ launcher (Host)  listens TCP Port, UDP Port+1  <======>  launcher (Join)  connects
+```
+
+One launcher per PC. The host listens on TCP `Port` (default 47641) and answers discovery on UDP `Port`+1; the guest connects. Each PC's plugin instances use only the local store. The launchers mirror `<store>\<region>\*.snapshot` and `_instances\*.status` between the two stores, so the plugin's existing publish, pull, store watch and RegionWatch paths see a remote writer like a local peer. On connect the host's region is copied to the guest (guest only, verified staging, archive first). The plugin has no network code. Rules and protocol: `docs/PLAN-LAN.md`.
+
+**Launcher threads.** A worker thread owns sockets, `getaddrinfo`, frames, MAC and CPace, hashing, the host's staging copy and the guest's local hashing. It blocks only in `WSAWaitForMultipleEvents` (sockets, wake event, stop event). Two mutex-guarded queues connect it to the UI thread: UI to worker (push, then `SetEvent(wake)`) and worker to UI (push, then `PostMessageW(WM_APP_LAN)` on empty to non-empty). The UI drains all items on `WM_APP_LAN` and on a 250 ms timer. Everything that writes (Regions swap, store, `_instances`, `launcher.ini`) runs on the UI thread. Shutdown sets the stop event and joins the worker for 3 s.
+
+Store layout. The store base is `StoreDirectory`, or `<DLL folder>\RegionSync` when empty. Under it:
+
+| Path | Written by | Contents |
+|---|---|---|
+| `<region dir>\<x>_<z>.snapshot` | the instance playing that tile | the regional record (Publish); the Q17 store watch watches this folder |
+| `_instances\<pid>-<start>.status` | each running instance | state, region, tile, conflict, sticky `saveCountFailed=<x>_<z>[,...]` tiles; read by the launcher |
+| `_saves\<region dir>\<x>_<z>.saves` | the save hook, on every save attempt | `count`, `file`, `prevFile`, `lastSaveUnix`, `simDateNumber`, `population`, `cityName`, `host`/`pid`/`start`, `lastOk` (docs/PLAN-LAN.md P2) |
+
+| `<Regions parent>\RegionSyncLAN\{staging,archive,journal}`, `lan.log` | the launcher | LAN folder: host staging copies, archived originals, the guest journal, the LAN log |
+
+`_instances` and `_saves` sit beside the region folders, so the store watch never sees them. All three go through `WriteFileAtomic` (temp file, checked write and close, rename).
 
 ## 4. Data flow
 
@@ -83,17 +110,18 @@ Nothing the plugin controls. The demand simulator consults regional totals when 
 ```
 game start
   RZGetCOMDllDirector()      static RegionSyncDllDirector constructed; Logger initialized
-  OnStart(cIGZCOM*)          version check (641 or disable); load INI; AddHook(this)
-  PostAppInit()              grab cheat manager; subscribe to 6 message IDs; SaveLock=1: patch App vtable slot 15 (SaveCity) with the lock wrapper; reap dead status files, write own status (starting); ReloadOnPeerSave=1: add the idle service (AddSystemService, AddToOnIdle)
+  OnStart(cIGZCOM*)          version check (641 or disable); load INI, then <UserDir>\SC4RegionSync.local.ini (HostAlias, StoreDirectory; test-only); set the host alias; AddHook(this)
+  PostAppInit()              grab cheat manager; subscribe to 6 message IDs; patch App vtable slot 15 (SaveCity) with the wrapper and set its save callbacks (the lock inside it only with SaveLock=1); reap dead status files, write own status (starting); ReloadOnPeerSave=1: add the idle service (AddSystemService, AddToOnIdle)
 region opened
   PostRegionInit             cache cISC4Region*, region dir name, resolve store path; open the save mutex; status (region); Enabled=1 and PullOnStoreChange=1: create the store folder and open its change handle; ReloadOnPeerSave=1: GetRegionsDirectory, open the region folder's change handle; register RegionSyncReload; the message (not the late call) sets regionViewReady and seeds the region probe
 city opened
   PostCityInit               cache cISC4City*; register cheat codes; subscribe to cheat messages; clear storeSeen and regionViewReady
-  PostCityInitComplete       cache regional city, neighbors sim, simulator; open the tile mutex (peer present = conflict, no store writes while this city is open); status (city); publish + pull on load
+  PostCityInitComplete       cache regional city, neighbors sim, simulator; open the tile mutex (peer present = conflict, no store writes while this city is open); note the save file basename (prevFile); status (city); publish + pull on load
 playing
   SimNewMonth (0x66956816)   increment counters; publish / pull / autosave on cadence
   SimNewDay (0x66956814)     store handle signalled and a peer snapshot new or changed: Pull("store change"); event publish; pending mirror
   CheatIssued (0x230E27AC)   dispatch RegionSync* commands
+  SaveCity (any save path)   wrapper takes the save lock (SaveLock=1); outermost save only: onSaving writes _saves\<region>\<x>_<z>.saves with count+1 (no lastOk); the original runs; onSaved rewrites it with lastOk; release. Unlocked saves log unlocked=1. A counter failure logs Error and adds the tile to the sticky saveCountFailed list in the status file; the save always runs
 city closed
   PostCityShutdown           publish once more (or remove own snapshot); release a RegionSyncHoldLock hold; close the tile mutex; status (region); clear city pointers; unregister city cheats (RegionSyncReload stays); clear regionViewReady
 region view
@@ -131,30 +159,36 @@ src/
                               key=value reader/writer with atomic rename, the connection type
                               maps, stub geometry and dual-lane pairing. No game headers,
                               no Windows headers. Compiles and tests anywhere.
-  WriterIdentity.{h,cpp}      This process's host/pid/start, and whether a snapshot's writer still
-                              runs (OpenProcess, creation time, exit code). Windows only, no game headers.
+  WriterIdentity.{h,cpp}      This process's host (or test-only alias)/pid/start, and whether a same-host
+                              writer still runs (OpenProcess, creation time, exit code). Another host's
+                              writer is judged by its status file in the director. Windows only, no game headers.
   SaveLock.{h,cpp}            Region-wide named save mutex with depth counter and timeout. Windows only,
                               no game headers.
   TileLock.{h,cpp}            Per-tile named mutex (same-tile guard). Windows only, no game headers.
-  InstanceStatus.{h,cpp}      The per-process status record the launcher reads, and the reap rule for
-                              stale ones. No game headers, no Windows headers, unit-tested.
+  InstanceStatus.{h,cpp}      The per-process status record the launcher reads, the reap rule for
+                              stale ones, and the per-tile save counter format. No game headers, no
+                              Windows headers, unit-tested.
   SaveHook641.{h,cpp}         Patches App vtable slot 15 (SaveCity(path, fast), 1.1.641 only) with a
-                              wrapper that holds the save lock across the game's save routine.
+                              wrapper that holds the save lock across the game's save routine and
+                              calls the director's onSaving/onSaved around it.
   IdleService.{h,cpp}         cRZBaseSystemService whose OnIdle calls one callback inside try/catch;
                               added only when ReloadOnPeerSave=1 (Q17).
-  SyncSettings.{h,cpp}        INI parsing with safe defaults; resolves the store directory.
+  SyncSettings.{h,cpp}        INI parsing with safe defaults, plus the test-only local INI; resolves
+                              the store directory.
   SC4RegionSync.ini           Shipped defaults; lives next to the DLL in Plugins.
   version.h / version.rc      Plugin version and the Win32 VERSIONINFO resource (rc is UTF-16 LE).
   resource.h                  Boilerplate for the .rc.
   SC4RegionSync.vcxproj/.sln  Visual Studio 2022 project, v143, Win32 only.
 
-vendor/                       git submodules, never edited here
+vendor/                       git submodules (plus a plain monocypher copy), never edited here
   gzcom-dll/                  The GZCOM SDK: every cIGZ*/cISC4* interface, SC4List/SC4Vector/
                               SC4String containers that match the game's memory layout,
                               cRZCOMDllDirector base class, cRZBaseString.
   sc4-dll-utilities/          Null45's Logger, FileSystem (DLL-relative paths), IniReader,
                               SC4VersionDetection, SC4NotificationDialog, string helpers.
   wil/                        Microsoft's Windows Implementation Library, used by the utilities.
+  monocypher/                 Plain copy of Monocypher 4.0.2 (X25519, hashing for CPace and MACs), not a
+                              submodule. Used by the launcher only.
   xwin/                       (created by scripts/setup-toolchain.sh, gitignored) MSVC CRT and
                               Windows SDK headers/libs for cross-compiling on Linux.
 
@@ -165,6 +199,20 @@ scripts/
 launcher/                     Win32 instance launcher (list, live thumbnail grid, raise, gated launch,
                               Settings dialog, resource estimate, orphan End Task). Built
                               with the same toolchain, shares WriterIdentity.cpp, reads _instances only.
+
+launcher/
+  Lan.h                       LAN types shared by the launcher files: queue items, session state.
+  Net.cpp                     Worker thread: sockets, discovery, frames on the wire, staging copy,
+                              hashing.
+  LanCrypto.cpp               BCryptGenRandom and DPAPI (PeerKey).
+  Lan.cpp                     UI-thread controller: mirror, guest swap, reaping, disconnect clock.
+  LanUi.cpp                   Join dialog, status strip, banner.
+  Frame.{h,cpp}               Frame codec: length caps, MAC, counters. Windows-free.
+  Handshake.{h,cpp}           Handshake field formats, CPace transcript and confirmation. Windows-free.
+  Manifest.{h,cpp}            Name rules and the manifest diff. Windows-free.
+  Journal.{h,cpp}             Guest journal (baseHash, baseCount per tile). Windows-free.
+
+tests/launcher_lan.cpp        Host-side test of the launcher's LAN core (make test-launcher).
 
 docs/
   DESIGN.md                   Why this seam, why file-based store, what stays local.

@@ -87,7 +87,10 @@ namespace regionsync
 			uint32_t pid = 0;
 			uint64_t start = 0;
 			uint64_t cityLoadedAt = 0;
-			bool operator==(const PublisherSession&) const = default;
+			bool operator==(const PublisherSession& o) const
+			{
+				return SameHost(host, o.host) && pid == o.pid && start == o.start && cityLoadedAt == o.cityLoadedAt;
+			}
 		};
 		struct SeenDeal
 		{

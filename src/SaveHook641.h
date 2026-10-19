@@ -10,16 +10,23 @@
 
 #pragma once
 #include <cstdint>
+#include <functional>
 
 class cISC4App;
 
 namespace regionsync::savehook641
 {
-	// Each save then holds the save lock, waiting up to timeoutMs.
-	bool Install(cISC4App* pApp, uint32_t timeoutMs);
+	// lock: each save holds the save lock, waiting up to timeoutMs. Without
+	// it the wrapper only runs the callbacks.
+	bool Install(cISC4App* pApp, bool lock, uint32_t timeoutMs);
 	// Restores the slot if it still holds our wrapper. log=false for DLL
 	// detach, where the Logger may be gone.
 	void Uninstall(bool log);
 	// True while a SaveCity call is inside the wrapper.
 	bool InSave();
+	// Outermost save only (depth 1). onSaving(path, ANSI; held) runs after the
+	// lock attempt, before the original; onSaved(ok, held) after it returns.
+	// held: the save lock is held. Exceptions are swallowed; the original
+	// always runs.
+	void SetCallbacks(std::function<void(const char*, bool)> onSaving, std::function<void(bool, bool)> onSaved);
 }

@@ -26,6 +26,32 @@ namespace
 		auto it = kv.find(key);
 		return it != kv.end() ? it->second : std::string();
 	}
+
+	template <typename T>
+	bool ParseWhole(std::string_view text, T& out)
+	{
+		const auto r = std::from_chars(text.data(), text.data() + text.size(), out);
+		return r.ec == std::errc() && r.ptr == text.data() + text.size();
+	}
+
+	// "<x>_<z>[,<x>_<z>...]"; malformed entries are skipped.
+	std::vector<std::pair<int32_t, int32_t>> ParseTileList(std::string_view text)
+	{
+		std::vector<std::pair<int32_t, int32_t>> tiles;
+		while (!text.empty() && tiles.size() < regionsync::kMaxListEntries)
+		{
+			const size_t comma = text.find(',');
+			const std::string_view item = text.substr(0, comma);
+			text = comma == std::string_view::npos ? std::string_view() : text.substr(comma + 1);
+			const size_t sep = item.find('_');
+			int32_t x = 0, z = 0;
+			if (sep != std::string_view::npos && ParseWhole(item.substr(0, sep), x) && ParseWhole(item.substr(sep + 1), z))
+			{
+				tiles.emplace_back(x, z);
+			}
+		}
+		return tiles;
+	}
 }
 
 namespace regionsync
@@ -62,7 +88,7 @@ namespace regionsync
 		{
 			return false;
 		}
-		return !ownHost.empty() && contents.writer.Known() && contents.writer.host == ownHost
+		return !ownHost.empty() && contents.writer.Known() && SameHost(contents.writer.host, ownHost)
 			&& contents.writer.pid == pid && contents.writer.start == start;
 	}
 
@@ -86,6 +112,15 @@ namespace regionsync
 			out << "regionZ=" << s.regionZ << '\n';
 			out << "cityName=" << OneLine(s.cityName) << '\n';
 			out << "conflict=" << (s.conflict ? 1 : 0) << '\n';
+		}
+		if (!s.saveCountFailedTiles.empty())
+		{
+			out << "saveCountFailed=";
+			for (size_t i = 0; i < s.saveCountFailedTiles.size(); i++)
+			{
+				out << (i ? "," : "") << s.saveCountFailedTiles[i].first << '_' << s.saveCountFailedTiles[i].second;
+			}
+			out << '\n';
 		}
 		out << "writtenUnixTime=" << s.writtenUnixTime << '\n';
 		return WriteFileAtomic(path, out.str(), error);
@@ -132,6 +167,96 @@ namespace regionsync
 		s.cityName = Value(kv, "cityName");
 		int32_t conflict = 0;
 		s.conflict = ReadKeyValue(kv, "conflict", conflict) && conflict != 0;
+		s.saveCountFailedTiles = ParseTileList(Value(kv, "saveCountFailed"));
 		ReadKeyValue(kv, "writtenUnixTime", s.writtenUnixTime);
+	}
+
+	std::string SaveCounterFileName(int32_t regionX, int32_t regionZ)
+	{
+		return std::to_string(regionX) + "_" + std::to_string(regionZ) + ".saves";
+	}
+
+	std::string FormatSaveCounter(const SaveCounter& c)
+	{
+		std::ostringstream out;
+		out << "; sc4-region-sync save counter\n";
+		out << "count=" << c.count << '\n';
+		out << "file=" << OneLine(c.file) << '\n';
+		if (!c.prevFile.empty() && c.prevFile != c.file)
+		{
+			out << "prevFile=" << OneLine(c.prevFile) << '\n';
+		}
+		out << "lastSaveUnix=" << c.lastSaveUnix << '\n';
+		out << "simDateNumber=" << c.simDateNumber << '\n';
+		out << "population=" << c.population << '\n';
+		out << "cityName=" << OneLine(c.cityName) << '\n';
+		if (c.writer.Known() && IsValidWriterHost(c.writer.host))
+		{
+			out << "host=" << c.writer.host << '\n';
+			out << "pid=" << c.writer.pid << '\n';
+			out << "start=" << c.writer.start << '\n';
+		}
+		if (c.lastOk >= 0)
+		{
+			out << "lastOk=" << (c.lastOk ? 1 : 0) << '\n';
+		}
+		return out.str();
+	}
+
+	bool ReadSaveCounter(const std::filesystem::path& path, SaveCounter& c, std::string& error)
+	{
+		error.clear();
+		c = SaveCounter{};
+		std::error_code ec;
+		const bool exists = std::filesystem::exists(path, ec);
+		if (!ec && !exists)
+		{
+			return true;
+		}
+		KeyValues kv;
+		if (!LoadKeyValues(path, kv, error))
+		{
+			return false;
+		}
+		if (!ReadKeyValue(kv, "count", c.count))
+		{
+			error = "No valid count in " + path.string();
+			return false;
+		}
+		ParseSaveCounter(kv, c);
+		return true;
+	}
+
+	void ParseSaveCounter(std::string_view text, SaveCounter& c)
+	{
+		KeyValues kv;
+		ParseKeyValues(text, kv);
+		ParseSaveCounter(kv, c);
+	}
+
+	void ParseSaveCounter(const KeyValues& kv, SaveCounter& c)
+	{
+		c = SaveCounter{};
+		ReadKeyValue(kv, "count", c.count);
+		c.file = Value(kv, "file");
+		c.prevFile = Value(kv, "prevFile");
+		ReadKeyValue(kv, "lastSaveUnix", c.lastSaveUnix);
+		ReadKeyValue(kv, "simDateNumber", c.simDateNumber);
+		ReadKeyValue(kv, "population", c.population);
+		c.cityName = Value(kv, "cityName");
+		if (const std::string host = Value(kv, "host"); IsValidWriterHost(host))
+		{
+			WriterIdentity w;
+			w.host = host;
+			if (ReadKeyValue(kv, "pid", w.pid) && ReadKeyValue(kv, "start", w.start) && w.Known())
+			{
+				c.writer = std::move(w);
+			}
+		}
+		int32_t ok = -1;
+		if (ReadKeyValue(kv, "lastOk", ok))
+		{
+			c.lastOk = ok != 0 ? 1 : 0;
+		}
 	}
 }

@@ -7,6 +7,7 @@
 #include "SyncSettings.h"
 #include "FileSystem.h"
 #include "IniReader.h"
+#include "NeighborSnapshot.h"
 #include <fstream>
 #include <algorithm>
 #include <cctype>
@@ -128,6 +129,56 @@ namespace regionsync
 		{
 			Logger::GetInstance().WriteLineFormatted(LogLevel::Error, "Failed to read settings: %s", e.what());
 		}
+	}
+
+	void SyncSettings::LoadLocal(const std::filesystem::path& localIniPath)
+	{
+		std::error_code ec;
+		if (!std::filesystem::exists(localIniPath, ec))
+		{
+			return;
+		}
+		KeyValues raw;
+		std::string error;
+		if (!LoadKeyValues(localIniPath, raw, error))
+		{
+			Logger::GetInstance().WriteLineFormatted(LogLevel::Error, "Local settings: %s", error.c_str());
+			return;
+		}
+		const auto trim = [](const std::string& s)
+		{
+			const size_t first = s.find_first_not_of(" \t");
+			const size_t last = s.find_last_not_of(" \t");
+			return first == std::string::npos ? std::string() : s.substr(first, last - first + 1);
+		};
+		KeyValues kv;
+		for (const auto& [key, value] : raw)
+		{
+			kv[trim(key)] = trim(value);
+		}
+		const auto trimmed = [&kv](const char* key)
+		{
+			const auto it = kv.find(key);
+			return it != kv.end() ? it->second : std::string();
+		};
+		const std::string alias = trimmed("HostAlias");
+		if (!alias.empty())
+		{
+			if (IsValidWriterHost(alias))
+			{
+				hostAlias = alias;
+			}
+			else
+			{
+				Logger::GetInstance().WriteLine(LogLevel::Error, "Local settings: HostAlias ignored (empty, too long or control characters).");
+			}
+		}
+		if (const std::string store = trimmed("StoreDirectory"); !store.empty())
+		{
+			storeDirectory = store;
+		}
+		Logger::GetInstance().WriteLineFormatted(LogLevel::Info, "Local settings: %s hostAlias='%s' storeDirectory='%s'",
+			localIniPath.string().c_str(), hostAlias.c_str(), storeDirectory.c_str());
 	}
 
 	std::filesystem::path SyncSettings::ResolveStoreDirectory(const std::string& regionDirectoryName) const

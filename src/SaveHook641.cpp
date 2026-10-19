@@ -12,6 +12,7 @@
 #include <Windows.h>
 #include <cstdint>
 #include <string>
+#include <utility>
 
 namespace
 {
@@ -25,9 +26,12 @@ namespace
 	using SaveCityFn = bool(__thiscall*)(cISC4App*, const cIGZString&, bool);
 
 	SaveCityFn original = nullptr;
+	bool lockEnabled = false;
 	uint32_t lockTimeoutMs = 0;
 	void** patchedSlot = nullptr;
 	int saveDepth = 0;
+	std::function<void(const char*, bool)> onSaving;
+	std::function<void(bool, bool)> onSaved;
 
 	// Our side of a save. Never throws; the original is always called.
 	class Scope
@@ -49,7 +53,10 @@ namespace
 			}
 			try
 			{
-				held = regionsync::savelock::Acquire(lockTimeoutMs, "save").held;
+				if (lockEnabled)
+				{
+					held = regionsync::savelock::Acquire(lockTimeoutMs, "save").held;
+				}
 			}
 			catch (...)
 			{
@@ -74,6 +81,8 @@ namespace
 		Scope(const Scope&) = delete;
 		Scope& operator=(const Scope&) = delete;
 
+		bool Held() const { return held; }
+
 	private:
 		bool held = false;
 	};
@@ -83,7 +92,30 @@ namespace
 	{
 		(void)edx;
 		const Scope scope(fast);
-		return original(self, path, fast);
+		const bool outermost = saveDepth == 1;
+		try
+		{
+			if (outermost && onSaving)
+			{
+				const char* text = path.ToChar();
+				onSaving(text ? text : "", scope.Held());
+			}
+		}
+		catch (...)
+		{
+		}
+		const bool ok = original(self, path, fast);
+		try
+		{
+			if (outermost && onSaved)
+			{
+				onSaved(ok, scope.Held());
+			}
+		}
+		catch (...)
+		{
+		}
+		return ok;
 	}
 
 	void* WrapperAddress()
@@ -114,7 +146,7 @@ namespace
 
 namespace regionsync::savehook641
 {
-	bool Install(cISC4App* pApp, uint32_t timeoutMs)
+	bool Install(cISC4App* pApp, bool lock, uint32_t timeoutMs)
 	{
 		Logger& logger = Logger::GetInstance();
 		if (!pApp)
@@ -122,6 +154,7 @@ namespace regionsync::savehook641
 			logger.WriteLine(LogLevel::Error, "SaveHook: no App, not patched.");
 			return false;
 		}
+		lockEnabled = lock;
 		lockTimeoutMs = timeoutMs;
 		if (patchedSlot)
 		{
@@ -174,6 +207,7 @@ namespace regionsync::savehook641
 			return false;
 		}
 		patchedSlot = slot;
+		logger.WriteLineFormatted(LogLevel::Info, "SaveHook: installed, lock=%d", lock ? 1 : 0);
 		return true;
 	}
 
@@ -217,5 +251,11 @@ namespace regionsync::savehook641
 	bool InSave()
 	{
 		return saveDepth > 0;
+	}
+
+	void SetCallbacks(std::function<void(const char*, bool)> saving, std::function<void(bool, bool)> saved)
+	{
+		onSaving = std::move(saving);
+		onSaved = std::move(saved);
 	}
 }

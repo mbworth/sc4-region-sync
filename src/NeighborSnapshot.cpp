@@ -144,12 +144,22 @@ namespace regionsync
 		const std::filesystem::path tempPath = path.string() + ".tmp";
 		{
 			std::ofstream stream(tempPath, std::ios::trunc);
-			if (!stream)
+			if (stream)
+			{
+				stream << text;
+				stream.flush();
+			}
+			const bool written = static_cast<bool>(stream);
+			if (stream.is_open())
+			{
+				stream.close();
+			}
+			if (!written || stream.fail())
 			{
 				error = "Unable to write " + tempPath.string();
+				std::filesystem::remove(tempPath, ec);
 				return false;
 			}
-			stream << text;
 		}
 
 		// A reader holding the destination open can fail the rename on Windows.

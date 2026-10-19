@@ -102,9 +102,14 @@ namespace regionsync
 		// installs.
 		std::string storeDirectory;
 
+		// Test-only (loopback), read only from <UserDir>\SC4RegionSync.local.ini.
+		std::string hostAlias;
+
 		LogLevel logLevel = LogLevel::Info;
 
 		void Load(const std::filesystem::path& iniPath);
+		// After Load. Only HostAlias and StoreDirectory; a missing file is silent.
+		void LoadLocal(const std::filesystem::path& localIniPath);
 		std::filesystem::path ResolveStoreDirectory(const std::string& regionDirectoryName) const;
 	};
 }
