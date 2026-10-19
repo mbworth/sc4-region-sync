@@ -1,5 +1,7 @@
 # Plan: two PCs on one region, slice 1 (live only)
 
+**Observed:** built 2026-10-19; Q18 loopback steps S1 to S9 recorded in `docs/OPEN-QUESTIONS.md` (Q18), S10 (two real PCs), the rename case and a non-private source address pending. Where this plan and the code differ, the code and Q18 win.
+
 Inputs: `docs/research/lan-two-pcs.md`, `docs/research/lan/save-design.md` (sections 2, 8, 10), `docs/research/lan/audit.md`, `docs/research/lan/smb.md`.
 
 Review round 1 (2026-10-19, security, threading and game safety, simplicity) made these changes. Removed: the heartbeat, `BeatTracker` and the status schema bump. Liveness has one judge (a status file present means Alive) and one 10 minute disconnect clock. The save counter is written before the save, inside the lock, and records the file name, so a city rename is handled. The journal is guest-only, keyed by tile, and the guest hashes its own files. Pairing is CPace over X25519 (Monocypher) in place of PBKDF2, so each code allows one online guess and nothing can be cracked offline. Every handshake field and wire name now has a strict format. The host binds `INADDR_ANY` and the peer address check is the boundary. Host staging moved to the worker without the save mutex. The guest swap refuses while any game process runs and rolls back on failure. Mirroring sends only on change and has caps per peer. The worker shuts down cleanly. Launch stays blocked until the sync is done. The UI lost two dialogs. Loopback is test-only. `WriteFileAtomic` now checks its writes, and the LAN folder's volume is verified.
@@ -61,7 +63,7 @@ It may open files in Regions read-only for those two jobs only. It never writes 
   The UI drains the whole queue on every `WM_APP_LAN` and on the 250 ms LAN timer, so a lost post costs at most 250 ms.
 - **Ownership.** A staging file has one owner at a time and changes owner only through a queue item.
 - **Modal dialogs.** While a dialog or message box is up, a `modal` flag holds back only the events that can prompt (`MANIFEST` ready, downloads done, sync failed) and the swap; mirror frames, logs and progress are still handled, queued `PUT`s are coalesced by name, and the worker stops reading sockets while more than 32 MiB of events wait for the UI. `WM_CLOSE` is deferred. `WM_APP_LAN` handling sits inside the WndProc try/catch.
-- **Shutdown.** `WM_CLOSE` sets stop, signals and joins the worker (3 s), then `DestroyWindow`. If the join times out, the UI saves `launcher.ini` and calls `ExitProcess`.
+- **Shutdown.** `WM_CLOSE` sets stop, signals and joins the worker (3 s), then `DestroyWindow`. If the join times out, the UI calls `ExitProcess` (`launcher.ini` is written as values change, so nothing is pending).
 
 | Step | Thread |
 |---|---|
@@ -170,7 +172,7 @@ Session key `Ks = BLAKE2b(K, "session" || nonceG || nonceH)`. A half-open old co
 |---|---|---|---|
 | `HELLO` | both | `proto`, `role`, `site`, `siteId`, `nonce`, `pair`, `build`, `pluginsHash`. Host adds `result`, `reason`, `Y` (pairing), and `region.N` on a paired reconnect only | as above |
 | `PAKE` | G to H | `Y`, `conf` | pairing only |
-| `CONFIRM` | both | `conf` and `region.N` (H to G when pairing, regions after the code is proven), MAC (G to H when paired) | session starts |
+| `CONFIRM` | both | `conf` and `region.N` (H to G when pairing, regions after the code is proven; only folders with a `region.ini`), MAC (G to H when paired) | session starts |
 | `SELECT` | G to H | `region` (ASCII, else refused with a message) | host stages it and sends `MANIFEST`. One per connection plus 3 retries |
 | `MANIFEST` | H to G | `region`, `count`; the data part carries the `file.N=name\|size\|hash\|tile` lines (`tile` is optional and comes from the host's `_saves` `file`) | guest refuses an empty manifest, otherwise diffs (section 4) |
 | `GET` | G to H | `region`, `name` (must be in the manifest) | host streams `FILE` from staging |
@@ -220,7 +222,7 @@ On every connect the host copies to the guest the region the guest selects. The 
    - **Free space:** checked against the downloads (archive moves are same-volume renames).
 4. **Guest, worker:** `GET` each download into `staging\<session>\` and verify it.
 5. **Guest, UI: swap.**
-   - Only when no SC4 game process runs on the guest at all. Otherwise the strip says "close SimCity 4 on this PC to finish the sync"; live mirroring runs anyway.
+   - Only when no SC4 game process runs on the guest at all. Otherwise the strip says "close SimCity 4 on this PC to finish the sync"; live mirroring runs anyway. A diff with nothing to download or archive (and an existing folder) needs neither the mutex nor a closed game and completes at once (`8b64b28`).
    - Launch is disabled until `SYNCED` with no pending swap.
    - Under the try-lock: re-check the processes. For each file, first move the original to `archive\<yyyy-mm-dd hhmmss>\`, then `MoveFileExW(staging, target, REPLACE_EXISTING | WRITE_THROUGH)`. Move extras to the archive.
    - On any failure every swapped original is moved back, the staging copy stays, and the error is reported.
@@ -281,12 +283,14 @@ It holds one peer record; pairing again replaces it. Every value written there i
 
 - **Toolbar:**
   - `Host`: check button, listen or stop.
-  - `Join`: a dialog with the found hosts (name, address, ID, paired), an address box, a 6-digit code box (enabled for an unpaired host) and a region combo, filled after the handshake.
+  - `Join`: a dialog with the found hosts (name, address, ID, paired), an address box, a 6-digit code box (enabled for an unpaired host), Connect, a region combo filled after the handshake, and Leave (stop syncing, keep the pairing).
+  - `New code`: host only, issues a fresh code.
   - `Re-sync`: guest only, connected, no game process. After a Yes/No naming the tiles, it archives the not-sent tiles, runs a full sync and resets the journal.
 - **Status strip:** a second part left of the resource line.
   - Host: `Hosting, code 482 913 (New code)`, with the address of the last burned attempt. Once paired: `Hosting, paired with GUEST-PC, synced 14:00:01, last mirror 14:03:12`.
   - Guest: `HOST-PC: syncing 3/14`, `synced, 2 tiles not sent`, `reconnecting in 8 s`.
   - The tooltip lists the not-sent tiles and the peer's `build`.
+- **Window title:** `SC4 Region Sync Launcher (Host)`, `(Host, <guest> joined)` or `(Guest of <host>)`.
 - **Banner:** one line above the list showing the most important of these. The tooltip lists all active ones.
   - refused (with reason);
   - Public network profile on the host (`INetworkListManager`);
@@ -298,7 +302,7 @@ It holds one peer record; pairing again replaces it. Every value written there i
   In loopback the launcher also warns when a local status file's host is not `SameHost` with its own `HostAlias`.
 - **Rows:**
   - A `Host` column; rows are keyed by the triple.
-  - Remote rows are read-only: no raise, List only, no End Task.
+  - Remote rows are read-only: no raise, no End Task, a grey text cell in the Grid.
   - Remote rows are excluded from the resource sample, from `liveUserDirs` and from pending-launch matching (audit 22, 23). Exception: a remote row whose pid and `start` match a game process on this PC (loopback only) still holds its `userDir`, so neither launcher picks a folder the other's game is using.
   - The orphan scan skips a pid named by any status file whose `start` equals that local process's creation time.
 
@@ -312,7 +316,7 @@ It holds one peer record; pairing again replaces it. Every value written there i
 `-RestoreLoopback` moves the guest folder to the LAN `archive\` (never deletes it) and recreates the junction. Plugins stays a junction, so the build and Plugins checks match by construction.
 
 - **Host launcher:** the normal install, with `AllowLoopback=1`.
-- **Guest launcher:** a copy in `SC4RegionSyncLauncher-Guest\` whose `[Lan]` has `HostAlias=<PC>-GUEST` (or `LOOPBACK-GUEST` when that exceeds 15 characters), `RegionsDirectory=<Instance2>\Regions` and `AllowLoopback=1`. Its `StatusDirectory` is `<Instance2>\RegionSyncStore\_instances`. It joins 127.0.0.1.
+- **Guest launcher:** a copy in `SC4RegionSyncLauncher-Guest\` (its own scheduled task, `SC4LauncherGuest` on the test box) whose `[Lan]` has `HostAlias=<PC>-GUEST` (or `LOOPBACK-GUEST` when that exceeds 15 characters), `RegionsDirectory=<Instance2>\Regions` and `AllowLoopback=1`. Its `StatusDirectory` is `<Instance2>\RegionSyncStore\_instances`. It joins 127.0.0.1.
 - **Instances** start from the `SC4Instance1` and `SC4Instance2` tasks.
 - **Limits:**
   - Both sides share a session, so they share the save and tile mutexes.
@@ -339,7 +343,7 @@ It holds one peer record; pairing again replaces it. Every value written there i
   - A paired peer's snapshots drive this PC's mirror: edge pieces (a failed lay demolishes cells), connection and deal removals, deal amounts. All of it lands in this PC's `.sc4` on its next save. Slice 1's "the host's Regions folder is never written" is true of the launcher only.
   - A paired host hands the guest `.sc4` files for the 2003 game's loader. Assume a malicious one can run code on the guest.
   - An empty manifest is refused. A short manifest archives the guest's other files, never deletes them.
-  - Before implementation, confirm that the snapshot parser's bounds (`kMaxListEntries`, deal amount and expiry ranges, connection cells) are tight enough for an untrusted source.
+  - Snapshot values from a peer are clamped and the clamps logged (`5f10d44`): population, jobs and RCI to [0, 50M], floats to |x| <= 1e10, workforce 0..100, mayor rating -100..100, city name 255 bytes.
 - **PeerKey at rest.** DPAPI (current user, no extra entropy): any process running as the same Windows user can decrypt it.
 - **README** says this in plain words: pair only with your own PC on a network you trust, and confidentiality is not provided.
 

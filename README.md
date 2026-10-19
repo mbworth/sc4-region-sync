@@ -4,12 +4,12 @@ A DLL plugin for SimCity 4 that lets you play several cities in one region at th
 
 The game only ever simulates one tile per process. What it knows about neighboring tiles is a small summary record per tile: population, jobs, imports and exports, deals. This plugin publishes that record from each running instance and pulls the other instances' records in, so your city's regional demand and neighbor deals track what is actually happening next door instead of what was there the last time you loaded.
 
-Status: scaffold. Builds against the published SDK, nothing verified in-game yet. See `docs/PHASES.md` for the plan and `docs/OPEN-QUESTIONS.md` for the experiments that decide whether the plan survives contact with the engine.
+Status: several instances on one PC work and have been played (records, demand, connections, deals, save lock). Two-PC sync (below) is built and tested; its first run on two real PCs is pending. See `docs/PHASES.md` for the plan and `docs/OPEN-QUESTIONS.md` for the experiments that decide whether the plan survives contact with the engine.
 
 ## Requirements
 
 - SimCity 4 Deluxe, version 1.1.641 (the GOG or Steam digital release). Disc versions and the macOS port will not load DLL plugins.
-- Either a Linux box with clang 16+, lld and llvm (for `llvm-rc`), or Visual Studio 2022 with the C++ desktop workload. The game is 32-bit, so the only target is Win32.
+- Either a Linux box with clang 19+, lld and llvm (for `llvm-rc`), or Visual Studio 2022 with the C++ desktop workload. The game is 32-bit, so the only target is Win32.
 - Git with submodules.
 
 ## Build
@@ -19,7 +19,7 @@ On Linux (clang-cl + lld-link against the MSVC headers and libs fetched by xwin,
 ```
 git clone --recurse-submodules <this repo>
 cd sc4-region-sync
-scripts/setup-toolchain.sh --apt     # once; ~1 GB download from Microsoft
+scripts/setup-toolchain.sh --prebuilt  # once: LLVM 20 to ~/.local, ~1 GB download from Microsoft
 make                                 # -> build/SC4RegionSync.dll
 ```
 
@@ -57,14 +57,15 @@ Setup makes a private user dir per instance under `Documents\SimCity 4 Instances
 
 ## Two PCs
 
-The launcher can keep one region live across two PCs on the same network. One PC is the **host** (it has the region), the other the **guest**. Both need the same launcher build and plugin version.
+The launcher can keep one region live across two PCs on the same network. One PC is the **host** (it has the region), the other the **guest**. Both need the same launcher build and plugin version: the host refuses a different build and names both versions. The window title shows the role (`Host`, `Host, <guest> joined`, `Guest of <host>`).
 
-- **Host.** Click **Host** on the toolbar. Windows asks about the firewall once, at the first Host: allow it on Private networks. The launcher uses TCP 47641 and UDP 47642 by default (`Port` in `launcher.ini` `[Lan]`). The status strip shows a 6-digit code.
-- **Join.** On the guest click **Join**. The dialog lists the hosts it found, or type an address. Enter the code shown on the host and pick the region.
-- **Pairing.** The code is used once and is burned after one attempt or 10 minutes. A burned code is not replaced on its own: click **New code** on the host for another. After pairing, the two launchers reconnect on their own without a code. Pairing again replaces the old peer.
-- **On connect** the host's region is copied to the guest. Guest files are replaced only when no SimCity 4 runs on the guest, and the originals are archived to `RegionSyncLAN\archive` next to `Regions`. Launch stays disabled until the sync is done.
-- **Then** snapshots and instance status files are mirrored live both ways, so each PC's cities see the other's growth, connections and deals.
-- **Guest saves are not sent in slice 1.** A save on the guest stays on the guest and the launcher flags the tile "not sent". **Re-sync** replaces it with the host's copy after archiving the guest's.
+- **Host.** Click **Host** on the toolbar (click again to stop). Windows asks about the firewall once, at the first Host: allow it on Private networks. A Public network profile blocks the guest and shows a banner. The launcher uses TCP 47641 and UDP 47642 by default (`Port` in `launcher.ini` `[Lan]`). The status strip shows a 6-digit code, for example `Hosting, code 482 913 (New code)`.
+- **Join.** On the guest click **Join**. The dialog lists the hosts it found (name, address, ID, paired), or type an address. Enter the code shown on the host (not needed for a host this PC is paired with), click **Connect**, then pick the region and OK. The region list shows the host's folders that have a `region.ini`. **Leave** in the same dialog stops syncing and keeps the pairing.
+- **Pairing.** The code is used once: it is burned after one attempt, right or wrong, or after 10 minutes. A burned code is not replaced on its own: the strip says `code burned (New code)` with the attempt's address, and **New code** issues another. After pairing, the two launchers reconnect on their own without a code. Pairing again replaces the old peer; the old guest then shows "pairing lost, Join again".
+- **On connect** the host's region is copied to the guest. Guest files are replaced only when no SimCity 4 runs on the guest; otherwise the strip says "close SimCity 4 on this PC to finish the sync" and the copy finishes when the last game closes. The originals are archived to `RegionSyncLAN\archive` next to `Regions`. If the guest already has a folder of that name that was never synced, the launcher asks first, then archives the whole folder. Launch stays disabled on the guest until the sync is done. If a file cannot be replaced, every original is put back and the error is shown.
+- **Then** snapshots and instance status files are mirrored live both ways, so each PC's cities see the other's growth, connections and deals. The other PC's instances appear in the list with its name in the **Host** column; they are read-only (no raise, no End Task). If both PCs open the same tile, a banner says "Tile (x,z) is open on both PCs" and neither PC's copy is overwritten. The guest's strip reads `<host>: synced` (or `syncing 3/14`, `reconnecting in 8 s`).
+- **Guest saves are not sent in slice 1.** A save on the guest stays on the guest and the strip flags the tile "not sent" (the tooltip lists the tiles). Later syncs keep that tile. **Re-sync** (guest, connected, no game running) replaces it with the host's copy after archiving the guest's.
+- **Disconnect.** The guest reconnects after 1, 2, 4, 8, 16 s, then every 30 s. Both PCs keep the other's instances and snapshots for 10 minutes; a reconnect within that time carries on where it left off. After 10 minutes the other PC's instances vanish from the list and its snapshots are removed, as if those games had exited.
 
 **Security.** Pair only with your own PC, on a network you trust. Traffic is signed but not encrypted: anyone on the LAN can read region files and snapshots. A paired PC is trusted with your region and your game: its snapshots change your cities' edges and deals, and a paired host's `.sc4` files are loaded by the game on the guest, so treat pairing like running that PC's files. Only private addresses are accepted and there is no UPnP; a router port forward that rewrites the source address, or a VPN, can still let a remote PC through, so do not forward the ports. The stored pairing key is protected for your Windows account: any program running as you can read it.
 
@@ -97,8 +98,9 @@ See `src\SC4RegionSync.ini`. Everything has a default; with no INI the plugin ru
 ## Layout
 
 - `src/` the plugin. `RegionSyncDllDirector.cpp` is the entry point and the only file that knows about messages and cheats. `RegionalCityBridge` moves data between the game's regional records and `NeighborSnapshot`, which is the plain struct that crosses between instances and has no game dependency.
-- `vendor/` git submodules: `gzcom-dll` (the SC4 GZCOM SDK), `sc4-dll-utilities` (Null45's logging, INI and version-detection helpers), `wil`.
+- `vendor/` git submodules: `gzcom-dll` (the SC4 GZCOM SDK), `sc4-dll-utilities` (Null45's logging, INI and version-detection helpers), `wil`; plus a plain copy of `monocypher` (launcher only).
 - `docs/` design, architecture, phases, open questions.
+- `launcher/` the Win32 launcher: instance list, grid, Settings, Two PCs.
 - `scripts/` multi-instance setup.
 
 ## Credits
@@ -107,4 +109,4 @@ Built on [gzcom-dll](https://github.com/nsgomez/gzcom-dll) by Nicholas Gomez and
 
 ## License
 
-Plugin code: MIT. Vendored libraries keep their own licenses (gzcom-dll and sc4-dll-utilities are LGPL 2.1 or later; wil is MIT).
+Plugin code: MIT. Vendored libraries keep their own licenses (gzcom-dll and sc4-dll-utilities are LGPL 2.1 or later; wil is MIT; Monocypher is CC0 or 2-clause BSD).

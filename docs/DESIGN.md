@@ -45,7 +45,7 @@ Phase 1 sidesteps it: autosave is off by default and the snapshot store carries 
 
 ## Two PCs
 
-With two PCs each keeps its own store and its own Regions folder. The launchers, one per PC, carry snapshots and status files between the stores over a paired LAN channel. The host's Regions folder is authoritative at rest: it is copied to the guest on connect. The plugin has no network code. See PLAN-LAN.md.
+With two PCs each keeps its own store and its own Regions folder. The launchers, one per PC, carry snapshots and status files between the stores over a paired LAN channel. The host's Regions folder is authoritative at rest: it is copied to the guest on connect, except tiles saved on the guest, which slice 1 keeps there and flags "not sent". The plugin has no network code. See PLAN-LAN.md.
 
 ## What is still a guess
 

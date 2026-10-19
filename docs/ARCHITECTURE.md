@@ -79,10 +79,9 @@ Store layout. The store base is `StoreDirectory`, or `<DLL folder>\RegionSync` w
 | `<region dir>\<x>_<z>.snapshot` | the instance playing that tile | the regional record (Publish); the Q17 store watch watches this folder |
 | `_instances\<pid>-<start>.status` | each running instance | state, region, tile, conflict, sticky `saveCountFailed=<x>_<z>[,...]` tiles; read by the launcher |
 | `_saves\<region dir>\<x>_<z>.saves` | the save hook, on every save attempt | `count`, `file`, `prevFile`, `lastSaveUnix`, `simDateNumber`, `population`, `cityName`, `host`/`pid`/`start`, `lastOk` (docs/PLAN-LAN.md P2) |
+| `<Regions parent>\RegionSyncLAN\{staging,archive,journal}`, `lan.log` | the launcher | LAN folder (not under the store): host staging copies, archived originals, the guest journal, the LAN log |
 
-| `<Regions parent>\RegionSyncLAN\{staging,archive,journal}`, `lan.log` | the launcher | LAN folder: host staging copies, archived originals, the guest journal, the LAN log |
-
-`_instances` and `_saves` sit beside the region folders, so the store watch never sees them. All three go through `WriteFileAtomic` (temp file, checked write and close, rename).
+`_instances` and `_saves` sit beside the region folders, so the store watch never sees them. The three store kinds go through `WriteFileAtomic` (temp file, checked write and close, rename).
 
 ## 4. Data flow
 
@@ -92,7 +91,7 @@ Store layout. The store base is `StoreDirectory`, or `<DLL folder>\RegionSync` w
 2. `CaptureRegionalCity(pOwnRegionalCity, pSimulator, snapshot)` reads the record into a `NeighborSnapshot`: position, size, serial, name, established flag, population, jobs, workforce %, mayor rating, budget, income, per-commodity exported/imported/produced/demanded/costPerUnit for 8 slots, per-RCI-group population for 12 groups, plus the writer's sim date and wall-clock time.
 3. `WriteSnapshotFile` serializes to `key=value` text, writes to `<x>_<z>.snapshot.tmp`, renames over `<x>_<z>.snapshot`. Rename is atomic on NTFS so the other instance never reads a torn file.
 
-Schema 3 adds the writer's identity: `writerHost` (computer name), `writerPid`, `writerStart` (process creation time as a 64-bit FILETIME). All three or none; older snapshots read as unknown. The pull checks it before applying (`CheckWriterLiveness=1`, `src/WriterIdentity.cpp`): same host and the pid either missing, exited, or reused by a process with a different creation time means dead, and the file is deleted and skipped (`dead=N` in the `Pull (...)` line). Another host, an incomplete identity, or any failed query is unknown and applies as before. This covers the Exit button, which sends no `PostCityShutdown` (Q9 step 3); it only covers instances on the same machine, and two machines with the same computer name sharing one store would misread each other.
+Schema 3 adds the writer's identity: `writerHost` (computer name), `writerPid`, `writerStart` (process creation time as a 64-bit FILETIME). All three or none; older snapshots read as unknown. The pull checks it before applying (`CheckWriterLiveness=1`, `src/WriterIdentity.cpp`): same host and the pid either missing, exited, or reused by a process with a different creation time means dead, and the file is deleted and skipped (`dead=N` in the `Pull (...)` line). Another host's writer (two PCs) is alive while the launcher-mirrored `_instances\<pid>-<start>.status` names the same writer and dead when that file is absent. An incomplete identity or any failed query is unknown and applies as before. This covers the Exit button, which sends no `PostCityShutdown` (Q9 step 3). Two PCs with the same computer name would misread each other; the launchers refuse to connect them.
 
 ### Pull (every N sim months, on city load, or `RegionSyncPull`)
 
@@ -197,16 +196,22 @@ scripts/
   Setup-MultiInstance.ps1     Per-instance user dirs + Regions junction + launcher (Windows).
 
 launcher/                     Win32 instance launcher (list, live thumbnail grid, raise, gated launch,
-                              Settings dialog, resource estimate, orphan End Task). Built
-                              with the same toolchain, shares WriterIdentity.cpp, reads _instances only.
+                              Settings dialog, resource estimate, orphan End Task, Two PCs). Built
+                              with the same toolchain, shares WriterIdentity, InstanceStatus and
+                              NeighborSnapshot with the plugin. Without Host or Join it only reads
+                              _instances; with them it also writes the store and, on the guest, Regions.
 
 launcher/
-  Lan.h                       LAN types shared by the launcher files: queue items, session state.
+  Lan.h                       LAN types shared by the launcher files: the two queues, events and
+                              commands, LanController.
   Net.cpp                     Worker thread: sockets, discovery, frames on the wire, staging copy,
                               hashing.
   LanCrypto.cpp               BCryptGenRandom and DPAPI (PeerKey).
-  Lan.cpp                     UI-thread controller: mirror, guest swap, reaping, disconnect clock.
-  LanUi.cpp                   Join dialog, status strip, banner.
+  Lan.cpp                     UI-thread controller: launcher.ini [Lan], pairing codes, version checks,
+                              guest diff, swap and journal, mirror, reaping, disconnect clock, lan.log.
+  LanUi.cpp                   Join dialog and the Yes/No prompt. The strip, banner and title text come
+                              from LanController::Status; main.cpp draws them.
+  main.cpp                    Window, list and grid, Host column, LAN timer, WM_APP_LAN, Launch gate.
   Frame.{h,cpp}               Frame codec: length caps, MAC, counters. Windows-free.
   Handshake.{h,cpp}           Handshake field formats, CPace transcript and confirmation. Windows-free.
   Manifest.{h,cpp}            Name rules and the manifest diff. Windows-free.
@@ -219,6 +224,8 @@ docs/
   ARCHITECTURE.md             This file.
   PHASES.md                   Ordered plan with exit criteria.
   OPEN-QUESTIONS.md           Experiments with an "Observed" slot each. The project's truth table.
+  PLAN-*.md                   One plan per slice (PLAN-LAN.md: two PCs, slice 1).
+  research/                   Studies behind the plans (lan/, lan-two-pcs.md, Ghidra notes).
 
 Makefile                      Linux cross-compile (clang-cl + lld-link + llvm-rc against xwin).
 CLAUDE.md                     Agent onboarding and rules.
@@ -226,14 +233,27 @@ CLAUDE.md                     Agent onboarding and rules.
 
 ## 7. Build pipelines
 
-Three ways to get `SC4RegionSync.dll`; they should produce functionally identical output.
+Two ways to get `SC4RegionSync.dll`; they should produce functionally identical output.
 
 | Pipeline | Where | Toolchain | When to use |
 |---|---|---|---|
 | `make` | Linux | clang-cl 20 + lld-link + llvm-rc against xwin splat | Day-to-day on the Linux dev box. This is how the NAM team ships NAM.dll. |
 | Visual Studio 2022 | Windows | MSVC v143 | Debugging with breakpoints attached to the game. |
 
-Non-negotiables for all three: target is i386 (Win32), C++20, `/EHsc`, dynamic CRT (`/MD`), and the exported symbol is `RZGetCOMDllDirector`. The game is 32-bit; a 64-bit DLL will simply not load, with no error message.
+Non-negotiables for both: target is i386 (Win32), C++20, `/EHsc`, dynamic CRT (`/MD`), and the exported symbol is `RZGetCOMDllDirector`. The game is 32-bit; a 64-bit DLL will simply not load, with no error message.
+
+Other `make` targets (Linux only):
+
+- `make launcher`: `build/SC4RegionSyncLauncher.exe`, static CRT (`/MT`), `LAUNCHER_SRCS` plus Monocypher compiled as C on its own, linked with `LAUNCHER_LIBS` (adds `ws2_32 bcrypt crypt32 version ole32` for the LAN code). `BUILD_ID` (`<PLUGIN_VERSION_STR>+<git short hash>`) is baked in; the host refuses a guest whose `BUILD_ID` differs, so both PCs must run the same commit.
+- `make test`: host-side g++ test of `NeighborSnapshot` and `InstanceStatus` (`tests/snapshot_roundtrip.cpp`).
+- `make test-launcher`: host-side g++ test of the launcher's Windows-free LAN core (`tests/launcher_lan.cpp`: frames, CPace, field formats, name rules, manifest diff, journal).
+- `make deploy` / `make logs`: SSH to the Windows box (targets in gitignored `local.mk`); `deploy` also copies the exe to `SC4RegionSyncLauncher-Guest\` when that folder exists, `logs` also pulls `lan.log`.
+
+### Loopback mode (developers only)
+
+One Windows box stands in for two PCs; used for Q18 S1 to S9. `scripts/Setup-MultiInstance.ps1 -LoopbackGuest 2` replaces `Instance2\Regions` (a junction) with an empty real folder and writes `Instance2\SC4RegionSync.local.ini` with `HostAlias=<PC>-GUEST` (`LOOPBACK-GUEST` when that is over 15 characters) and `StoreDirectory=<Instance2>\RegionSyncStore`. The plugin reads that file only from `<UserDir>`, so only an instance started with `-UserDir` becomes the guest. A second launcher copy in `SC4RegionSyncLauncher-Guest\` gets the printed `[Launcher] StatusDirectory` and `[Lan] HostAlias`, `RegionsDirectory`, `AllowLoopback=1`; the host launcher also needs `AllowLoopback=1` (127.0.0.1 then passes the address check). On the test box each launcher has its own scheduled task (`SC4Launcher`, `SC4LauncherGuest`), instances start from `SC4Instance1` and `SC4Instance2`. `-RestoreLoopback -LoopbackGuest 2` moves the guest folder and the local INI to `RegionSyncLAN\archive\loopback-guest-<stamp>` and recreates the junction. `HostAlias` and `AllowLoopback` are test-only and stay out of the README.
+
+Limits: both sides share one Windows session, so they share the save and tile mutexes; the guest's "no game process" swap rule also sees the host's instances; a remote row whose process runs locally still reserves its instance folder. Firewall behaviour, the Plugins-hash banner and the cross-PC same-tile case need two PCs (Q18 S10).
 
 ## 8. Constraints that shape every decision
 

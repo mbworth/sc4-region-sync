@@ -4,7 +4,7 @@ Date 2026-10-19. Inputs: DESIGN.md, ARCHITECTURE.md, research/save-641.md, resea
 
 Player constraints: no shared network drive, no SMB setup, no junctions to UNC paths. One PC is the **host** and keeps the region on its local disk. The launcher on the **guest** points at the host, pulls the region, keeps it in sync and pushes the guest's saves back. The UX stays simple even if the code gets harder.
 
-> **What PLAN-LAN slice 1 changed (2026-10-19).** No Reclaim: the reconcile picker is deferred to slice 2, and slice 1 keeps and flags guest-saved tiles. The archive lives outside Regions (`RegionSyncLAN\archive`). CPace pairing replaces PBKDF2. No heartbeat. `SaveHook641` had no `onExit`, so there are two callbacks, `onSaving` and `onSaved`. The save counter lives in `_saves\<region>\x_z.saves`, not the status file. Where this study disagrees, `docs/PLAN-LAN.md` wins.
+> **What PLAN-LAN slice 1 changed (2026-10-19).** No Reclaim: the reconcile picker is deferred to slice 2, and slice 1 keeps and flags guest-saved tiles. The archive lives outside Regions (`RegionSyncLAN\archive`). CPace pairing replaces PBKDF2. No status-file heartbeat (liveness is the mirrored status file; the wire has a `PING` keepalive). `SaveHook641` had no `onExit`, so there are two callbacks, `onSaving` and `onSaved`. The save counter lives in `_saves\<region>\x_z.saves`, not the status file. Where this study disagrees, `docs/PLAN-LAN.md` wins.
 
 ## 0. Summary
 
@@ -180,7 +180,7 @@ Reasons: it meets the no-share constraint with one firewall click. It keeps ever
 
 ## Q18. Can two PCs play one region with the launcher replicating saves and tile leases?
 
-Plan: `docs/PLAN-LAN.md` (to write). Host GAMEBOX, guest a second PC. Region New York, BumperVille (4,6) and TuggersVille (6,6). Back up the region folder on both PCs first. File times: `gci <region> -Filter *.sc4* | % { '{0} {1:HH:mm:ss.fff} {2}' -f $_.Name, $_.LastWriteTime, (Get-FileHash $_.FullName).Hash.Substring(0,12) }`.
+Plan: `docs/PLAN-LAN.md`. Host the main PC, guest a second PC. Region New York, BumperVille (4,6) and TuggersVille (6,6). Back up the region folder on both PCs first. File times: `gci <region> -Filter *.sc4* | % { '{0} {1:HH:mm:ss.fff} {2}' -f $_.Name, $_.LastWriteTime, (Get-FileHash $_.FullName).Hash.Substring(0,12) }`.
 
 1. **Suppression keeps vanilla reload semantics (one PC, before any LAN code).** Two instances, a power deal and a water deal across the shared edge, `SuppressForeignNeighborWrites=1` with both tiles treated as foreign. Save both, exit both, reopen both, `RegionSyncDump`. Pass: in both cities the deal list (type, amount, expiry), connection count and edge stubs equal the pre-save dump, with no duplicates. On each save the neighbor's `.sc4` time is unchanged. Fail: a deal or connection missing or doubled after reload. Then the cross write carries something load depends on, and slice 3 is dropped (ignore-and-re-pull stays). Record which.
 2. **Deny handle is silent.** Ctrl+S with suppression on, the neighbor in the region view (where vanilla's write would land). Pass: the save logs `released ... ok=1`, the neighbor's `.sc4` time and hash are unchanged, no dialog. Fail: a dialog, `ok=0`, or a changed neighbor file.

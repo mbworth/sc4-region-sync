@@ -35,10 +35,12 @@
     Test-only, one Windows box. Turns InstanceN into a stand-in for a second
     PC: its Regions junction is removed (non-recursively) and replaced by an
     empty real folder, and InstanceN\SC4RegionSync.local.ini gets a HostAlias
-    (<PC>-GUEST, site names are max 15 chars of A-Z a-z 0-9 -) and its own
-    StoreDirectory. The plugin reads that file only when the instance runs
+    (<PC>-GUEST, or LOOPBACK-GUEST when that is not 1 to 15 of A-Z a-z 0-9 -)
+    and its own StoreDirectory. The plugin reads that file only when the instance runs
     with -UserDir (the scheduled tasks and -Launch do). Prints the lines the
-    guest launcher's launcher.ini needs. Does not need -GameExe.
+    guest launcher's launcher.ini needs ([Launcher] StatusDirectory, [Lan]
+    HostAlias, RegionsDirectory, AllowLoopback=1; the host launcher needs
+    AllowLoopback=1 too). Does not need -GameExe.
 
 .PARAMETER RestoreLoopback
     Undo -LoopbackGuest N. The real InstanceN\Regions folder is moved (never
