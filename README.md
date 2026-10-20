@@ -10,7 +10,6 @@ Status: several instances on one PC work and have been played (records, demand, 
 
 - SimCity 4 Deluxe, version 1.1.641 (the GOG or Steam digital release). Disc versions and the macOS port will not load DLL plugins.
 - Either a Linux box with clang 19+, lld and llvm (for `llvm-rc`), or Visual Studio 2022 with the C++ desktop workload. The game is 32-bit, so the only target is Win32.
-- Git with submodules.
 
 ## Build
 
