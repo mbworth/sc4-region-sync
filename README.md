@@ -105,7 +105,7 @@ See `src\SC4RegionSync.ini`. Everything has a default; with no INI the plugin ru
 
 ## Credits
 
-Built on [gzcom-dll](https://github.com/nsgomez/gzcom-dll) by Nicholas Gomez and the interface work by Nicholas Hayes (Null45), whose [sc4-dll-utilities](https://github.com/0xC0000054/sc4-dll-utilities) and published plugins set the conventions this project follows.
+Built on [gzcom-dll](https://github.com/nsgomez/gzcom-dll) by Nelson Gomez (nsgomez) and the interface work by Nicholas Hayes (Null45), whose [sc4-dll-utilities](https://github.com/0xC0000054/sc4-dll-utilities) and published plugins set the conventions this project follows.
 
 ## License
 
