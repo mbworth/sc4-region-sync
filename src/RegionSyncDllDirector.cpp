@@ -69,6 +69,7 @@
 #include "SC4VersionDetection.h"
 
 #include <Windows.h>
+#include <Psapi.h>
 #include <algorithm>
 #include <cmath>
 #include <ctime>
@@ -84,6 +85,27 @@
 // Message IDs. The first group is shared with Null45's plugins; MonthPassed
 // comes from the gzcom-dll city hall sample and matches the simulator's
 // AgentTypeSimNewMonth broadcast.
+// Process memory at Info so a crash log shows the curve. ullAvailVirtual is the free
+// address space of this 32-bit process (4 GB, the exe is large address aware).
+static void LogMemory(Logger& logger, const char* reason)
+{
+	PROCESS_MEMORY_COUNTERS_EX pmc{};
+	GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc), sizeof(pmc));
+	MEMORYSTATUSEX mem{};
+	mem.dwLength = sizeof(mem);
+	GlobalMemoryStatusEx(&mem);
+	constexpr uint64_t kMb = 1024 * 1024;
+	logger.WriteLineFormatted(
+		LogLevel::Info,
+		"Memory (%s): private=%llu MB workingSet=%llu MB peakWorkingSet=%llu MB addressSpaceFree=%llu MB physFree=%llu MB",
+		reason,
+		static_cast<unsigned long long>(pmc.PrivateUsage / kMb),
+		static_cast<unsigned long long>(pmc.WorkingSetSize / kMb),
+		static_cast<unsigned long long>(pmc.PeakWorkingSetSize / kMb),
+		static_cast<unsigned long long>(mem.ullAvailVirtual / kMb),
+		static_cast<unsigned long long>(mem.ullAvailPhys / kMb));
+}
+
 static constexpr uint32_t kMessageCheatIssued = 0x230E27AC;
 static constexpr uint32_t kSC4MessagePostCityInit = 0x26D31EC1;
 static constexpr uint32_t kSC4MessagePostCityInitComplete = 0xEA8AE29A;
@@ -847,6 +869,7 @@ private:
 			pCity->GetEstablished() ? 1 : 0,
 			static_cast<void*>(pNeighborsSim),
 			static_cast<void*>(pSimulator));
+		LogMemory(logger, "city load");
 		logger.Flush();
 
 		// Tile guard first, then status, then the load publish (which it may refuse).
@@ -1884,6 +1907,7 @@ private:
 				snapshot.connections.size(), snapshot.deals.size(),
 				snapshot.simYear, snapshot.simMonth, snapshot.simDay,
 				path.string().c_str());
+			LogMemory(logger, reason);
 		}
 		else
 		{

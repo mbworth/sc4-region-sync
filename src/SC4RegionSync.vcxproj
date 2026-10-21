@@ -120,7 +120,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <AdditionalDependencies>version.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>version.lib;psapi.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent Condition="'$(SC4PluginsDir)'!=''">
       <Command>xcopy "$(TargetPath)" "$(SC4PluginsDir)" /y
@@ -150,7 +150,7 @@ xcopy "$(ProjectDir)SC4RegionSync.ini" "$(SC4PluginsDir)" /y /d</Command>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <AdditionalDependencies>version.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>version.lib;psapi.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent Condition="'$(SC4PluginsDir)'!=''">
       <Command>xcopy "$(TargetPath)" "$(SC4PluginsDir)" /y

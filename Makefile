@@ -86,7 +86,7 @@ COMMON_FLAGS = -target i386-pc-windows-msvc -fuse-ld=lld-link -ferror-limit=20 \
 RELEASE_FLAGS = /MD /O2 /Oi /D NDEBUG
 DEBUG_FLAGS   = /MDd /Od /Zi /D _DEBUG
 
-LIBS = version.lib ole32.lib user32.lib
+LIBS = version.lib ole32.lib user32.lib psapi.lib
 
 RES = $(BUILD)/version.res
 
