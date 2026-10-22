@@ -373,6 +373,40 @@ int main(int argc, char** argv)
 		CHECK(ReadSnapshotFile(ap, x, error) && error.empty() && x.population == 100 && x.mayorRating == -100);
 	}
 
+	// Q19: the 39 demand keys round trip, oversize counts clamp, old 12-entry files still parse.
+	{
+		static_assert(kRegionalDemandKeys.size() == 39 && kRCIGroupIds.size() == 12);
+		CHECK(IsCarriedDemandKey(0x1010, false) && IsCarriedDemandKey(0x4400, false) && IsCarriedDemandKey(0x1010, true));
+		CHECK(!IsCarriedDemandKey(0x2111, false) && IsCarriedDemandKey(0x2111, true) && IsCarriedDemandKey(0x4401, true));
+		CHECK(!IsCarriedDemandKey(0x1001, true) && !IsCarriedDemandKey(0x12111, true) && !IsCarriedDemandKey(0, true));
+
+		const std::filesystem::path dp = dir / "derived.snapshot";
+		NeighborSnapshot d;
+		for (uint32_t k : kRegionalDemandKeys) d.rciGroups[d.rciGroupCount] = { k, static_cast<int32_t>(d.rciGroupCount * 1000 + 7) }, d.rciGroupCount++;
+		CHECK(WriteSnapshotFile(dp, d, error));
+		NeighborSnapshot dr;
+		CHECK(ReadSnapshotFile(dp, dr, error) && error.empty() && dr.rciGroupCount == 39);
+		for (size_t i = 0; i < 39; i++) CHECK(dr.rciGroups[i].groupId == kRegionalDemandKeys[i] && dr.rciGroups[i].population == d.rciGroups[i].population);
+
+		std::ostringstream big;
+		big << "rciGroupCount=100\n";
+		for (int i = 0; i < 100; i++) big << "rci." << i << ".groupId=" << (0x5000 + i) << "\nrci." << i << ".population=" << i << "\n";
+		std::ofstream(dp) << big.str();
+		CHECK(ReadSnapshotFile(dp, dr, error) && dr.rciGroupCount == kRCIGroupSlots);
+		CHECK(dr.rciGroups[kRCIGroupSlots - 1].groupId == 0x5000 + kRCIGroupSlots - 1 && dr.rciGroups[kRCIGroupSlots - 1].population == static_cast<int32_t>(kRCIGroupSlots - 1));
+
+		std::ostringstream old;
+		old << "rciGroupCount=12\n";
+		for (size_t i = 0; i < kRCIGroupCount; i++) old << "rci." << i << ".groupId=" << kRCIGroupIds[i] << "\nrci." << i << ".population=5\n";
+		std::ofstream(dp) << old.str();
+		NeighborSnapshot o;
+		CHECK(ReadSnapshotFile(dp, o, error) && o.rciGroupCount == 12 && o.rciGroups[11].groupId == 0x4400 && o.rciGroups[12].groupId == 0);
+
+		std::ofstream(dp) << "rciGroupCount=39\nrci.20.groupId=8466\nrci.20.population=-3\nrci.38.groupId=17409\nrci.38.population=2000000000\n";
+		CHECK(ReadSnapshotFile(dp, dr, error) && !error.empty());
+		CHECK(dr.rciGroups[20].population == 0 && dr.rciGroups[38].population == 50000000);
+	}
+
 	// P1: key=value text form.
 	{
 		KeyValues kv;

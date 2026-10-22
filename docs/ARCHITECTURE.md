@@ -88,7 +88,7 @@ Store layout. The store base is `StoreDirectory`, or `<DLL folder>\RegionSync` w
 ### Publish (every N sim months, on city load, on city shutdown, or `RegionSyncPublish`)
 
 1. `pOwnRegionalCity->UpdateCityCache(pCity)` copies the live city's totals into this tile's regional record, the same call the game makes on save. (Side effects: open question Q1.)
-2. `CaptureRegionalCity(pOwnRegionalCity, pSimulator, snapshot)` reads the record into a `NeighborSnapshot`: position, size, serial, name, established flag, population, jobs, workforce %, mayor rating, budget, income, per-commodity exported/imported/produced/demanded/costPerUnit for 8 slots, per-RCI-group population for 12 groups, plus the writer's sim date and wall-clock time.
+2. `CaptureRegionalCity(pOwnRegionalCity, pSimulator, snapshot)` reads the record into a `NeighborSnapshot`: position, size, serial, name, established flag, population, jobs, workforce %, mayor rating, budget, income, per-commodity exported/imported/produced/demanded/costPerUnit for 8 slots, per-key population for the 39 region-use demand keys (the 12 RCI groups and 27 derived ones; pulls apply the derived ones only with `SyncDerivedDemand=1`, Q19), plus the writer's sim date and wall-clock time.
 3. `WriteSnapshotFile` serializes to `key=value` text, writes to `<x>_<z>.snapshot.tmp`, renames over `<x>_<z>.snapshot`. Rename is atomic on NTFS so the other instance never reads a torn file.
 
 Schema 3 adds the writer's identity: `writerHost` (computer name), `writerPid`, `writerStart` (process creation time as a 64-bit FILETIME). All three or none; older snapshots read as unknown. The pull checks it before applying (`CheckWriterLiveness=1`, `src/WriterIdentity.cpp`): same host and the pid either missing, exited, or reused by a process with a different creation time means dead, and the file is deleted and skipped (`dead=N` in the `Pull (...)` line). Another host's writer (two PCs) is alive while the launcher-mirrored `_instances\<pid>-<start>.status` names the same writer and dead when that file is absent. An incomplete identity or any failed query is unknown and applies as before. This covers the Exit button, which sends no `PostCityShutdown` (Q9 step 3). Two PCs with the same computer name would misread each other; the launchers refuse to connect them.
@@ -142,7 +142,7 @@ src/
                               Publish / Pull / ReloadAdjacent / Save / Dump / Status.
   RegionalCityBridge.{h,cpp}  Capture a cISC4RegionalCity into a NeighborSnapshot; apply a
                               NeighborSnapshot to a cISC4RegionalCity; resolve a tile slot.
-                              Knows the RCI group IDs. No messages, no cheats, no I/O.
+                              No messages, no cheats, no I/O.
                               Also captures the own simulator's connections and deals.
   NeighborMirror.{h,cpp}      Creates other instances' connections and deals here, injects the
                               connection into the publisher's record copy, pairs dual lanes, lays
@@ -156,7 +156,8 @@ src/
                               record's +0x90 connection list and connection raw fields.
   NeighborSnapshot.{h,cpp}    The plain struct that crosses between instances, and its
                               key=value reader/writer with atomic rename, the connection type
-                              maps, stub geometry and dual-lane pairing. No game headers,
+                              maps, stub geometry, dual-lane pairing and the demand key table
+                              (`kRegionalDemandKeys`, `IsCarriedDemandKey`). No game headers,
                               no Windows headers. Compiles and tests anywhere.
   WriterIdentity.{h,cpp}      This process's host (or test-only alias)/pid/start, and whether a same-host
                               writer still runs (OpenProcess, creation time, exit code). Another host's

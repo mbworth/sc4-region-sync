@@ -21,6 +21,7 @@
 #include <string_view>
 #include <array>
 #include <optional>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -50,7 +51,58 @@ namespace regionsync
 		int32_t population = 0;
 	};
 
-	constexpr size_t kRCIGroupSlots = 12;
+	constexpr size_t kRCIGroupSlots = 64;
+
+	// Region-use demand keys (property 0x47bb3f60, 641) the record's +0x3c map
+	// carries: the 12 RCI groups first, then the 27 derived ones (Q19). 0x1001
+	// is left out: its 0x11001 target is also fed by a sum link.
+	inline constexpr std::array<uint32_t, 39> kRegionalDemandKeys
+	{
+		0x1010, 0x1020, 0x1030,          // R$, R$$, R$$$
+		0x3110, 0x3120, 0x3130,          // Cs$, Cs$$, Cs$$$
+		0x3320, 0x3330,                  // Co$$, Co$$$
+		0x4100, 0x4200, 0x4300, 0x4400,  // I-R, I-D, I-M, I-HT
+		0x1011, 0x1021, 0x1031,
+		0x2010, 0x2020, 0x2030,          // region use 2 (demand side)
+		0x2111, 0x2112, 0x2113, 0x2114,
+		0x2121, 0x2122, 0x2123, 0x2124,
+		0x2131, 0x2132, 0x2133, 0x2134,
+		0x3111, 0x3121, 0x3131, 0x3321, 0x3331,
+		0x4101, 0x4201, 0x4301, 0x4401,
+	};
+	constexpr size_t kRCIGroupCount = 12;
+	inline constexpr std::span<const uint32_t, kRCIGroupCount> kRCIGroupIds{ kRegionalDemandKeys.data(), kRCIGroupCount };
+
+	constexpr bool IsKeyIn(std::span<const uint32_t> keys, uint32_t id)
+	{
+		for (uint32_t k : keys) if (k == id) return true;
+		return false;
+	}
+	constexpr bool KeysUnique()
+	{
+		for (size_t i = 0; i < kRegionalDemandKeys.size(); i++)
+			for (size_t j = i + 1; j < kRegionalDemandKeys.size(); j++)
+				if (kRegionalDemandKeys[i] == kRegionalDemandKeys[j]) return false;
+		return true;
+	}
+	static_assert(kRegionalDemandKeys.size() <= kRCIGroupSlots);
+	static_assert(KeysUnique());
+	static_assert(!IsKeyIn(kRegionalDemandKeys, 0x1001));
+	static_assert(kRegionalDemandKeys.size() == 39);
+	constexpr bool GroupsFirst()
+	{
+		constexpr uint32_t groups[kRCIGroupCount]{ 0x1010, 0x1020, 0x1030, 0x3110, 0x3120, 0x3130, 0x3320, 0x3330, 0x4100, 0x4200, 0x4300, 0x4400 };
+		for (size_t i = 0; i < kRCIGroupCount; i++)
+			if (kRegionalDemandKeys[i] != groups[i]) return false;
+		return true;
+	}
+	static_assert(GroupsFirst());
+
+	// Apply and discover both ask this, so one setting (SyncDerivedDemand) drives both.
+	constexpr bool IsCarriedDemandKey(uint32_t id, bool derived)
+	{
+		return IsKeyIn(derived ? std::span<const uint32_t>(kRegionalDemandKeys) : std::span<const uint32_t>(kRCIGroupIds), id);
+	}
 
 	// Schema 2. Connections and deals as the publisher sees them.
 	struct ConnectionRecord

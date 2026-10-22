@@ -22,15 +22,6 @@ class cISC4NeighborsSimulator;
 
 namespace regionsync
 {
-	// The standard RCI group IDs the demand simulator uses.
-	constexpr std::array<uint32_t, 12> kRCIGroupIds
-	{
-		0x1010, 0x1020, 0x1030,          // R$, R$$, R$$$
-		0x3110, 0x3120, 0x3130,          // Cs$, Cs$$, Cs$$$
-		0x3320, 0x3330,                  // Co$$, Co$$$
-		0x4100, 0x4200, 0x4300, 0x4400   // I-R, I-D, I-M, I-HT
-	};
-
 	// Commodity slots written back into a record. The game keys commodity
 	// stats by id in a map (any id works), but only 1..3 ever carry data.
 	constexpr size_t kApplyCommoditySlots = 4;
@@ -51,8 +42,17 @@ namespace regionsync
 		bool commodities = true;
 		bool population = true;   // totals and per-RCI-group, direct field writes
 		bool extrapolationCap = true;   // also set the record's +0x54 cap to the live value so the game stops extrapolating it (Q16)
+		bool derivedDemand = false;     // also the 27 derived demand keys (SyncDerivedDemand, Q19)
 	};
-	int ApplySnapshotToRegionalCity(const NeighborSnapshot& snapshot, cISC4RegionalCity* pRegionalCity, const ApplyOptions& options);
+	// Per-key skips, summed over a pull: ids not carried, missing nodes per map (never inserted).
+	struct ApplySkips
+	{
+		int notCarried = 0;
+		int plain = 0;          // +0x3c
+		int extrapolated = 0;   // +0x48
+		int cap = 0;            // +0x54
+	};
+	int ApplySnapshotToRegionalCity(const NeighborSnapshot& snapshot, cISC4RegionalCity* pRegionalCity, const ApplyOptions& options, ApplySkips& skips);
 
 	// Fill snapshot.connections from the own simulator's GetAllConnections.
 	// Leaves connectionsKnown false when pNeighborsSim is null.

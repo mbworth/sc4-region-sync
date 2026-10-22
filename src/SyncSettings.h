@@ -62,6 +62,10 @@ namespace regionsync
 		// game's monthly neighbor extrapolation adds nothing (Q16).
 		bool freezeExtrapolation = true;
 
+		// Also apply and feed the 27 derived demand keys (workforce, jobs,
+		// use-2 demand), not only the 12 RCI groups (Q19).
+		bool syncDerivedDemand = false;
+
 		// Regional sum for that feed: false = every established tile,
 		// true = GetAllConnectedCities (what the game's fold uses).
 		bool regionalSumConnected = false;

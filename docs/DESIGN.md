@@ -19,7 +19,7 @@ Both run on a sim-month cadence and on demand from the cheat console.
 
 Everything that makes a neighbor "matter" to this tile goes through `cISC4RegionalCity`:
 
-- **Regional demand.** The demand simulator looks at regional population and jobs for the RCI caps. Those come from the regional records.
+- **Regional demand.** The demand simulator looks at regional population and jobs for the RCI caps. Those come from the regional records. Besides the 12 RCI groups, the record carries 27 derived demand keys (workforce, jobs, industrial demand) that the game folds the same way; snapshots carry them, and pulls apply them with `SyncDerivedDemand=1` (Q19).
 - **Neighbor deals.** Power, water and garbage deals are `cISC4NeighborDeal` objects hanging off the regional records, with amounts, costs and expiry dates. The neighbors simulator recomputes them from the records (`FindDeals`, `GetDealMaxAmount`, `GetDealCost`).
 - **Connections.** `cISC4NeighborConnection` objects know which regional city is on the other side and act as traffic sinks/sources. They are created from the road network, not from the neighbor, so they do not need to sync; only the record they point to does.
 

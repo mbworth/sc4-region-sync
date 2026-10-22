@@ -108,20 +108,17 @@ namespace regionsync
 			}
 		}
 
+		// All 39 keys always; a missing node reads 0, which the receiver never inserts.
 		out.rciGroupCount = 0;
-		for (uint32_t groupId : kRCIGroupIds)
+		for (uint32_t key : kRegionalDemandKeys)
 		{
-			if (out.rciGroupCount >= kRCIGroupSlots)
-			{
-				break;
-			}
 			RCIGroupPopulation& g = out.rciGroups[out.rciGroupCount++];
-			g.groupId = groupId;
-			g.population = rc641::GetPopulation(pRegionalCity, groupId);
+			g.groupId = key;
+			g.population = rc641::GetPopulation(pRegionalCity, key);
 		}
 	}
 
-	int ApplySnapshotToRegionalCity(const NeighborSnapshot& s, cISC4RegionalCity* pRegionalCity, const ApplyOptions& opt)
+	int ApplySnapshotToRegionalCity(const NeighborSnapshot& s, cISC4RegionalCity* pRegionalCity, const ApplyOptions& opt, ApplySkips& skips)
 	{
 		if (!pRegionalCity)
 		{
@@ -157,20 +154,23 @@ namespace regionsync
 			for (size_t i = 0; i < s.rciGroupCount && i < kRCIGroupSlots; i++)
 			{
 				const RCIGroupPopulation& g = s.rciGroups[i];
-				int32_t* pValue = rc641::FindPopulationByType(pRegionalCity, g.groupId);
-				if (!pValue)
+				if (!IsCarriedDemandKey(g.groupId, opt.derivedDemand))
 				{
-					if (g.population != 0)
-					{
-						logger.WriteLineFormatted(LogLevel::Debug, "Apply: rci 0x%04X has no node in the record, skipped (snapshot %d)", g.groupId, g.population);
-					}
+					skips.notCarried++;
 					continue;
 				}
-				// Never insert: +0x48 is written only if the node exists (slot 17 falls back to +0x3c).
+				// Never insert: each map is written only where its node exists, independently.
+				int32_t* pValue = rc641::FindPopulationByType(pRegionalCity, g.groupId);
 				int32_t* pExtrapolated = rc641::FindExtrapolatedPopulationByType(pRegionalCity, g.groupId);
 				int32_t* pCap = opt.extrapolationCap ? rc641::FindExtrapolationCapByType(pRegionalCity, g.groupId) : nullptr;
-				const int32_t value = g.population < 0 ? 0 : g.population;
-				const bool plainDiffers = *pValue != value;
+				if (!pValue) skips.plain++;
+				if (!pExtrapolated) skips.extrapolated++;
+				if (opt.extrapolationCap && !pCap) skips.cap++;
+				// Without a plain node the snapshot value is not written anywhere (a peer
+				// lacking the node publishes 0); the cap is still pinned so nothing grows.
+				const int32_t value = pValue ? (g.population < 0 ? 0 : g.population)
+					: (pExtrapolated ? *pExtrapolated : 0);
+				const bool plainDiffers = pValue && *pValue != value;
 				const bool extrapolatedDiffers = pExtrapolated && *pExtrapolated != value;
 				// Cap without an extrapolated node: pin it to 0, or the game would insert ext=0 and grow it to the cap.
 				const int32_t capValue = pExtrapolated ? value : 0;
@@ -180,9 +180,9 @@ namespace regionsync
 					continue;
 				}
 				logger.WriteLineFormatted(LogLevel::Info, "Apply: rci 0x%04X %d (extrapolated %d, cap %d) -> %d (snapshot %d)",
-					g.groupId, *pValue, pExtrapolated ? *pExtrapolated : -1, pCap ? *pCap : -1, value, g.population);
+					g.groupId, pValue ? *pValue : -1, pExtrapolated ? *pExtrapolated : -1, pCap ? *pCap : -1, value, g.population);
 				logger.Flush();
-				*pValue = value;
+				if (pValue) *pValue = value;
 				if (pExtrapolated) *pExtrapolated = value;
 				if (pCap) *pCap = capValue;
 				changed++;

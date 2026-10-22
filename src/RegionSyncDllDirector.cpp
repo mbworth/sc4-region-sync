@@ -467,7 +467,7 @@ public:
 
 		logger.WriteLineFormatted(
 			LogLevel::Info,
-			"Initialized. instanceId=%u enabled=%d publishEveryMonths=%d pullEveryMonths=%d autoSaveEveryMonths=%d syncConnections=%d syncDeals=%d layEdgeNetwork=%d syncRemovals=%d saveLock=%d saveLockTimeoutMs=%d hook=%d pullOnStoreChange=%d reloadOnPeerSave=%d%s",
+			"Initialized. instanceId=%u enabled=%d publishEveryMonths=%d pullEveryMonths=%d autoSaveEveryMonths=%d syncConnections=%d syncDeals=%d layEdgeNetwork=%d syncRemovals=%d saveLock=%d saveLockTimeoutMs=%d hook=%d pullOnStoreChange=%d reloadOnPeerSave=%d syncDerivedDemand=%d%s",
 			instanceId,
 			settings.enabled ? 1 : 0,
 			settings.publishEveryMonths,
@@ -482,6 +482,7 @@ public:
 			hookInstalled ? 1 : 0,
 			settings.pullOnStoreChange ? 1 : 0,
 			settings.reloadOnPeerSave ? 1 : 0,
+			settings.syncDerivedDemand ? 1 : 0,
 			settings.hostAlias.empty() ? "" : (" hostAlias=" + settings.hostAlias).c_str());
 
 		ownWriter = regionsync::writer::Current();
@@ -910,6 +911,7 @@ private:
 		SetStatus("city", "city load");
 
 		DiscoverRegionalDemand();
+		firstPullSinceLoad = true;
 
 		if (settings.enabled && settings.publishOnLoad)
 		{
@@ -1055,8 +1057,9 @@ private:
 			logger.WriteLine(LogLevel::Info, "RegionalDemand: no demand simulator.");
 			return;
 		}
-		for (uint32_t groupId : regionsync::kRCIGroupIds)
+		for (uint32_t groupId : regionsync::kRegionalDemandKeys)
 		{
+			if (!regionsync::IsCarriedDemandKey(groupId, settings.syncDerivedDemand)) continue;
 			cISC4Demand* pLocal = pDemandSim->GetDemand(groupId, 0);
 			if (!pLocal) continue;
 			const uint32_t use = pLocal->GetRegionUse();
@@ -1080,18 +1083,21 @@ private:
 		{
 			logger.WriteLine(LogLevel::Info, "RegionalDemand: sum set=all; connected set not queried at load (RegionSyncDemand logs it).");
 		}
-		// Load check: target supply should equal sumConnected (the game's Init sets it absolutely).
+		// Load check: the target's supply (use 1) or demand (use 2) should equal sumConnected (the game's Init sets it absolutely).
 		for (size_t i = 0; i < regionalDemand.size(); i++)
 		{
 			const RegionalDemandEntry& e = regionalDemand[i];
+			const bool supply = e.regionUse == 1;
 			char target[32];
-			if (e.pTarget) snprintf(target, sizeof(target), "%.1f", e.pTarget->QuerySupplyValue());
+			if (e.pTarget) snprintf(target, sizeof(target), "%.1f", supply ? e.pTarget->QuerySupplyValue() : e.pTarget->QueryDemandValue());
 			else snprintf(target, sizeof(target), "absent");
-			logger.WriteLineFormatted(LogLevel::Info, "RegionalDemand: 0x%04X use=%u local supply=%.1f target supply=%s sumConnected=%.0f sumAll=%.0f",
-				e.groupId, e.regionUse, e.pLocal->QuerySupplyValue(), target, connected[i], all[i]);
+			logger.WriteLineFormatted(LogLevel::Info, "RegionalDemand: 0x%04X use=%u local %s=%.1f target %s=%s sumConnected=%.0f sumAll=%.0f",
+				e.groupId, e.regionUse, supply ? "supply" : "demand",
+				supply ? e.pLocal->QuerySupplyValue() : e.pLocal->QueryDemandValue(),
+				supply ? "supply" : "demand", target, connected[i], all[i]);
 		}
-		logger.WriteLineFormatted(LogLevel::Info, "RegionalDemand: %zu region-using groups, sum set=%s.",
-			regionalDemand.size(), settings.regionalSumConnected ? "connected" : "all");
+		logger.WriteLineFormatted(LogLevel::Info, "RegionalDemand: %zu region-using keys, sum set=%s, syncDerivedDemand=%d.",
+			regionalDemand.size(), settings.regionalSumConnected ? "connected" : "all", settings.syncDerivedDemand ? 1 : 0);
 		logger.Flush();
 	}
 
@@ -2181,6 +2187,7 @@ private:
 		int applied = 0;
 		int totalChanged = 0;
 		std::vector<regionsync::NeighborSnapshot> pulled;
+		regionsync::ApplySkips skips;
 		const bool feed = FeedsRegionalDemand();
 		const RegionalSums sumsBefore = feed ? SumRegional() : RegionalSums{};
 
@@ -2232,8 +2239,9 @@ private:
 			opt.commodities = settings.applyCommodities;
 			opt.population = settings.applyPopulation;
 			opt.extrapolationCap = settings.freezeExtrapolation;
+			opt.derivedDemand = settings.syncDerivedDemand;
 
-			const int changed = regionsync::ApplySnapshotToRegionalCity(snapshot, pTarget, opt);
+			const int changed = regionsync::ApplySnapshotToRegionalCity(snapshot, pTarget, opt, skips);
 			applied++;
 			totalChanged += changed;
 
@@ -2243,6 +2251,18 @@ private:
 				snapshot.regionX, snapshot.regionZ, changed);
 			logger.Flush();
 			pulled.push_back(std::move(snapshot));
+		}
+
+		if (applied > 0 && firstPullSinceLoad)
+		{
+			// Its write-back of saved +0x48 values is a one-off correction.
+			logger.WriteLineFormatted(LogLevel::Info, "Pull (%s): first pull applied since city load.", reason);
+			firstPullSinceLoad = false;
+		}
+		if (applied > 0)
+		{
+			logger.WriteLineFormatted(LogLevel::Info, "Pull: rci skips notCarried=%d missing plain=%d extrapolated=%d cap=%d",
+				skips.notCarried, skips.plain, skips.extrapolated, skips.cap);
 		}
 
 		if (feed && totalChanged > 0)
@@ -2757,8 +2777,9 @@ private:
 		// 0x00000 feeds the record's +0x3c, 0x10000 holds the regional fold, 0x20000 the totals.
 		const uint32_t indices[] = { 0x00000, kRegionalTargetIndex, 0x20000 };
 		logger.WriteLine(LogLevel::Info, "==== RegionSyncDemand begin ====");
-		for (uint32_t groupId : regionsync::kRCIGroupIds)
+		for (uint32_t groupId : regionsync::kRegionalDemandKeys)
 		{
+			if (!regionsync::IsCarriedDemandKey(groupId, settings.syncDerivedDemand)) continue;
 			for (uint32_t idx : indices)
 			{
 				cISC4Demand* pDemand = pDemandSim->GetDemand(groupId, idx);
@@ -3011,6 +3032,7 @@ private:
 	uint32_t instanceId;
 	regionsync::WriterIdentity ownWriter;
 	uint64_t cityLoadedAt = 0;
+	bool firstPullSinceLoad = false;
 
 	std::vector<RegionalDemandEntry> regionalDemand;
 	bool fakeNeighborHeld = false;
