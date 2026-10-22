@@ -15,3 +15,4 @@ ingame_tests/ghidra/
 local.mk
 ingame_tests/*.log
 ingame_tests/*.png
+ingame_tests/exception_reports/
