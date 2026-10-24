@@ -1,6 +1,6 @@
 # Plan: sync the derived region-use demand keys (Q19)
 
-Status: planned and reviewed 2026-10-22 (two adversarial reviews, no blockers), not yet implemented.
+Status: planned and reviewed 2026-10-22 (two adversarial reviews, no blockers), built 2026-10-22, observed 2026-10-24 (Q19 in `docs/OPEN-QUESTIONS.md`), default on.
 
 ## Problem
 

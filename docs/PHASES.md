@@ -52,5 +52,5 @@ Exit criterion: growth in instance B visibly changes regional demand in instance
 - [x] Coordinator slice 4: orphan game processes listed with End Task, observed 2026-10-18 (Q15).
 - [x] Demand saw-tooth from the game's neighbor extrapolation fixed by pinning the record cap (Q16, 2026-10-18).
 - [x] First play soak: three cities, about an hour, saves and sync clean (Q15, 2026-10-18).
-- [ ] Derived demand keys (workforce, jobs, use-2 demand) synced like the 12 groups (`docs/PLAN-DERIVED-DEMAND.md`, Q19): built behind `SyncDerivedDemand=0`, in-game experiment pending.
+- [x] Derived demand keys (workforce, jobs, use-2 demand) synced like the 12 groups (`docs/PLAN-DERIVED-DEMAND.md`, Q19): observed 2026-10-24, on by default.
 - [ ] Publish to Simtropolis once it has survived a few hundred hours of play.
