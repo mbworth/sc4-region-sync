@@ -1,4 +1,4 @@
-// Control ids shared by launcher.rc, Settings.cpp and LanUi.cpp.
+// Control ids shared by launcher.rc, Settings.cpp, LanUi.cpp and Setup.cpp.
 #pragma once
 
 #define IDD_SETTINGS       100
@@ -25,3 +25,14 @@
 #define IDC_JOIN_MESSAGE   2005
 #define IDC_JOIN_REGION    2006
 #define IDC_JOIN_LEAVE     2007
+
+#define IDD_SETUP          300
+#define IDC_SETUP_EXE      3001
+#define IDC_SETUP_SOURCE   3002
+#define IDC_SETUP_ROOT     3003
+#define IDC_SETUP_COUNT    3004
+#define IDC_SETUP_APPID    3005
+#define IDC_SETUP_PLAN     3006
+#define IDC_SETUP_PROGRESS 3007
+#define IDC_SETUP_LOG      3008
+#define IDC_SETUP_START    3009

@@ -16,6 +16,7 @@
 namespace launcher
 {
 	inline constexpr wchar_t kDefaultWindowClass[] = L"GDriverClass--DirectX";
+	inline constexpr wchar_t kIniSection[] = L"Launcher";  // launcher.ini
 
 	struct Settings
 	{
@@ -49,6 +50,12 @@ namespace launcher
 
 	// Modal Settings dialog. True when OK wrote launcher.ini.
 	bool EditSettings(HWND owner, const Settings& current);
+
+	// Modal Setup dialog (InstanceN folders and junctions). True when launcher.ini changed.
+	bool RunSetupDialog(HWND owner, const Settings& current, bool instancesRunning);
+
+	// The elevated --write-appid run: 0 written, 1 already there, 2 bad folder, 3 write failed.
+	int WriteAppId(const std::wstring& folder);
 
 	// One status file, as written by the plugin (plan A1).
 	struct InstanceStatus
@@ -115,5 +122,11 @@ namespace launcher
 		int running, const std::vector<std::wstring>& liveUserDirs, PendingMap& pending);
 
 	void ShowMessage(HWND owner, const std::wstring& text, UINT icon = MB_ICONWARNING);
+
+	bool FileExists(const std::wstring& path);  // a file, not a folder
+	std::wstring Lower(std::wstring s);
+	std::wstring Folder(const std::wstring& path);  // up to the last backslash
+	bool IsSteamExe(const std::wstring& exe);  // \steamapps\ in the path
+	std::wstring GetText(HWND dlg, int id);
 	std::wstring Widen(const std::string& utf8);
 }

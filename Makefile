@@ -90,7 +90,7 @@ LIBS = version.lib ole32.lib user32.lib psapi.lib
 
 RES = $(BUILD)/version.res
 
-.PHONY: all release debug launcher clean check-toolchain test test-launcher deploy logs
+.PHONY: all release debug launcher clean check-toolchain test test-launcher deploy logs dist
 
 all: release
 
@@ -122,7 +122,7 @@ debug: check-toolchain $(RES)
 
 # Launcher: a plain Win32 exe, static CRT, its own flags (no /LD, no plugin defines).
 LAUNCHER_SRCS = launcher/main.cpp launcher/Status.cpp launcher/Settings.cpp \
-	launcher/Resources.cpp launcher/Launch.cpp src/WriterIdentity.cpp \
+	launcher/Resources.cpp launcher/Launch.cpp launcher/Setup.cpp src/WriterIdentity.cpp \
 	launcher/Lan.cpp launcher/LanUi.cpp launcher/LanCrypto.cpp launcher/Net.cpp \
 	launcher/Frame.cpp launcher/Handshake.cpp launcher/Manifest.cpp launcher/Journal.cpp \
 	src/InstanceStatus.cpp src/NeighborSnapshot.cpp
@@ -169,6 +169,21 @@ test-launcher:
 		launcher/Manifest.cpp launcher/Journal.cpp launcher/Handshake.cpp src/InstanceStatus.cpp src/NeighborSnapshot.cpp \
 		$(BUILD)/monocypher.o -o $(BUILD)/launcher_lan
 	$(BUILD)/launcher_lan
+
+# ---------------------------------------------------------------------------
+# make dist -> dist/SC4RegionSync-<version>/ with only what a player needs, plus a zip.
+PLUGIN_VERSION := $(shell sed -n 's/.*PLUGIN_VERSION_STR[[:space:]]*"\(.*\)"/\1/p' src/version.h)
+DIST := dist/SC4RegionSync-$(PLUGIN_VERSION)
+
+dist: release launcher
+	rm -rf $(DIST) $(DIST).zip
+	mkdir -p $(DIST)
+	cp $(BUILD)/SC4RegionSync.dll $(LAUNCHER_EXE) LICENSE $(DIST)/
+	sed 's/^LogLevel=.*/LogLevel=Info/' $(BUILD)/SC4RegionSync.ini > $(DIST)/SC4RegionSync.ini
+	sed 's/0\.0\.0/$(PLUGIN_VERSION)/' release/README.txt | sed 's/$$/\r/' > $(DIST)/README.txt
+	cd dist && zip -qr SC4RegionSync-$(PLUGIN_VERSION).zip SC4RegionSync-$(PLUGIN_VERSION)
+	cp release/SIMTROPOLIS-POST.md dist/
+	@echo "Built $(DIST).zip"; ls -l $(DIST)
 
 # ---------------------------------------------------------------------------
 # Windows game box over SSH (OpenSSH server on the Windows side, key auth).

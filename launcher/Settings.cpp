@@ -16,9 +16,9 @@
 
 namespace
 {
-	constexpr wchar_t kSection[] = L"Launcher";
 	constexpr const wchar_t* kRenderers[] = { L"DirectX", L"Software", L"OpenGL" };
 
+	using launcher::GetText;
 	using launcher::IniPath;
 
 	std::wstring Documents()
@@ -30,7 +30,7 @@ namespace
 	std::wstring ReadString(const std::wstring& ini, const wchar_t* key)
 	{
 		wchar_t buffer[2048]{};
-		GetPrivateProfileStringW(kSection, key, L"", buffer, 2048, ini.c_str());
+		GetPrivateProfileStringW(launcher::kIniSection, key, L"", buffer, 2048, ini.c_str());
 		return buffer;
 	}
 
@@ -72,7 +72,7 @@ namespace
 	{
 		const auto put = [&ini](const wchar_t* key, const std::wstring& value)
 		{
-			WritePrivateProfileStringW(kSection, key, value.c_str(), ini.c_str());
+			WritePrivateProfileStringW(launcher::kIniSection, key, value.c_str(), ini.c_str());
 		};
 		put(L"GameExe", s.gameExe);
 		put(L"UserDirRoot", s.userDirRoot);
@@ -156,14 +156,6 @@ namespace
 		m.extraArgs = rest;
 		s = m;
 		return true;
-	}
-
-	std::wstring GetText(HWND dlg, int id)
-	{
-		const HWND h = GetDlgItem(dlg, id);
-		std::wstring text(static_cast<size_t>(GetWindowTextLengthW(h)) + 1, L'\0');
-		text.resize(static_cast<size_t>(GetWindowTextW(h, text.data(), static_cast<int>(text.size()))));
-		return text;
 	}
 
 	void InitDialog(HWND dlg, const launcher::Settings& s)
@@ -272,6 +264,14 @@ namespace
 
 namespace launcher
 {
+	std::wstring GetText(HWND dlg, int id)
+	{
+		const HWND h = GetDlgItem(dlg, id);
+		std::wstring text(static_cast<size_t>(GetWindowTextLengthW(h)) + 1, L'\0');
+		text.resize(static_cast<size_t>(GetWindowTextW(h, text.data(), static_cast<int>(text.size()))));
+		return text;
+	}
+
 	std::wstring IniPath()
 	{
 		wchar_t exe[MAX_PATH]{};

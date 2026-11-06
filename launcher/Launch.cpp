@@ -13,27 +13,6 @@
 
 namespace
 {
-	bool FileExists(const std::wstring& path)
-	{
-		const DWORD attrs = GetFileAttributesW(path.c_str());
-		return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
-	}
-
-	std::wstring Lower(std::wstring s)
-	{
-		for (wchar_t& c : s)
-		{
-			c = static_cast<wchar_t>(std::towlower(c));
-		}
-		return s;
-	}
-
-	std::wstring Folder(const std::wstring& path)
-	{
-		const size_t slash = path.find_last_of(L'\\');
-		return slash == std::wstring::npos ? std::wstring() : path.substr(0, slash);
-	}
-
 	bool SteamRunning()
 	{
 		const HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -84,6 +63,32 @@ namespace
 
 namespace launcher
 {
+	bool FileExists(const std::wstring& path)
+	{
+		const DWORD attrs = GetFileAttributesW(path.c_str());
+		return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
+	}
+
+	std::wstring Lower(std::wstring s)
+	{
+		for (wchar_t& c : s)
+		{
+			c = static_cast<wchar_t>(std::towlower(c));
+		}
+		return s;
+	}
+
+	std::wstring Folder(const std::wstring& path)
+	{
+		const size_t slash = path.find_last_of(L'\\');
+		return slash == std::wstring::npos ? std::wstring() : path.substr(0, slash);
+	}
+
+	bool IsSteamExe(const std::wstring& exe)
+	{
+		return Lower(exe).find(L"\\steamapps\\") != std::wstring::npos;
+	}
+
 	bool LaunchInFlight(const PendingMap& pending)
 	{
 		return std::any_of(pending.begin(), pending.end(), [](const auto& p) { return !p.second.timedOut; });
@@ -104,11 +109,11 @@ namespace launcher
 			ShowMessage(owner, L"GameExe not found:\n" + exe + L"\n\nSet GameExe in launcher.ini.");
 			return false;
 		}
-		const bool steam = Lower(exe).find(L"\\steamapps\\") != std::wstring::npos;
+		const bool steam = IsSteamExe(exe);
 		if (steam && !FileExists(Folder(exe) + L"\\steam_appid.txt"))
 		{
-			ShowMessage(owner, L"steam_appid.txt is missing next to the game exe. Create it by hand with the text 24780 "
-				L"(the launcher never writes under Program Files):\n" + Folder(exe));
+			ShowMessage(owner, L"steam_appid.txt is missing next to the game exe. Click Setup on the toolbar, "
+				L"or create it by hand with the text 24780:\n" + Folder(exe));
 			return false;
 		}
 		if (steam && !SteamRunning())
@@ -158,7 +163,7 @@ namespace launcher
 		if (dir.empty())
 		{
 			ShowMessage(owner, L"No free InstanceN folder under\n" + settings.userDirRoot
-				+ L"\n\nRun scripts\\Setup-MultiInstance.ps1 -Setup -Instances 16.");
+				+ L"\n\nClick Setup on the toolbar.");
 			return false;
 		}
 
@@ -186,10 +191,27 @@ namespace launcher
 		STARTUPINFOW si{};
 		si.cb = sizeof(si);
 		PROCESS_INFORMATION pi{};
-		if (!CreateProcessW(exe.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr,
-			workDir.c_str(), &si, &pi))
+		const auto start = [&] {
+			return CreateProcessW(exe.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr,
+				workDir.c_str(), &si, &pi) != FALSE;
+		};
+		bool started = start();
+		DWORD error = started ? 0 : GetLastError();
+		if (!started && error == ERROR_ELEVATION_REQUIRED)
 		{
-			ShowMessage(owner, L"CreateProcessW failed, error " + std::to_wstring(GetLastError()) + L":\n" + command, MB_ICONERROR);
+			// The GOG exe is flagged to run as administrator (Q18 S10). With -UserDir the game
+			// writes only under Documents, so start it at the launcher's own level instead.
+			SetEnvironmentVariableW(L"__COMPAT_LAYER", L"RunAsInvoker");
+			started = start();
+			error = started ? 0 : GetLastError();
+			SetEnvironmentVariableW(L"__COMPAT_LAYER", nullptr);
+		}
+		if (!started)
+		{
+			ShowMessage(owner, error == ERROR_ELEVATION_REQUIRED
+				? L"SimCity 4 is set to run as administrator and could not be started without it.\n"
+				  L"Close this launcher and start it with Run as administrator, or clear the setting on\n" + exe
+				: L"CreateProcessW failed, error " + std::to_wstring(error) + L":\n" + command, MB_ICONERROR);
 			return false;
 		}
 		CloseHandle(pi.hThread);

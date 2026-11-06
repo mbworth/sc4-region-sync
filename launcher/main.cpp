@@ -11,6 +11,7 @@
 #include "Lan.h"
 #include <CommCtrl.h>
 #include <dwmapi.h>
+#include <shellapi.h>
 #include <windowsx.h>
 #include <TlHelp32.h>
 #include <algorithm>
@@ -32,6 +33,7 @@ namespace
 	constexpr int kCmdJoin = 108;
 	constexpr int kCmdResync = 109;
 	constexpr int kCmdNewCode = 110;
+	constexpr int kCmdSetup = 111;
 	constexpr int kColumns = 5;
 	constexpr size_t kMaxCells = 16;
 	constexpr ULONGLONG kPendingTimeoutMs = 60000;
@@ -1007,11 +1009,11 @@ namespace
 			0, 0, 0, 0, hwnd, nullptr, inst, nullptr);
 		SendMessageW(app.toolbar, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0);
 		SendMessageW(app.toolbar, TB_SETBITMAPSIZE, 0, MAKELONG(0, 0));
-		constexpr int kButtons = 14;
+		constexpr int kButtons = 15;
 		TBBUTTON buttons[kButtons]{};
-		const wchar_t* labels[] = { L"Launch", L"Refresh", nullptr, L"List", L"Grid", nullptr, L"Settings", nullptr, L"End Task",
+		const wchar_t* labels[] = { L"Launch", L"Refresh", nullptr, L"List", L"Grid", nullptr, L"Settings", L"Setup", nullptr, L"End Task",
 			nullptr, L"Host", L"Join", L"Re-sync", L"New code" };
-		const int ids[] = { kCmdLaunch, kCmdRefresh, 0, kCmdList, kCmdGrid, 0, kCmdSettings, 0, kCmdEndTask,
+		const int ids[] = { kCmdLaunch, kCmdRefresh, 0, kCmdList, kCmdGrid, 0, kCmdSettings, kCmdSetup, 0, kCmdEndTask,
 			0, kCmdHost, kCmdJoin, kCmdResync, kCmdNewCode };
 		for (int i = 0; i < kButtons; ++i)
 		{
@@ -1027,9 +1029,9 @@ namespace
 			buttons[i].iString = reinterpret_cast<INT_PTR>(labels[i]);
 		}
 		buttons[3].fsState |= TBSTATE_CHECKED;  // always starts in List
-		buttons[8].fsState = 0;  // End Task: enabled for a selected orphan
-		buttons[12].fsState = 0;  // Re-sync: guest, connected
-		buttons[13].fsState = 0;  // New code: hosting
+		buttons[9].fsState = 0;  // End Task: enabled for a selected orphan
+		buttons[13].fsState = 0;  // Re-sync: guest, connected
+		buttons[14].fsState = 0;  // New code: hosting
 		SendMessageW(app.toolbar, TB_ADDBUTTONSW, kButtons, reinterpret_cast<LPARAM>(buttons));
 
 		app.list = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, nullptr,
@@ -1187,7 +1189,8 @@ namespace
 					}
 				}
 				else if (LOWORD(wParam) == kCmdRefresh
-					|| (LOWORD(wParam) == kCmdSettings && EditSettings(hwnd, app.settings)))
+					|| (LOWORD(wParam) == kCmdSettings && EditSettings(hwnd, app.settings))
+					|| (LOWORD(wParam) == kCmdSetup && RunSetupDialog(hwnd, app.settings, LocalRowCount() > 0 || !app.pending.empty())))
 				{
 					app.settings = LoadSettings();
 					app.lan.SettingsChanged(app.settings);
@@ -1321,6 +1324,19 @@ namespace
 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show)
 {
+	// Setup's elevated copy: writes steam_appid.txt and exits, no window.
+	int argc = 0;
+	if (wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc))
+	{
+		const bool writeAppId = argc >= 2 && wcscmp(argv[1], L"--write-appid") == 0;
+		const int code = writeAppId ? (argc == 3 ? WriteAppId(argv[2]) : 2) : 0;
+		LocalFree(argv);
+		if (writeAppId)
+		{
+			return code;
+		}
+	}
+
 	INITCOMMONCONTROLSEX icc{ sizeof(icc), ICC_LISTVIEW_CLASSES | ICC_BAR_CLASSES | ICC_WIN95_CLASSES };
 	InitCommonControlsEx(&icc);
 

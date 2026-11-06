@@ -67,9 +67,9 @@ Read `_instances\*.status` with share-delete opens; a failed read keeps the row 
 
 ### Launch
 
-Preconditions, each with a message when it fails: `GameExe` exists; `steam_appid.txt` exists next to a `steamapps` exe (the launcher never writes under Program Files: a 32-bit write there gets virtualised and the game never sees it, Q5 created the file by hand); `steam.exe` running for a Steam exe; `ExtraArgs` contains `-w` (a fullscreen DirectDraw instance switches display modes when raised); no launch in flight; the resource line is not red; `MaxInstances` not reached; a free `InstanceN`.
+Preconditions, each with a message when it fails: `GameExe` exists; `steam_appid.txt` exists next to a `steamapps` exe (the launcher process never writes under Program Files: a 32-bit write there gets virtualised and the game never sees it, Q5 created the file by hand; amended 2026-10-30, Setup button: the only exception is steam_appid.txt, created by an elevated copy of the launcher after the user approves the UAC prompt); `steam.exe` running for a Steam exe; `ExtraArgs` contains `-w` (a fullscreen DirectDraw instance switches display modes when raised); no launch in flight; the resource line is not red; `MaxInstances` not reached; a free `InstanceN`.
 
-A free `InstanceN` is an existing dir under `UserDirRoot` (created once by `scripts/Setup-MultiInstance.ps1 -Setup -Instances 16`, which stays the only place that builds the layout) whose normalised path (case-insensitive, no trailing backslash) matches no live status file and no pending launch. Pending launches are an in-memory map user dir -> pid, kept until that pid's status file appears or the pid exits; after 60 s a message is shown and Launch is re-enabled, but the dir stays reserved until the pid exits. A pid that exits with no status file is reported once (Q5's silent quit). Paths are compared after full-path and long-name normalisation, case-insensitive, no trailing backslash. While one is pending, Launch is disabled: the game closes its single-instance mutex only in `PostAppInit`, so a second exe started before that finds the mutex and quits silently (Q5).
+A free `InstanceN` is an existing dir under `UserDirRoot` (created once by the Setup toolbar button, `launcher/Setup.cpp`, with the same layout as `scripts/Setup-MultiInstance.ps1 -Setup`; amended 2026-10-30: Setup replaces the script for players, the script stays for the loopback-guest dev workflow) whose normalised path (case-insensitive, no trailing backslash) matches no live status file and no pending launch. Pending launches are an in-memory map user dir -> pid, kept until that pid's status file appears or the pid exits; after 60 s a message is shown and Launch is re-enabled, but the dir stays reserved until the pid exits. A pid that exits with no status file is reported once (Q5's silent quit). Paths are compared after full-path and long-name normalisation, case-insensitive, no trailing backslash. While one is pending, Launch is disabled: the game closes its single-instance mutex only in `PostAppInit`, so a second exe started before that finds the mutex and quits silently (Q5).
 
 Command line built by hand, no quoting helper (Q5): `"<exe>" -UserDir:"<dir>\" <ExtraArgs>` (slice 3 replaces `<ExtraArgs>` with the composed switches), `CreateProcessW` with the exe's folder as working directory.
 
@@ -92,7 +92,7 @@ The 16 ceiling comes from the slice 2 grid, not from the machine. On this box me
 
 ### Reads and writes
 
-The launcher reads status files, the plugin INI is not read; it writes `launcher.ini`, deletes only `Dead` status files. It never touches snapshots, `.sc4` files, the Regions folder, the plugin INI or anything under Program Files.
+The launcher reads status files, the plugin INI is not read; it writes `launcher.ini`, deletes only `Dead` status files. It never touches snapshots, `.sc4` files, the Regions folder, the plugin INI or anything under Program Files (2026-10-30: except steam_appid.txt, written by an elevated copy after the UAC prompt; Setup creates InstanceN folders and junctions to Regions and Plugins, never their contents).
 
 ## What must not break
 

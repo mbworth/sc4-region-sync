@@ -1905,14 +1905,14 @@ private:
 			publishCount++;
 			logger.WriteLineFormatted(
 				LogLevel::Info,
-				"Publish (%s): (%d,%d) '%s' pop=%d com=%d ind=%d connections=%zu deals=%zu simDate=%u-%02u-%02u -> %s",
+				"Publish (%s): (%d,%d) '%s' pop=%d com=%d ind=%d connections=%zu deals=%zu simDate=%u-%02u-%02u -> %s at=%s",
 				reason,
 				snapshot.regionX, snapshot.regionZ,
 				snapshot.cityName.c_str(),
 				snapshot.population, snapshot.commercialJobs, snapshot.industrialJobs,
 				snapshot.connections.size(), snapshot.deals.size(),
 				snapshot.simYear, snapshot.simMonth, snapshot.simDay,
-				path.string().c_str());
+				path.string().c_str(), regionsync::savelock::Stamp().c_str());
 			LogMemory(logger, reason);
 		}
 		else
@@ -2289,8 +2289,8 @@ private:
 		pullCount++;
 		logger.WriteLineFormatted(
 			LogLevel::Info,
-			"Pull (%s): files=%d dead=%d applied=%d changedFields=%d mirrorPending=%zu",
-			reason, filesSeen, dead, applied, totalChanged, mirrorPending.size());
+			"Pull (%s): files=%d dead=%d applied=%d changedFields=%d mirrorPending=%zu at=%s",
+			reason, filesSeen, dead, applied, totalChanged, mirrorPending.size(), regionsync::savelock::Stamp().c_str());
 	}
 
 	// Mirror cheat: the subscriber steps for every snapshot in the store,
