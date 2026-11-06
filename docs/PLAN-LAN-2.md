@@ -1,430 +1,259 @@
 # Plan: two PCs on one region, slice 2 (saves flow both ways)
 
-**Status:** reviewed 2026-11-05 (data integrity, security, simplicity); findings applied. Nothing built.
+**Status:** reworked 2026-11-06 (route C), pending review. Nothing built.
 
-Inputs: `docs/PLAN-LAN.md` (slice 1, built; where this plan is silent, slice 1 holds), `docs/research/lan-two-pcs.md`, `docs/research/lan/save-design.md` (sections 2.4 to 2.9, 3, 10), `docs/research/save-641.md`, Q4, Q14, Q17 and Q18 in `docs/OPEN-QUESTIONS.md`.
+Inputs: `docs/PLAN-LAN.md` (slice 1, built; where this plan is silent, slice 1 holds), Q4, Q14, Q17, Q18 and Q20 in `docs/OPEN-QUESTIONS.md`, `docs/research/save-641.md`, `docs/research/deals-641.md`, `docs/research/record-connections-641.md`.
 
-Slice 2 is four increments, 2a to 2d, and all four are required before the public release (owner, 2026-11-05). Each ships on its own and keeps every slice 1 guarantee. Requirement "the two PCs cannot both save the same tile" is planned as: the second PC to open a tile goes dark (2b) and its saves are never committed over the other's; the plugin does not refuse the game's save. **Owner decision (2026-11-06):** dark saves stay local and the save is not refused. See D16 for the rule that follows from it.
+**Today** (slice 1) the host's region is copied to the guest on connect, snapshots and status files mirror live, guest saves stay on the guest flagged "not sent", and a host save reaches the guest only at the next connect with no game running there.
 
-**Today** (slice 1) the host's region is copied to the guest on connect, snapshots and status files mirror live, and guest saves stay on the guest flagged "not sent". A host save reaches the guest only at the next connect, and only when no game runs there.
+**Route C** (owner, 2026-11-06). Q20 showed a neighbor write changes exactly one DBPF entry of the neighbour's file (the regional record `0xCA027EDB/0xCA027EE1/0`), plus the directory `0xE86B1EEF` and header date and hole fields, and that a city loads its deal with a neighbour from the neighbour's file. So files still move whole, and a neighbor-written file is a change that travels, under a rule that makes the replace equal to the neighbor write the game would have done on the receiving PC. No plugin ledger, no reconciliation at load, no new game call, no editing of `.sc4` contents anywhere.
 
 ## 0. Increments
 
-Ordered by risk. Snapshots and status files mirror live throughout, as today.
+All three are required before the public release. Each ships on its own and keeps every slice 1 guarantee.
 
 | # | Adds | The player has after it |
 |---|---|---|
-| 2a | Closed-game sync: host journal, counters and per-tile `hostCount` in `MANIFEST`, guest push with host commit, host-to-guest delivery, one-sided changes resolved on reconnect, `Conflicts\` copies and flags for two-sided changes | Saves flow both ways. A save reaches the other PC once that PC has no SimCity 4 process running (and, on the saving PC, once the player has left that city). Until then the receiving launcher shows "swap pending, close SimCity 4". A tile saved on both sides is never overwritten: the guest's copy goes to `Conflicts\` and the tile is flagged; Re-sync keeps the host's. Same tile open on both PCs is still only a banner. |
-| 2b | Cross-PC tile guard from mirrored status files | Opening a city that is open on the other PC gives a dark city, exactly as two instances on one PC do today. Both launchers name the tile in a banner. Two-sided changes are left to play while apart and to sub-second races. |
-| 2c | Live swap: a not-open tile's file is replaced while games run on that PC; the saving PC stages right after the save | A save reaches the other PC within seconds while connected, unless that PC has the tile open. Gated on Q20 steps 18 to 21 (section 15). |
-| 2d | Picker over the `Conflicts\` state 2a records | The player chooses per tile which copy to keep; the other stays in `Conflicts\`. Release candidate. |
+| 2a | Cross-PC tile guard (D13, D14); plugin mutex descriptor (P3) | Opening a city that is open on the other PC gives a dark city, as two instances on one PC do today. Saves behave as slice 1. |
+| 2b | Two-way file sync (D1 to D12, D15 to D17), receiving rule "tile not open on that PC" from the start; plugin P1, P2 | A save reaches the other PC within seconds while connected, unless that PC has the tile open. Any difference pauses the pair until resolved. |
+| 2c | Picker over the difference set (section 9) | The player chooses per city which copy to keep. Release candidate. |
+
+Closed-game sync is not its own increment: it is only the fallback if gate step 6 fails.
 
 ## 1. Design-freeze gate
 
-**Gate failed 2026-11-06 (Q20 in `docs/OPEN-QUESTIONS.md`).** A city loads its deal with a neighbour from the neighbour's file, so a discarded neighbor write brought a cancelled deal back. D1 does not stand. Everything below is on hold until reworked and re-reviewed; no slice 2 code.
+**Q20 step 1 ran 2026-11-06 and failed** (`docs/OPEN-QUESTIONS.md` Q20): discarding a neighbor write brought back a deal the neighbour had cancelled. Route C was chosen from its file diff.
 
-Before any slice 2 code, Q20 step 1 (section 15) runs on the current build: a tile's own save restored over a neighbor-written copy, both cities reloaded, deals and connections compared. Every rule below discards neighbor writes into the other PC's tiles (D1); slice 1 S8 already does so on connect, but nobody has checked a reload after it.
+**New gate**, before any launcher code: Q20 steps 2 to 7, one PC, two instances, the current plugin build, region New York (BumperVille (4,6), TuggersVille (6,6), DumpsVille (4,4); back up the folder and the store first). The operator's assistant copies files over SSH with `Copy-Item` only after a `SaveLock: ... released` line and pulls them as `make logs` does. "Dump" is `RegionSyncDump` with its deal and connection lines. "The script" is a game-free DBPF tool the assistant writes for the gate (run with `python3 -I`, game files never committed): per entry TGI, size and BLAKE2b, header fields, `ch` and `fh` (D1), and a diff of two copies.
 
-If it fails, D1 cannot stand: a tile's file would carry something the neighbor's load depends on. Slice 2 then stops before code. The likely rework is that each save carries its neighbor-written files and they commit only for tiles unchanged on the receiver (more conflicts, larger transfers); the plan is reviewed again.
+2. **`ch` holds (A1).** After each of these, copy all three files: (i) BumperVille lit save, TuggersVille closed; (ii) the same with TuggersVille at the region view; (iii) a save after a deal change with TuggersVille; (iv) after a new road and power line across their edge; (v) an autosave (`AutoSaveEveryMonths=1` in the test INI); (vi) TuggersVille own saves twice with time passing; (vii) TuggersVille saved right after load, paused. Pass: every file parses (section 6, no fallback); every neighbour copy differs from its predecessor only in the record entry, the directory and header date or hole fields, with size unchanged; (vi) changes another entry; (vii) recorded either way. Fail: any other entry differs in a neighbor write. Fallback: none; route C stops.
+3. **Save groups (A2, A3).** Both cities open with a water deal, both saved: copies B0, T0. TuggersVille to the region view; BumperVille cancels the deal and saves: B1 (own) and T1 (record-only, `ch(T1) = ch(T0)` by the script). Both exit. For each set, open TuggersVille then BumperVille, dump both, then both open one sim day (mirror lines), dump; exit without saving and restore the next set: {B1, T1} (pass: no deal on either side, also after save and reload); {B1, T0} (Q20: deal back); {B0, T1} (record-only file with the old saver file: record what the game loads and what the mirror does). Repeat the three sets with a new deal made in BumperVille. Pass: {B1, T1} matches the PC1 state; the mixed sets are recorded (they justify D1's groups). Fail: {B1, T1} wrong. Fallback: none; route C stops.
+4. **Connections (A4).** As step 3 with a road and a power line built across the edge, then bulldozed. Pass: {B1, T1} matches on both sides through save and reload. Record {B1, T0} and {B0, T1}. Fail: {B1, T1} wrong. Fallback: none.
+5. **Stale in-memory neighbour record (A5).** Instance 1 TuggersVille, instance 2 DumpsVille, BumperVille closed; copy BumperVille as B0. TuggersVille makes a deal with BumperVille and saves (B1); DumpsVille then saves (B2). Script: is B2's record entry equal to B0's, B1's, or neither? Exit both, open TuggersVille alone, dump; open BumperVille, dump. Repeat with a new road from TuggersVille into BumperVille. Pass: deal and road survive; D17 not needed. Loss: D17 applies.
+6. **Live swap (A6 to A9).** PowerShell takes the save mutex by try-lock (`[Threading.Mutex]::OpenExisting(...).WaitOne(0)`) around each operation. (a) Copy TuggersVille's file under the lock while the player presses Ctrl+S five times 2 s apart; record the hold time for the largest file in the region. Pass: five `ok=1`, no `SaveLock` timeout, hold under 5 s. (b) `[IO.File]::Move($copy, $target, $true)` over TuggersVille's file while it is open. Pass: error 32, hash unchanged. (c) TuggersVille open; replace DumpsVille, then BumperVille, with record-only copies under the lock. Pass: no Error or Warning, game running 60 s later; at the region view `RegionWatch: N tile(s) due`, `Reload (4,6) ... recordPtrChanged=1`. (d) A loop replaces BumperVille under the lock every second, logging each move's time, while the player clicks Play on it; at least 10 loads. (e) The same, replacing TuggersVille (a neighbour) while BumperVille loads, at least 10 loads. Pass for (d) and (e): every load succeeds; each dump matches the old or the new file (record of the neighbour for (e)), checked against the swap times around `SaveCount: ... loaded from`. Fail: a move over an open city, a crash, a dialog, a dump matching neither. Fallback: 2b replaces only with no game process on that PC and the ground-rule amendment drops "tile not open".
+7. **Writes outside SaveCity (A10).** At the region view: found a city on an empty tile, rename a city, delete a city; in a city: obliterate. For each, watch `SaveLock` lines and the mtimes of every region file. Record which take the save mutex. If any does not, D5's stability check covers it.
+
+Results go into Q20; this plan is reviewed again before 2a code.
 
 ## 2. Decisions
 
-**D1. Only a lit counted save is a change.** A tile changed on a PC only when that PC's `_saves\<region>\<x>_<z>.saves` shows a save made lit in a city (`litCount` rose, P3) with `lastOk=1` from a writer on that PC. Everything else that changes a tile file is a neighbor write (save-641 step 10), observed 2026-11-05: one host save of BumperVille gave BumperVille, DumpsVille and TuggersVille the same mtime. Consequences:
-- A hash change on the host without a lit save is host truth: delivered to the guest, never a conflict.
-- A hash change on the guest without a lit save is an artifact: never pushed; the guest downloads the host's copy again.
-- A push meets a destination that changed underneath it whenever a host save neighbor-wrote that tile, so the commit rule compares counters, never hashes (D3).
+**D1. Sync rule.** Every `.sc4` has a full hash `fh` (BLAKE2b, as slice 1) and a content hash `ch` over every entry except the regional record and the directory (section 6). Each PC keeps, per peer and region, the shared base `(ch, fh)` of every file (section 8). Against its base a local copy is `same` (`fh` equal), `record` (`ch` equal, `fh` not: a neighbor write, or a re-save with nothing else) or `save` (`ch` changed).
+- **A file travels only when it changed against the shared base.** Direction is symmetric: a guest's record-only update to an unplayed city reaches the host and is never overwritten by the host's unchanged copy. "The host is the source of truth" decides ties, layout and Re-sync, nothing else.
+- **Save groups.** Every file one save wrote is one group: the saver's own file plus the record-only neighbour files whose mtime falls inside that save's window (P1). Record-only members commit only with or after the saver's file; if the saver's file is held, the group is held; if it enters the difference set, the group enters with it and is resolved with it (D10). A record-only change with no covering save window (A10) is a group of one.
+- **A real save travels whole** when the other copy is `same` or `record`; the receiver's record-only copy is archived and replaced.
+- **A record-only update travels whole** and replaces the receiver's copy only when the receiver's `ch` equals the sender's, so the replace changes only the record, as the game's own neighbor write would there. Otherwise it is dropped (`Record <name>: dropped, saved here`).
+- **Converged:** a pushed or served `fh` equal to the receiver's current `fh` moves the base and is never a rejection.
+- **The host serializes.** Every change reaches the host's copy first; the host's copy after each event is the shared state, delivered to the guest. While connected, two record-only versions of one file apply in arrival order at the host, later wins, as with two instances on one PC. At connect or resume, when both copies are `record`, the host's wins.
+- **Both copies `save`** with different `fh`: difference `both` (D16).
+- **Reverts** (documented, no machinery): (a) apart, both PCs neighbor-wrote the same closed city N: the host's record wins at connect, and the guest's deal or connection change toward N reverts; (b) apart, one PC changed a link toward N and the other really saved N: the link change reverts (also connected, when N is open on the other PC and saves before closing, as on one PC, where a neighbor write to an open city is skipped); (c) a stale in-memory write (D17) replaces N's whole record, so another city's unrelated change to N can be lost.
 
-**D2. Which file belongs to which tile.** The `.saves` `file` is the file to push. The status file gains `cityFile` (P1). The launcher never reads a tile out of a `.sc4` (no parser exists, and none is added); it binds files to tiles:
-- A host file is bound to at most one tile, by the host journal or the host `.saves`. Most host files start unbound (a region of 51 files may have a handful of `.saves`).
-- The guest journal records, per tile, the base it last shared with the host: `baseFile` and `baseHash`. Today (`launcher/Journal.cpp` `UpdateJournalAfterSwap`) it records `file` and `baseHash` only for tiles named by the manifest's `tile`, the journal or a local `.saves`; slice 2 adds every other manifest `.sc4` as an unbound line `u.N=name|hash`. At the first counted save of a tile with no entry, the guest launcher takes `baseFile` from the `.saves` name the city was loaded from (`prevFile` if set, else `file`), only if that name is an unbound line, with its hash as `baseHash`; the entry then lives in the journal until `COMMITTED`, so it survives a reload. `prevFile` is not trusted by the host.
-- A push binds an unbound host file to its tile under the rule in section 6. A file bound to nothing stays under hash rules: delivered when it changes, never pushed.
+**D2. File to tile, host-side data only.** The host maps a file to a tile from, in order: its own `.saves` (`file`), the plugin's tile map (P2), the host journal. A push naming a file mapped by none waits (`WAITING map`, banner `Open <region> once in SimCity 4 on this PC so sync can match its cities.`); such a file reaches the guest only with no game process there. The guest's claimed tile is never trusted. The guest uses the host's announced tile and its own map for "open here" (D15).
 
-**D3. Commit rule.** The host commits a pushed file for tile t only if all hold, checked at precheck and again inside the lock right before the move (D6):
-1. t is not host-changed (D7): the host `.saves` epoch equals the journal `hostEpoch` and its `litCount` equals `hostCount`;
-2. 2a: no SimCity 4 process runs on the host. 2c: t is not open on the host (D15);
-3. the push passes the validation in section 6 (name, count bounds, epoch, content);
-4. the staged file's hash is still the one pushed, and no newer push for t arrived.
+**D3. Commit rule.** The host commits a pushed file for tile t only if all hold, at precheck and again inside the lock (D6): (1) the push names the file the host maps to t (D2), or is a founding or rename that passes D8; (2) D1 allows it against the host's current copy (real save: host `ch` equals the base; record-only: equals the pushed `ch`; equal `fh`: converged); (3) its group's saver file is committed or in this commit; (4) t is not open on the host (D15), and for a founding or rename no game process runs there; (5) section 6 validation passes and the staged file still has the pushed hash; (6) the pair is not paused, or it is a resolution (D10). Otherwise `REJECTED` with one reason: `both`, `stale` (record-only dropped; the guest then fetches the host's copy), `base`, `paused`, `space`, `bad`; or `WAITING` (`open`, `nogame`, `map`, `lock`, `confirm`, `group`). `both` and `base` add t, with its group, to the set.
 
-Otherwise the push is refused (`hostSaved`, `epoch`, `count`, `bad`, `space`) or held (`closed`, `open`, `lock`). A host dark save (P3) over no unsent lit save is not host-changed; its file is copied to the host's `Conflicts\` before the replace (D11).
+**D4. Push queue.** The guest pushes one group at a time, files in group order, from a queue holding the latest change per file. It never starts another push before the current one ends; the host drops a `PUSH` that breaks this.
 
-**D4. Pushes coalesce.** Only the newest save of a tile exists on disk, so the push queue is "the latest lit save per tile".
+**D5. Copies.** Each copy out of Regions (staging, archive, `Conflicts\`) is made in one save-mutex try-lock hold of at most 5 s, one file per hold, together with the `.saves` and tile map reads for it. The staged copy is hashed after the release. A copy that would exceed 5 s is abandoned and retried; after 3 abandons the file is not synced and the banner reads `<file> is too large to copy while SimCity 4 runs here. Close SimCity 4 on this PC to send it.` A file changed outside any save window (A10) is copied only after two reads 2 s apart give equal `fh`, file ID, size and mtime.
 
-**D5. Copies before the lock, moves inside it.** Any copy that can be large (staging, archive and conflict copies) happens before the save-mutex try-lock, with slice 1's verified method (file ID, size, mtime before and after; `Net.cpp` `StepStage`). Inside the lock the launcher only re-runs the decision, verifies that each source's file ID, size and mtime are unchanged, and renames. An original that is replaced in place is copied to `archive\` before the lock; a file that is removed (D8) is renamed into `archive\` inside the lock after its replacement is in place.
+**D6. Replace.** Archive copy first (D5), then try-lock, re-run D1 and D3 or the delivery decision against the current copy, verify the original's file ID, size and mtime against the archive copy, stamp the staged file's mtime with the current time, one `MoveFileExW(staging, target, REPLACE_EXISTING | WRITE_THROUGH)`, release. The new mtime is required: RegionWatch and D17 detect changes by size and mtime, and a neighbor write keeps the size. A failed check drops or retries; error 32 retries, after 20 it waits for that tile's status to change.
 
-**D6. Every replacement re-decides inside the lock.** A delivery, commit or resolution that waited (pending, held, deferred by a modal dialog) runs its decision again inside the lock immediately before the move. A delivery is dropped if the local `.saves` epoch or `litCount` differs from the journal's base, or the journal hash for that tile moved since the `CHANGED` was accepted. When the host commits a pushed file it marks any staged older copy of that name gone, so a later `GET` for it gets `GONE`.
+**D7. Change detection.** Only `ch` and `fh` against the base. A failed save leaves the file and its hashes unchanged (A11). `.saves` is read for `dark`, the save window and the map.
 
-**D7. Counters and epochs.** Each `.saves` carries a random `epoch` (P3); both journals store the epoch next to every count. A count is compared only within one epoch. An epoch mismatch, or a count below the journal's base, means "changed here" (conflict path), never "artifact". Reading a slice 1 `.saves`: a missing `litCount` means `count`; a missing `epoch` means the fixed legacy epoch `0000000000000000`, which matches a journal entry with no epoch. The host journal's `guestEpoch` adopts the pushed epoch while it is legacy or empty, logged; every other epoch changes only on a commit, delivery or resolution.
+**D8. One file per tile; new names are layout-class.** A founding (new name on an unmapped tile), a rename (new name replacing the tile's mapped file), a removal, `region.ini` and `config.bmp` are delivered only with no game process on the receiving PC. For a guest founding or rename the host checks: the tile is unmapped (founding) or mapped to `baseFile` (rename); the new name matches no host file; the pair's founding count (host journal, lasting) is under 16; the file fits the disk cap (section 4). A rename archives the old file on commit. A founded file is mapped from the push until the host's next tile map; if that puts it on a tile that already had a file, that tile is a difference `base`. Removals and layout travel host to guest only; a guest-side removal or layout change is copied to `Conflicts\` and undone at the next no-game sync, with a banner.
 
-**D8. One file per tile on the host.** Renames are decided by the tile's binding, never by `prevFile`. A rename is a push whose `name` differs from `baseFile`; on commit the host copies `baseFile` to `archive\` before the lock and, inside it, moves the new file into place and renames `baseFile` into `archive\`, so the tile ends with one file. Q20 step 8 and a unit test check the invariant.
+**D9. No gap.** The losing copy is in `archive\` or `Conflicts\`, verified, before the single move.
 
-**D9. Resolution never leaves a gap.** A copy that loses or waits goes into `Conflicts\` (copy, verified) before anything replaces it; the replacement is then a single `MoveFileExW(staging, target, REPLACE_EXISTING | WRITE_THROUGH)`.
+**D10. Resolution.** Per tile in the set, one PC's copy wins for the tile's whole group (the union of both PCs' groups for it), every file taken from the winner, so both PCs end byte-identical for those files, records included. The losing PC's copies go to its `Conflicts\` with `conflict.txt` (tile, city, reason, both `fh`, which PC). The PC whose copy loses confirms in its own launcher first. Default winner per reason: `both` the host's; `dark` the lit copy; `base` the host's file, the guest's file name moved to `Conflicts\`, no-game class. In 2b, Re-sync on the guest applies these defaults (the host confirms where its copy loses, i.e. a host dark save); 2c lets the player choose. Keep host's: the guest copies to `Conflicts\`, `GET resolve=1`, replace, `APPLIED`. Keep guest's: `PUSH resolve=1`, the host's player confirms (section 7), the host copies to `Conflicts\` and commits; No gives `REJECTED confirm` and the tile stays. Base = the kept copy. Nothing goes to `Conflicts\` until a copy loses.
 
-**D10. Two-sided changes in 2a.** The host keeps its copy in its Regions. The guest copies its current file to `Conflicts\` with `conflict.txt` (tile, city, both counts and epochs, both save times, both hashes), keeps its file in its Regions, flags the tile "saved on both PCs, kept here", and stops pushing it. Re-sync keeps the host's for every flagged tile (D9). 2d adds the choice.
+**D11. Dark saves.** A real save is `dark` when the tile's latest local `.saves` has `dark=1` (P1). It stays local, is never refused, and makes the tile a difference `dark`.
 
-**D11. Dark saves.** A save in a dark city has `dark=1` (P3). It is never a change to sync and is always filed as the losing copy: the launcher copies that file into its `Conflicts\`, then the other PC's copy replaces it (guest: the host's current copy by `GET`; host: the guest pushes its current copy back, section 7.2). That replacement happens only when the dark save overwrote nothing unsent: on the host, `litCount` equals the journal `hostCount` (`hostState=dark`); on the guest, `litCount` equals `baseCount`. Otherwise a lit save that never reached the other PC was overwritten: the tile is a conflict (D10), both copies are kept, and a staged copy of that lit version that was never applied moves to that PC's `Conflicts\` instead of being deleted.
+**D12. Region layout comes from the host.** `region.ini` and `config.bmp` are never pushed (D8).
 
-**D16. No sync while the region differs (owner, 2026-11-06).** The two PCs sync only when their copies of the region agree. Any discrepancy (a tile saved on both PCs, a dark save, an epoch mismatch) pauses all region sync for the pair: no record mirroring, no push, no delivery. Both launchers say so and offer the choice of master copy per differing tile (2d picker; before 2d, Re-sync, which keeps the host's). Sync resumes when every difference is resolved. Either PC can keep playing SimCity 4 meanwhile, unsynced. **Not yet applied below:** D10, D11, sections 7, 9, 10 and Q20 steps 13 to 15 still describe a per-tile flag with the rest of the region syncing, and a dark save losing without a prompt. They are to be amended and re-reviewed after the section 1 gate, before any 2a code.
+**D13. Cross-PC tile guard (2a).** Each launcher holds `Local\SC4RegionSync.Tile.<region>.<x>_<z>` for every tile a mirrored peer status file shows in `city` state with `conflict=0`, and closes it when that status leaves `city` state or is reaped (slice 1 reap, 10 minute disconnect rule). Accepted only for the paired region and tiles inside `config.bmp` bounds; at most 64 held. The plugin's Q14 guard then finds `peer=1` and the city goes dark. A dead launcher drops its handles, so the guard fails open; D1 and D16 still prevent an overwrite. Names are built as the plugin does (`TileLock.cpp`, `SaveLock.cpp`): `regionDirectoryName` from a local status file's `region` value, else the on-disk folder name, no case folding (A15). A race within the mirror latency leaves both lit; both launchers show "open on both PCs", and two saves become `both`.
 
-**D12. Region layout comes from the host.** `region.ini` and `config.bmp` are never pushed. A guest-side change is copied to `Conflicts\` and replaced at the next no-game sync, with a banner.
+**D14. Mutexes and elevation.** Launcher and plugin create the tile and save mutexes with `CreateMutexExW(..., SYNCHRONIZE | MUTEX_MODIFY_STATE)` and the descriptor `D:P(A;;0x120001;;;<token user SID>)S:(ML;;NW;;;ME)` (SYNCHRONIZE, MUTEX_MODIFY_STATE, READ_CONTROL for the current user only, medium label) (P3). `ERROR_ACCESS_DENIED`: the plugin goes dark on a tile mutex (Warning) and takes today's timeout path on the save mutex; the launcher treats the mutex as held. **One elevation rule:** before any replace, the launcher checks its own token and every running local SimCity 4 process (`TokenElevation`; a process whose token it cannot open counts as elevated); if any is elevated, nothing is replaced on that PC and the banner reads `No city files are replaced on this PC while <the launcher|SimCity 4> runs as administrator. Restart it normally.` Host, Join and mirroring stay allowed.
 
-**D13. 2b guard.** Each launcher creates and holds the plugin's tile mutex `Local\SC4RegionSync.Tile.<region>.<x>_<z>` for every tile that a mirrored peer status file shows in `city` state with `conflict=0` in the mirrored region, and closes it when that status leaves `city` state or the file goes away (slice 1's dead-writer reap and 10 minute disconnect rule). The plugin's existing guard (Q14) finds `peer=1` and the city goes dark: no publish, pull, mirror or plugin save, and it stays dark until closed. No lease protocol, no lease file, no plugin network code. A dead launcher drops its handles, so the guard fails open; D3 still prevents an overwrite.
+**D15. Open here.** A tile is open on a PC if a local status in city state names it, its tile mutex exists and this launcher does not hold it (or opening it is denied), or a local snapshot with a live local writer names it (slice 1 `TileOpenHere`). A file is open when its tile is open by either PC's map (D2). A city that starts loading in between holds its file with read sharing only, so the move fails with error 32 (A8).
 
-Mutex names are case-sensitive. The plugin builds them as `"Local\\SC4RegionSync.Tile." + regionDirectoryName + "." + x + "_" + z` (and `"Local\\SC4RegionSync.SaveLock." + regionDirectoryName`), where `regionDirectoryName` is `cISC4Region::GetDirectoryName()` as the game returns it, widened with `CP_ACP` (`TileLock.cpp`, `SaveLock.cpp`). The launcher uses the same string from the same source: the `region` value of a local status file for that region (`AcpToUtf8(regionDirectoryName)`, converted back), else the on-disk folder name (`ExistingFolderName`, exact case, as slice 1's save mutex does). No case folding. Region names are printable ASCII (slice 1 name rules), so the code page conversion is the identity. A12 records that the game returns the on-disk case.
+**D16. No sync while the regions differ.** A tile enters the difference set, with its group, for `both`, `dark` or `base`. At connect the host's base is used where the journals disagree, and an `fh` mismatch in `MANIFEST` that neither side's change explains is `base`. While the set is non-empty the pair is paused:
+- Stopped both ways: city files, snapshots. Status files still cross (the guard and banners need them).
+- Allowed: resolution transfers (`resolve=1`) for tiles in the set, `DIFFER`, `PAUSED`, `PING`, `MANIFEST` and `CHANGED` as display data.
+- Either PC keeps playing unsynced. A tile leaves the set only by resolution. Re-sync touches only tiles in the set.
+- When the set empties, both sides reclassify every file as at connect: changes made on one side during the pause travel then.
+- Banner on both: `Sync paused: N cities differ between <host> and <guest>. Both PCs can keep playing; nothing is sent until each is resolved (Re-sync on <guest>).` (2c: `... Choose a copy for each in Resolve on <guest>.`)
 
-**D14. Mutexes across integrity levels.** The launcher creates the tile and save mutexes with an explicit security descriptor that a medium-integrity game can open: SDDL `D:(A;;0x1F0001;;;IU)(A;;0x1F0001;;;SY)S:(ML;;NW;;;ME)` (`MUTEX_ALL_ACCESS` for the interactive user and SYSTEM, medium label). The plugin creates its mutexes with the same descriptor (P4). The launcher treats `ERROR_ACCESS_DENIED` on either mutex as held by a game: no replace. An elevated launcher is allowed: games it starts run at its level, which worked in Q18 S10. It writes one Warning to `lan.log` at start when it runs elevated (`TokenElevation`). The descriptor is what fixes the mixed case (an elevated launcher beside a game started elsewhere). The launcher's error 740 fix (retry with `__COMPAT_LAYER=RunAsInvoker`, in the working tree, `launcher/Launch.cpp`) is observed on the GOG PC in Q20 step 2.
+**D17. Stale in-memory neighbour records (only if gate step 5 shows the loss).** A city Y open since before a record-only update of its closed neighbour N lands (delivered, or neighbor-written by another local instance) still holds the older record and writes it back at its next save. Rule, simplest safe option: in the save wrapper, before the original save and under the save lock it already holds, the plugin compares each closed neighbour's file size and mtime with what Y loaded or last reloaded; if N changed and Y's own deals and connections with N equal what it loaded, Y reloads N's record (`ReloadCity`, already called in city view by `RegionSyncReload`, Q3) and logs `Reload (x,z) before save: neighbour file changed`. If Y also changed its link with N, nothing is reloaded and Y's write wins (revert (c), logged). If no safe reload exists, revert (c) stands with this condition: another city next to N was open, on either PC, from before the change until after its next save.
 
-**D15. Open here.** A tile is open on a PC if a local status in city state names it (`regionX`, `regionZ`) or its file (`cityFile`, P1), its tile mutex exists and this launcher does not hold it (or opening it gives `ERROR_ACCESS_DENIED`), or a local snapshot with a live local writer names it (slice 1 `TileOpenHere`). 2a uses it for when the source may stage a file; 2c also for when a receiver may replace one.
-
-## 3. Supersedes
-
-| Where | Now | Becomes |
-|---|---|---|
-| PLAN-LAN 2 | "The save mutex `Local\SC4RegionSync.SaveLock.<region>` is used only by the guest's UI thread, only around the swap renames" | "...is used by either launcher's UI thread, only by try-lock, only around renames into Regions (sync swap, commit, delivery, resolution)." |
-| PLAN-LAN 3 | "the data part carries the `file.N=name\|size\|hash\|tile` lines" | the section 6 format, `proto` 2 |
-| PLAN-LAN 4 | "**Journal** (guest only)" | "Each side keeps a journal per peer and region (PLAN-LAN-2 section 8)." |
-| PLAN-LAN 8 | "Slice 1's "the host's Regions folder is never written" is true of the launcher only." | "The host launcher writes a paired guest's city files into its Regions on a commit (PLAN-LAN-2 section 12)." |
-| PLAN-LAN 9 | "The launcher writes into Regions only on the guest, and only under all of these conditions: ... only when no game process runs." | "The launcher writes into Regions on either PC, only under the CLAUDE.md ground rule as amended by PLAN-LAN-2." |
-| PLAN-LAN 9 | "It never writes to the host's Regions. It never takes the save mutex anywhere else, so it can never stall a game save." | "On the host it writes only to commit a guest push or apply a resolution. It takes the save mutex only by try-lock around those renames, so it can never stall a game save." |
-| PLAN-LAN 9 | "`NeighborSnapshot`, `InstanceStatus`, `Frame`, `Manifest` and `Journal` stay game-free and Windows-free." | adds `Ownership` |
-| PLAN-LAN, slice 2 hooks | "`archive\` becomes `Conflicts\`." | "`archive\` keeps replaced originals; `Conflicts\` is added for copies of two-sided changes and dark saves." |
-| PLAN-LAN, Not in slice 1 | "A cross-PC same-tile guard. Slice 1 has a banner and refuses the write." | 2b (D13) |
-| CLAUDE.md ground rule | "The launcher may replace whole files in Regions only on the guest, from verified staging, originals archived first, under the save-mutex try-lock, with no game process running." | 2a: "The launcher may replace whole files in Regions only from verified staging, originals archived or copied to `Conflicts\` first, under the save-mutex try-lock, with no game process running on that PC. On the host it does so only for a commit or resolution that passes the commit rule in `docs/PLAN-LAN-2.md`." 2c adds, **provisional until Q20 steps 18 to 21 are observed:** "A single existing tile file may also be replaced while games run on that PC when none of them has that tile open, with the original copied out first and the replacement a single move. Adding, removing or renaming a file, or changing `region.ini` or `config.bmp`, still requires that no game process runs on that PC." |
-| CLAUDE.md ground rule | "Never write to `.sc4` save files or the Regions folder from the plugin." | unchanged, plus "(The launcher's narrower exception is the ground rule above.)" |
-| CLAUDE.md | Windows-free list `launcher/Frame`, `Handshake`, `Manifest`, `Journal` | adds `Ownership` |
-
-## 4. Deviations from the study
-
-From `docs/research/lan-two-pcs.md` and `docs/research/lan/save-design.md`:
-- **Counters, not generations** (2.5). The two `_saves` counters plus the journals already order every played change per tile; a generation is a third clock that decides nothing new.
-- **Latest save per tile, not an ordered queue** (2.7, "queued pushes in order"). Only the newest file exists on disk; older saves cannot be replayed.
-- **Tile mutex from mirrored status, not leases** (2.4, `_lan\leases`, `launcher.alive`, the plugin dialog). The status files already cross; the plugin's own guard does the rest with no new plugin read path and no protocol.
-- **Conflict copy kept on the PC that made it** (section 10, "archived under `Conflicts\` on both PCs"). One copy loses nothing; a second costs a transfer and disk.
-- **Region layout always from the host** (section 10, "region layout" picker row). Layout edits while apart are rare, and two authorities over `config.bmp` would need a merge; the guest's copy is kept in `Conflicts\` (D12).
-- **Rename under try-lock, not copy under the mutex** (2.6). A large copy under the lock can stall a save; slice 1's verified copy works without it (D5).
-
-## 5. What it touches and what must not break
+## 3. What it touches
 
 **Plugin** (no network code, no thread, no new game call):
-- **P1.** Status key `cityFile=<basename>` while in city state, from `loadedSaveFile` (read at `PostCityInitComplete`). Schema stays 1.
-- **P2.** The `Conflict:` line names the holder's host as well as its pid.
-- **P3.** `.saves` gains `epoch` (16 lowercase hex from `BCryptGenRandom`, set when the file is created, or at the next save of a slice 1 file without one), `dark=1` when the save ran in a dark city (`conflict` set), and `litCount` (the count of the latest save made lit). `SaveCount` lines add `dark=1`. Older parsers ignore the keys.
-- **P4.** `TileLock` and `SaveLock` create their mutexes with the D14 descriptor. `CreateMutexW` failing with `ERROR_ACCESS_DENIED` means "peer present", with a Warning: the tile guard goes dark (`TileLock: ... access denied, peer assumed`); the save lock retries the open at each `Acquire` within its existing timeout, then follows the timeout path (`unlocked=1`) and writes status key `lockDenied=1` for the process lifetime. The save is never refused (section 0). While any local status has `lockDenied=1`, the launcher copies and replaces nothing on that PC (banner `Sync paused: a game here cannot share the save lock. Close SimCity 4 and start it from the launcher.`). Today both fail open (`no same-tile guard`, `saves run unlocked`).
+- **P1.** `.saves` gains `dark=1` when the save ran in a dark city, and `windowFrom` and `windowTo` (UTC FILETIME at the `saving` and `saved` callbacks), both written inside the save lock as today (`SaveHook641.cpp`).
+- **P2.** Tile map `<store>\_saves\<region>\tiles.txt`, `x_z=<basename>` per established tile with a save path, rewritten at each region-view seed when it changes (`ProbeTiles` already calls `GetCitySaveFilePath`). Format in `InstanceStatus`.
+- **P3.** D14 descriptor and access in `TileLock` and `SaveLock`.
+- **P4.** D17, only if gate step 5 shows the loss.
 
-**Launcher, Windows-free** (unit-tested): `Frame.h` (new types), `Manifest.{h,cpp}` (manifest fields, push validation), `Journal.{h,cpp}` (epochs, host journal), new `Ownership.{h,cpp}`: tile classification, commit decision, delivery decision, guard set from statuses, picker suggestion. Inputs are plain structs.
+**Launcher, Windows-free** (unit-tested): `Dbpf` (new), `SyncRules` (new: classification, groups, commit and delivery decisions, difference set, guard set, picker suggestion), `Frame`, `Manifest`, `Journal`.
 
-**Launcher, Windows:** `Net.cpp` (region watch staging, push send and receive, `GET` by hash), `Lan.cpp` (journals, commit, delivery, `Conflicts\`, guard mutexes, live swap), `LanUi.cpp` and `launcher.rc` (picker `IDD_PICKER`, strip, banners).
+**Launcher, Windows:** `Net.cpp` (region watch, staging, push, `GET` by hash), `Lan.cpp` (journals, commit, delivery, pause, `Conflicts\`, guard mutexes, elevation check), `LanUi.cpp` and `launcher.rc` (strip, banners, confirmations, picker).
 
-**Must not break:**
-- Without Host or Join nothing changes from today.
-- The plugin never writes `.sc4` files or Regions; only the game saves cities.
-- The launcher replaces files in Regions only under the amended ground rule (section 3), on either PC.
-- The launcher takes the save mutex only by try-lock, held for milliseconds around renames (D5), so it never stalls a game save.
-- Q4 save lock, Q14 tile guard, Q17 store watch and RegionWatch unchanged apart from P4. A launcher replace looks to them like a peer's save.
-- Slice 1 first sync, mirroring, pairing, reaping and S9 handling unchanged; slice 1 frames keep their numbers and parse as before.
-- `NeighborSnapshot`, `InstanceStatus`, `Frame`, `Handshake`, `Manifest`, `Journal`, `Ownership` stay Windows-free; `make test` and `make test-launcher` pass; `make launcher` has zero warnings.
+**Must not break:** without Host or Join nothing changes; the plugin never writes `.sc4` files or Regions; the launcher replaces files only under the amended ground rule (section 13) and never edits a `.sc4`; it takes the save mutex only by try-lock, at most 5 s per hold, so a game save never times out on it; Q4, Q14, Q17 and Phase 2 mirroring unchanged apart from P3 (and P4); slice 1 frames keep their numbers; Windows-free files stay so; `make test`, `make test-launcher` pass; `make launcher` has zero warnings.
 
-## 6. Protocol
+## 4. Disk and paths
 
-`proto` goes to 2 because the `MANIFEST` format changes. A slice 1 peer is refused at `HELLO` with `refused reason=proto` and the message `The other PC runs an older SC4 Region Sync (protocol 1, this PC 2). Install the same release on both PCs.`; the build check already forces equal builds. New frame types are appended to the enum. All slice 1 rules hold: exact counters, MAC, field formats, drop on any violation.
+- One cap per peer, 8 GiB, over `staging\`, `archive\<peerSiteId>\`, `Conflicts\<peerSiteId>\` and founded files together, plus the free-space floor (size + 10 % + 256 MiB) before any copy. At either limit transfers stop on that PC (not a pause; mirroring continues), pushes get `REJECTED space`, deliveries wait, banner `RegionSyncLAN is full. Delete old copies in <full path>.`
+- Archived copies whose `fh` was a shared base are pruned after 14 days. `Conflicts\` is never pruned.
+- Paths: `<LAN folder>\archive|Conflicts\<peerSiteId>\<region>\<yyyymmdd-hhmmss>-<n>\<name>`, `<name>` passing `IsValidRegionFileName`, the stamp unique, every path `\\?\`-prefixed. Every directory the launcher creates or writes into is refused if it is a reparse point. A failed copy means no replace.
 
-| Type | Direction | Fields | Receiver |
+## 5. Protocol
+
+`proto` 2. A slice 1 peer is refused at `HELLO`: `The other PC runs an older SC4 Region Sync (protocol 1, this PC 2). Install the same release on both PCs.` New types are appended. Slice 1 rules hold: exact counters, MAC, field formats, drop on any violation.
+
+| Type | Dir | Fields | Receiver |
 |---|---|---|---|
-| `MANIFEST` (changed) | H to G | data lines `file.N=name\|size\|hash\|tile\|hostCount\|hostEpoch\|hostState`, the last three empty for unbound files; `info.x_z=count\|simDate\|population\|lastSaveUnix\|cityName` for each `changed` tile | section 7.1 |
-| `HELLO` (changed) | both | adds `live=0\|1` (11.2) | the session is live only when both send 1 |
-| `SYNCED` (changed) | G to H | adds `kept.N=x_z`, `conflict.N=x_z`, `resync=1` after a Re-sync | for every tile neither kept nor in conflict the guest now holds the announced file, and the host journal records its `hash`, `hostCount`, `hostEpoch` as announced in that `MANIFEST` (never the current values); kept and conflict tiles leave the host journal entry unchanged (conflict tiles only raise the host banner); `resync=1` clears every `guestCount` and `guestEpoch`, so the next push adopts them |
-| `CHANGED` | H to G | `region`, `name`, `size`, `hash`, `tile`, `hostCount`, `hostEpoch`, `hostState`, or `layout=1` alone | 7.1 |
-| `GET` (changed) | G to H | adds `hash` | host serves a staged copy with that hash, staging the current file on demand if its hash matches, else `GONE` |
-| `GONE` | H to G | `region`, `name`, `hash` | the guest waits for the newer `CHANGED` |
-| `APPLIED` | G to H | `region`, `name`, `hash` | only for a (name, hash) the host served by `GET` in this session; host journal: `hash`, `hostCount`, `hostEpoch` recorded with that staged copy |
-| `PUSH` | G to H | `region`, `tile`, `name`, `baseFile` and `baseHash` (both empty for a founding), `size`, `hash`, `count`, `epoch` | precheck, then `READY` or `REJECTED` |
-| `READY` | H to G | `region`, `tile` | the guest sends `FILE` |
-| `FILE` (now both ways) | G to H | as slice 1; valid only after `READY` for the push in flight | host writes `staging\push\`, checks hash and content on `last` |
-| `WAITING` | H to G | `region`, `tile`, `reason` (`closed`, `open`, `lock`) | strip only |
-| `COMMITTED` | H to G | `region`, `tile`, `name`, `hash`, `count`, `epoch` | guest journal |
-| `REJECTED` | H to G | `region`, `tile`, `reason` (`hostSaved`, `epoch`, `count`, `space`, `hash`, `bad`, `limit`, `bound`, `base`) | 7.2 |
-| `RESOLVE` (2d) | G to H | `region`, `tile`, `hostCount`, `hostEpoch` (as shown), `count`, `epoch`, `hash` | keep the guest's copy, section 9 |
-| `RESOLVED` (2d) | H to G | `region`, `tile`, `ok`, `reason` | section 9 |
+| `MANIFEST` (changed) | H to G | `file.N=name\|size\|fh\|ch\|tile` (tile empty when unmapped), `base.N=name\|ch\|fh` (host base); 2c: `info.x_z=simDate\|population\|lastSaveUnix\|cityName` for tiles in the set | D1, D16 |
+| `CHANGED` | H to G | `name`, `size`, `fh`, `ch`, `tile`, `group`, or `layout=1` | D1 |
+| `GET` (changed) | G to H | adds `fh`, `resolve` | serve that copy, else `GONE` |
+| `GONE` | H to G | `name`, `fh` | wait for the newer `CHANGED` |
+| `APPLIED` | G to H | `name`, `fh`, `resolve` | only for a copy served this session; base moves |
+| `PUSH` | G to H | `tile`, `name`, `baseFile` (empty for a founding), `size`, `fh`, `ch`, `group` (the saver's file name), `resolve`, `hostFh` (with `resolve=1`) | D3 precheck |
+| `READY` | H to G | `tile` | guest sends `FILE` |
+| `FILE` (both ways) | G to H too | as slice 1, only after `READY` | `staging\push\`, hash and `ch` checked on `last` |
+| `WAITING` | H to G | `tile`, `reason` | strip only |
+| `COMMITTED` | H to G | `tile`, `name`, `fh`, `ch` | base moves |
+| `REJECTED` | H to G | `tile`, `reason` (D3; `confirm`, `changed` for resolutions) | D1, D10, D16 |
+| `DIFFER` | G to H | `differ.N=name\|reason` | host adds to the set, sends `PAUSED` |
+| `PAUSED` | H to G | `differ.N=name\|reason`; none means resumed | the guest's copy of the set |
 
-`hostState`: `same` (hash changed without a host lit save), `changed` (host-changed, D7, including a dark save over an unsent lit one, D11), `dark` (the host's file is a dark save and `litCount` equals `hostCount`).
+`DIFFER` and `PAUSED` are the only carriers of the set. `resolve=1` is valid only for a tile in the set; `hostFh` must equal the host's current `fh`, else `REJECTED changed`.
 
-**Push validation** (host, at precheck; `Manifest.cpp`):
-- `name` and `baseFile` pass `IsValidRegionFileName` and end in `.sc4`; `region.ini`, `config.bmp` and any other name are never valid. Names resolve case-insensitively against the host folder and always take the host's casing.
-- **Bound tile** (the host journal or host `.saves` binds a file to it): `baseFile` must equal that file, else `REJECTED base`.
-- **Unbound tile, `baseFile` set:** `baseFile` must be an existing host file bound to no tile (bound to another tile: `REJECTED bound`), and its current hash must equal `baseHash`, or the host journal's unbound line for it shows `baseHash` as the shared base (the file was only neighbor-written since) and D3 passes. Else `REJECTED base`. On commit the push binds the file (or its renamed successor) to the tile.
-- **Founding** (`baseFile` empty): only when the tile is unbound on the host, the guest journal had no file for the tile at sync, and `name` matches no host file. Else `REJECTED base`.
-- **Rename:** `name` differs from `baseFile` and matches no other host file (D8).
-- Any `bound` or `base` refusal is shown on the guest as `<city>: <reason text>; kept here (Re-sync keeps the host's)` and takes the conflict path (D10), never an overwrite.
-- `count` > journal `guestCount` and <= `guestCount` + 1000, `epoch` equal to the journal `guestEpoch` (adopted when empty). Over the bound: `REJECTED count`, banner "push refused: use Re-sync"; Re-sync resets `guestCount` (`SYNCED resync=1`). Epoch mismatch: `REJECTED epoch`, which the guest treats as a conflict. Exception: a tile the host announced `dark` accepts `guestCount` <= `count` <= `guestCount` + 1000 (D11).
-- Content on `last`: hash equal, the first four bytes `DBPF`, size between 96 bytes and 1 GiB (`kMaxManifestFileSize`). The same content check applies to every `.sc4` the guest receives.
+**Content hash** (`Dbpf.cpp`; every field hostile): file size 96 bytes to 1 GiB; magic `DBPF`, major 1, minor 0 or 1, index 7.0; entry count at most 65536; index size equal to count * 20; index and every entry inside the file, offsets at least 96, u64 arithmetic; no two entries overlap; no duplicate TGI; exactly one record entry, at most one directory entry. `ch` = BLAKE2b-256 over `SC4RS-CH1`, then in index order for every other entry: type, group, instance, size (u32 LE), bytes. On any failure `ch = fh`, one Warning and a banner once: `<file> could not be read as a city file. It still syncs, but if both PCs change it, sync pauses until you choose a copy.` Such a file has no `record` state. The receiver recomputes `fh` and `ch` of every received file and refuses a mismatch.
 
-**Limits and checks** (S9 rules extended):
-- `region` equals the mirrored region (`EqualsNoCase`), else drop. `tile` canonical (`ParseTileKey`) and inside `config.bmp` bounds.
-- `size` <= 1 GiB; `hash` 64 lowercase hex; `count`, `hostCount` canonical decimal, u32; `epoch` 16 lowercase hex; `hostState` and `reason` from the fixed lists.
-- `info` `cityName`: at most 255 bytes, printable ASCII only (anything else shown as `?`); `simDate` canonical decimal, shown through the launcher's own date formatting; `population` clamped as snapshot values (`5f10d44`).
-- One push in flight per connection; a `PUSH` for the tile in flight replaces it (older staging deleted); another tile's `PUSH` before the first ends: drop.
-- State checks, drop and log: `READY`, `COMMITTED`, `WAITING`, `REJECTED` for a tile with no push in flight; `FILE` G to H without `READY`; `APPLIED` for a (name, hash) not served by `GET` in this session; `RESOLVE` for a tile not in the conflict set.
-- Replay: session keys and exact counters as slice 1; across sessions the count rules above, and `RESOLVE` must echo the `hostCount` and `hostEpoch` the host announced.
-- The worker interleaves `FILE` chunks of both directions with mirror and `PING` frames, one chunk per transfer per loop, so a 1 GiB transfer cannot starve the 20 s liveness timer.
+**Validation and limits:** `name` and `baseFile` pass `IsValidRegionFileName` and end in `.sc4` (never `region.ini`, `config.bmp`); names resolve case-insensitively to the host's casing; `tile` canonical and inside `config.bmp` bounds; `DBPF` magic and size cap; at most 1024 `differ` lines naming manifest files; `cityName` 255 bytes printable ASCII; out-of-state frames dropped and logged. The worker interleaves `FILE` chunks of both directions with mirror and `PING` frames.
 
-## 7. State machines
+## 6. UI strings
 
-### 7.1 Host to guest delivery (2a)
+**Host is the source of truth (guest launcher):**
+- Join, before the first sync, OK/Cancel: `<host> is the source of truth for <region>. This PC takes its region layout, and when both PCs changed the same city, <host> decides. Re-sync keeps <host>'s copy of every city saved on both PCs; this PC's copy goes to RegionSyncLAN\Conflicts first. Changes made on either PC still reach the other.` (2c replaces the third sentence with `You choose which copy to keep in Resolve; Keep all from <host> is the default.`)
+- Strip while mirroring: `Mirroring <region> with <host> (source of truth)`.
 
-Host:
-1. **Detect.** A change handle on `Regions\<region>` plus the existing `_saves\<region>` handle, 1 s debounce.
-2. **Stage.** A changed file is staged (D5) when its tile is not open on the host (D15), even while other games run there (A7, Q20 step 12). The city the host just saved is therefore staged after the player leaves it (2c lifts this). Each staged copy records the host `litCount` and epoch at staging. The connect-time `MANIFEST` staging stays as slice 1.
-3. **Classify** (`Ownership`): hash equals the journal: nothing. A name added or removed, or `region.ini` or `config.bmp` changed: `CHANGED layout=1`. Else `CHANGED` with `hostState`.
-4. **Serve.** Keep the staged copy per announced (name, hash) until `APPLIED`, a newer `CHANGED` of that name, a commit of that name (D6), or disconnect. A staged lit version superseded by a dark save follows D11.
+**Confirmations on the losing PC:** guest Re-sync `Re-sync replaces N cities on this PC with <host>'s copies. This PC's copies go to RegionSyncLAN\Conflicts first.` OK/Cancel. Host: `Replace <city> (<x>,<z>) on this PC with <guest>'s copy? This PC's copy goes to RegionSyncLAN\Conflicts.` Yes/No.
 
-Guest, on `MANIFEST` diff or `CHANGED` for a tiled file (`Ownership::DecideDelivery`):
+**Other:** strip `pushing TuggersVille 4/18 MiB`, `TuggersVille sent 14:02:11`, `BumperVille open on <PC>, waiting`; guard banners `BumperVille (4,6) is open on <peer>: this copy is dark; saving it pauses sync until you choose a copy` and `BumperVille (4,6) is also open on <peer> (dark there)`; pause (D16), map (D2), too large (D5), elevation (D14), full (section 4), unreadable file (section 5).
 
-| Guest state of the tile | Action |
+**README text:** "Pairing makes the other PC part of your region. Saves travel both ways: a city saved on one PC replaces the copy on the other, unless that PC has the city open (then it waits) or saved it too (then sync pauses for the whole region until you choose a copy). The host is the source of truth: it decides ties, its region layout wins, and Re-sync keeps its copies. The copy that loses is kept in RegionSyncLAN\Conflicts. Deals and connections between cities can revert in three cases: (1) while the PCs are apart, both PCs saved cities next to the same unplayed city: the host's version of that city wins; (2) while apart, you changed a deal or connection toward a city that was saved on the other PC; (3) a city that stayed open while its unplayed neighbour was updated can write its older view of that neighbour back when it saves. Files travel unencrypted on your network."
+
+## 7. Journal and upgrade
+
+**Journal**, one format both sides: guest `journal\<hostSiteId>\<region>.txt`, host `journal\<guestSiteId>\<region>.host.txt`. Lines `f.N=name|ch|fh|tile` (shared base), `d.N=name|reason|group` (the set; the host's is authoritative), host only `foundings=N`. Written with `WriteAtomic` after every change; a failed write is an Error and a banner. One builder, one strict parser.
+
+**First connect after upgrading** (or no host journal): the guest's slice 1 `baseHash` is the base `fh`; the base `ch` is that of whichever side still has that `fh`; then D1 decides. A file with no slice 1 line whose copies differ is `base`. **Downgrade** to slice 1: it ignores `*.host.txt`, `tiles.txt` and the new `.saves` keys, rejects the new guest journal and treats it as empty, so guest-saved tiles show "not sent" and are kept.
+
+## 8. Picker (2c)
+
+On the guest, `Resolve` (enabled while the set is non-empty). One row per tile in the set (its group listed in the tooltip); layout is never a row; a row whose tile is open on either PC is disabled (`open on <PC>`). Suggestion is D10's default; for `both` the later sim date each PC reports, tie host, labelled `suggested from the dates each PC reports`. Decide later keeps the pause. When the last row resolves, the pair resumes.
+
+Title `Cities that differ between PCs`. Text `Sync between <host> and <guest> is paused because these cities differ. Choose which copy to keep for each; sync resumes when all are chosen. The other copy goes to RegionSyncLAN\Conflicts on the PC that has it; nothing is deleted.` Columns `City`, `Tile`, `Why`, `<host>`, `<guest>`, `Keep`; `Why` cells `saved on both PCs`, `dark save on <PC>`, `no shared base`; cell `pop 50,037, Jun 2153, saved 14:02`, tooltip `(that PC's clock)`. Buttons `Keep all from <host>`, `Keep all from <guest>`, `OK`, `Decide later`.
+
+## 9. Trust and limits
+
+Slice 1 pairing trusted the host with the guest's game. Slice 2 newly allows:
+- A paired guest's files replace host files under D1 and D3: any host city the host has not really saved since the shared base. A host-changed city is replaced only after the host's player confirms (D10).
+- Because `ch` excludes them, a paired peer can change the regional record and the directory of any city file whose content matches, without confirmation. The launcher does not validate them.
+- The guest can found cities on empty host tiles (16 per pairing) and rename its cities, with no game running on the host (D8). It cannot touch `region.ini`, `config.bmp`, non-`.sc4` names or unmapped files, or put two files on one tile.
+- Saves cross the network unencrypted.
+- A guest can hold host tile mutexes through its status files, so host cities open dark (D13).
+- Either side can keep the pair paused indefinitely (D16).
+- A malicious paired guest can hand the host's 2003 loader a hostile file, as a malicious host already can the guest. `Dbpf` reads only the index; the host cannot check that a file is a sound city or sits on the tile claimed.
+- The reverts in D1.
+
+Pairing is the trust boundary: the peer is the player's own PC. README and `docs/DESIGN.md` say this in plain words.
+
+## 10. Experiments: Q21 (slice 2)
+
+New question in `docs/OPEN-QUESTIONS.md`, one Observed slot per step. Loopback unless marked, then two PCs (wired, files up to 50 MiB). Logs named here (`Commit`, `Deliver`, `Record`, `Guard`, `Differ`) are added by this plan.
+
+**2a:**
+1. **GOG non-elevated [2 PCs] (A16).** The non-elevated launcher starts the GOG exe via `RunAsInvoker`. Pass: the instance starts, `SaveLock: ... opened`. Fail: error 740; the owner decides before 2b ships (D14 would block replaces on that PC).
+2. **Guard (A13).** Host in BumperVille; guest opens it. Pass: `Guard: holding tile (4,6) for <host>` within 2 s of the status landing, guest `TileLock: ... peer=1`, both banners. Reverse roles. A peer status for another region or an out-of-bounds tile holds nothing.
+3. **Release.** End the guest game: `Guard: released` within 2 s of the reap. Kill the guest launcher: released after 10 minutes (plus or minus 30 s).
+4. **Descriptor (A14).** An elevated PowerShell creates the tile mutex with the D14 descriptor; a medium game opens TuggersVille: `peer=1`, no Warning. With a default mutex: Warning `access denied`, city dark.
+5. **Name case (A15).** Status `region=` against the folder name on both PCs, mixed-case region: byte-equal, step 2 holds.
+
+**2b:**
+6. **Elevation rule.** An elevated SimCity 4 on the guest: a host save is not delivered, banner names SimCity 4; it lands after that game exits. Same with the launcher elevated.
+7. **Host save beside a running guest game (A7, A17).** Guest in TuggersVille; host saves DumpsVille and BumperVille. Pass: both `Deliver ... applied` within 5 s / 15 s, equal hashes, new mtimes; the host's neighbor-written TuggersVille waits (`open`) and is dropped when the guest saves it. Dumps of a delivered city equal on both PCs.
+8. **Guest push and groups.** Guest TuggersVille saves (neighbor-writing DumpsVille and BumperVille). Pass: one group, `Commit (6,6)` before both record-only members; with TuggersVille open on the host, the whole group waits (`WAITING group`). The host's unchanged copies are never sent back.
+9. **Record-only across PCs.** Q20's case through the launchers: guest TuggersVille cancels a deal with closed BumperVille and saves; open both on the host: no deal. Reverse direction. Then revert (a): apart, guest TuggersVille cancels its deal with closed BumperVille and host DumpsVille saves (both neighbor-write BumperVille); Join: host's BumperVille kept on both, and the cancelled deal is back on reload (as documented). Connected, the same within seconds: later arrival wins, deal state follows it.
+10. **Revert (b).** Apart, guest TuggersVille cancels the deal, host really saves BumperVille; Join. Pass: `Record City - BumperVille.sc4: dropped, saved here`, host's BumperVille delivered, the deal back on reload.
+11. **Pause.** Both save TuggersVille apart; Join. Pass: `Differ (6,6) both` with its group, banners, no city file or snapshot crosses (a host month tick gives no guest `Pull (store change)`), statuses still cross; a guest DumpsVille save made meanwhile waits. Re-sync: confirm text, only (6,6) and its group touched, guest copies in `Conflicts\`, both PCs byte-identical for the group, empty `PAUSED`, then DumpsVille pushes.
+12. **Dark save.** Step 2's dark guest city saved: `dark=1`, `Differ (4,6) dark`, pause; Re-sync keeps the host's lit copy. Then a dark host save with a lit guest save: Re-sync asks the host to confirm, the guest's lit copy wins.
+13. **Mapping and layout class.** Delete the host's `tiles.txt`, guest saves a city: `WAITING map` until the host enters the region view. A push naming a file mapped to another tile: `REJECTED base`; Re-sync keeps the host's file and moves the guest's name to `Conflicts\` with no game running. Founding on an occupied tile: `base`; on an empty tile with no host game: committed, `foundings` incremented. Rename on either PC: one file per tile, old name archived, only with no game on the receiver.
+14. **Copies under the lock (A6).** Host BumperVille saves five times 30 s apart while the host launcher stages its neighbours. Pass: five `ok=1`, no `SaveLock` timeout, every hold under 5 s, staged hashes match. A file over the 5 s hold: the too-large banner, nothing sent.
+15. **Disconnect and crash.** A log tail runs `Stop-Process` on the host launcher at the first `FILE` progress line (push and delivery) and at `Commit ... moving`. Pass: no part in Regions, no missing file, the re-push converges (`fh` equal), equal hashes.
+16. **Disk and hostile input.** `fsutil file createnew` in `Conflicts\<peer>` to within 1 GiB of the cap: `REJECTED space`, full banner, nothing replaced. S9's unauthenticated cases again; authenticated hostile frames and DBPF indexes in `make test-launcher`.
+17. **Failed save (A11).** Hold `City - TuggersVille.sc4` open from PowerShell (`'Read', 'Read'`), Ctrl+S: `ok=0`, hashes unchanged, nothing sent.
+18. **Layout file (A12).** Hash `region.ini` before and after a city exit on each PC: equal, no `layout=1`.
+19. **Live swap on the build.** Gate step 6 (c) to (e) through the launcher (`Deliver (4,6) retry error=32`, then `applied`).
+20. **Stale neighbour record (A18, only if D17 applies).** Gate step 5 on the P4 build, then across PCs. Pass: `Reload (4,6) before save`, the deal and road survive; with Y's own link changed, Y's write wins and is logged.
+21. **Latency and soak.** `SaveLock: released` to `COMMITTED` or `APPLIED`, target 15 s, `w32tm`-synced clocks. 60 minutes, a city on each PC, saves every few minutes, region-view round trips, one deal changed each way: every save delivered or committed, no differences, no Warning.
+
+**2c:**
+22. **Picker.** Both save TuggersVille apart; Join. Keep guest's: host dialog; No keeps the pause (`REJECTED confirm`); Yes puts the host's group in the host's `Conflicts\`, byte-identical group, empty `PAUSED`. Keep host's ends with `APPLIED resolve=1`. A host save between showing and OK: `REJECTED changed`. A dark row suggests the lit copy.
+
+## 11. Assumptions
+
+| # | Assumption | Basis | Step |
+|---|---|---|---|
+| A1 | A neighbor write changes only the record, directory and header fields, keeps the size; every save parses | one diff of two pairs (Q20) | Q20 2 |
+| A2 | A record-only replace with equal `ch` loads as the game's own neighbor write would | Q20 diff | Q20 3 |
+| A3 | The deal state of a pair depends on both files of the group, so a record-only file needs its saver's file | Q20 | Q20 3 |
+| A4 | Connections across an edge are carried by the record entry alone | record-connections-641 | Q20 4 |
+| A5 | An open neighbour's save does (or does not) write back a stale record of a closed city | untested | Q20 5 |
+| A6 | A copy under the save mutex, at most 5 s, never fails a save | Q4 hold times | Q20 6a, Q21 14 |
+| A7 | Replacing a tile file not open in a running game is as safe as a local peer's save | Q4, Q15, Q17 | Q20 6c, Q21 7 |
+| A8 | A game holds its open city's file with read sharing only, so a move over it fails with error 32 | save-641, S4 | Q20 6b |
+| A9 | A city load reads its own file and its neighbours' records (Q20); a file swapped during the load gives the old or the new copy, never a mix or a crash | Q20, Q17 | Q20 6d, 6e |
+| A10 | Region-view founding, rename, delete and obliterate do (or do not) take the save mutex | unknown | Q20 7 |
+| A11 | A failed save leaves the previous file in place | save-641 step 8 | Q21 17 |
+| A12 | `region.ini` is rewritten on city exit with the same bytes | Q4 saw a write | Q21 18 |
+| A13 | The plugin treats a launcher-held tile mutex like an instance's | `TileLock::Open` reading | Q21 2 |
+| A14 | A medium game opens a D14 mutex made by an elevated process | Windows docs | Q21 4 |
+| A15 | `GetDirectoryName()` returns the folder name in on-disk case | code reading | Q21 5 |
+| A16 | The GOG exe starts from a non-elevated launcher with `RunAsInvoker` | fix in tree, S10 | Q21 1 |
+| A17 | A city saved on one PC loads identically on the other | S10 shared vtables | Q21 7 |
+| A18 | `ReloadCity` of a closed neighbour in city view, before a save, keeps that city's deals and connections | Q3 (no deals checked) | Q21 20 |
+
+Verified by code reading: both `.saves` callbacks run inside the save lock scope (`SaveHook641.cpp`), so D5's same-hold read sees `dark` and the save window.
+
+## 12. Supersedes and ground rules
+
+| Where | Becomes |
 |---|---|
-| guest-changed (D7) and `hostState=changed` | conflict (D10) |
-| guest-changed, `hostState` `same` or `dark` | no delivery; the push supersedes it |
-| latest save dark (D11) | copy to `Conflicts\`, then deliver |
-| any other | `GET`, verify into staging, then pending |
+| PLAN-LAN 2, save mutex used only by the guest around swap renames | used by either launcher by try-lock only, for every copy out of Regions and every replace |
+| PLAN-LAN 3, `file.N=name\|size\|hash\|tile` | section 5, `proto` 2 |
+| PLAN-LAN 4, "the copy uses no save mutex"; "only the counter means changed here"; journal guest only | D5; D1 and D7; section 7 |
+| PLAN-LAN 8, "the host's Regions folder is never written" | section 9 |
+| PLAN-LAN 9, writes into Regions only on the guest with no game process | the amended ground rule below |
+| PLAN-LAN, Not in slice 1: cross-PC guard; suppression of foreign neighbor writes | 2a (D13); not needed, record-only updates travel (D1) |
+| PLAN-LAN, slice 2 hooks: "`archive\` becomes `Conflicts\`" | `archive\` keeps replaced originals; `Conflicts\` keeps losing copies |
 
-A pending delivery is swapped when no SimCity 4 process runs on the guest (slice 1 swap path and its "swap pending, close SimCity 4" state), re-decided inside the lock (D6), original copied to `archive\` before the lock (D5), single move. Then journal (`file`, `baseHash`, `baseCount` = local `litCount`, `epoch`) and `APPLIED`. Unbound files skip the first three rows. `layout=1` runs the slice 1 `SELECT` sync under the same no-game condition.
+**CLAUDE.md ground rule, proposed text** (replaces "The launcher may replace whole files in Regions only on the guest, ..."): "The launcher may replace whole files in Regions on either PC, only from verified staging, with the original archived or copied to `Conflicts\` first, under the save-mutex try-lock, only when no game on that PC has that tile open and neither the launcher nor any SimCity 4 process there runs elevated; adding, removing or renaming a file, or changing `region.ini` or `config.bmp`, also needs no game process on that PC. While the pair is paused it replaces only to apply a resolution the losing PC confirmed. It copies out of Regions only under the same try-lock, reads a `.sc4` only to hash it, and never edits one." The "tile open" clause is provisional until Q20 step 6 passes; if it fails, it becomes "with no game process running on that PC". Windows-free list adds `launcher/Dbpf` and `launcher/SyncRules`. The plugin rule "Never write to `.sc4` save files or the Regions folder" is unchanged (P1, P2 write into the store).
 
-**Guest neighbor writes:** a tiled file whose hash differs from `baseHash` with no lit save is fetched again with `GET hash=<journal baseHash>`; a `GONE` means the host moved on and its `CHANGED` follows.
+## 13. Tests
 
-### 7.2 Push and commit (2a)
+`make test`: `tiles.txt`, `dark` and the save window round trip and strict parse. `make test-launcher`: `Dbpf` (section 5, each bound and fallback reason including index size, overlap and duplicate TGI; `ch` stable under record, directory, header and offset changes, changed by any other entry); every new frame and drop rule; journal round trip and the upgrade rule; `SyncRules`: each D1 case, groups (held, paused, resolved together), convergence, host base on disagreement, unexplained mismatch, D3 conditions one at a time, D8 cases and the lasting founding cap, D10 defaults per reason, D16 set behaviour, D13 guard set limits; disk cap and pruning. Windows-only behaviour is covered by Q21.
 
-Guest, per tile:
-```
-idle --(lit save: litCount > baseCount, count == litCount, dark=0, lastOk=1, writer ours, not open here)--> stage (D5)
-stage --(verified, .saves unchanged)--> PUSH        (.saves changed: stage again)
-PUSH --READY--> FILE --> waiting --COMMITTED--> idle (journal)
-                            \--WAITING--> waiting (strip: "waiting for <host>: close SimCity 4 there")
-                            \--REJECTED hostSaved|epoch--> conflict (D10)
-                            \--REJECTED space|hash--> retry in 60 s, then 5 min; banner
-    --REJECTED count|bad|limit--> stop for the tile, banner, Error in lan.log
-any --disconnect--> idle (pushed again after the next SYNCED)
-```
-- `lastOk=0`, or `lastOk` missing while the writer is dead: not pushed; "save failed here, not sent".
-- Tiles in the writer's `saveCountFailed` list: never pushed (slice 1).
-- `litCount > baseCount` with `count > litCount` (a dark save over an unsent lit one): never pushed, conflict path (D11).
-- For a tile announced `hostState=dark`, the guest pushes its current file even when unchanged (D11).
-- `REJECTED bound` or `base`: conflict path with the section 6 message.
+## 14. Operator steps
 
-Host:
-1. Precheck: section 6 validation, free space (11.1), D3 1. Else `REJECTED`. Then `READY`.
-2. `FILE` into `staging\push\fNNNN.part`; hash and content on `last`.
-3. Idempotent re-push (hash equal to the host file): journal and `COMMITTED`, no move.
-4. Wait for D3 2 (`WAITING closed`, strip "commit pending, close SimCity 4"). Then, before the lock: copy the original to `archive\` (or a dark host file to `Conflicts\`, D11), verified (D5).
-5. Try-lock, re-run D3 (D6), verify the original and staging unchanged, single move of staging into place, rename every other file of the tile into `archive\` (D8), release. Failure: keep staging, `WAITING lock`, retry on the timer.
-6. Host journal through `WriteAtomic` (`hash`, `guestCount`, `guestEpoch`, `file`; `hostCount` = host `litCount`). On failure: Error, banner, no `COMMITTED` (step 3 finishes it on the re-push).
-7. `COMMITTED`; mark older staged copies of that name gone.
-
-### 7.3 Reconnect and upgrade
-
-On connect the `MANIFEST` diff applies 7.1 and 7.2 to every tile: one-sided changes are delivered or pushed without asking, two-sided changes are flagged (D10). Slice 1 S8's offline case becomes a push.
-
-**First connect after upgrading from slice 1.** The host journal does not exist, so every tile with a host `.saves` count > 0 is host-changed (section 8). A tile the guest holds "not sent" from slice 1 and the host has ever saved therefore becomes a conflict: the guest's copy goes to `Conflicts\`, the tile stays in the guest's Regions flagged "saved on both PCs, kept here", and the host's file is untouched. A not-sent tile the host never saved is pushed. Nothing is overwritten on either PC. The banner reads `N cities saved on both PCs are kept here, not sent (Re-sync keeps the host's; copies in RegionSyncLAN\Conflicts)`.
-
-### 7.4 Cross-PC tile guard (2b)
-
-D13 on both launchers, on the 250 ms timer after each status mirror change. Lines: `Guard: holding tile (x,z) for <peer>`, `Guard: released tile (x,z)`. A race where both PCs open one tile within the mirror latency leaves both lit; both launchers show `BumperVille (4,6) is open on both PCs` and the counters turn the later push into a conflict. When the second opener's local status has `conflict=1`, its launcher shows `BumperVille (4,6) is open on <peer>: this copy is dark, its saves will not be sent` and the other shows `BumperVille (4,6) is also open on <peer> (dark there)`.
-
-### 7.5 Live swap (2c)
-
-2c replaces the "no SimCity 4 process" wait in 7.1 and 7.2 step 4 with "the tile is not open here" (D15), for one existing tile file only, and lets the saving PC stage right after `lastOk=1`. Sequence: copy the original to `archive\` (D5), try-lock, re-check open-here and re-decide (D6), verify, single move, release. A city that loads in between holds its file with read sharing only, so the move fails with error 32 (A3) and is retried; after 20 failures it waits for that tile's status to change.
-
-| Situation on the receiving PC | Replace? | Basis |
-|---|---|---|
-| tile open in a city there | never | rule above; A3 backstop |
-| tile adjacent to a city open there | yes | a local peer's save does the same (Q4, Q15); A2 |
-| tile in a region view there | yes | Q17 step 4 (peer save); A4 |
-| a city loading there | only before its `LoadCity` open | A3, A5 |
-| a save in progress there | no: the try-lock fails | Q4 |
-| rename, new or removed file, `region.ini`, `config.bmp` | only with no game process | slice 1 path |
-
-## 8. Journals and counters
-
-**Guest** `journal\<hostSiteId>\<region>.txt`: `x_z=baseFile|baseHash|baseCount|epoch` per tile, plus `u.N=name|hash` for each manifest `.sc4` bound to no tile (D2).
-- Guest-changed: `litCount > baseCount`, an epoch mismatch, a count below `baseCount`, or `saveCountFailed` (D7).
-- Set after a swap or delivery (`baseCount` = local `litCount`), after `COMMITTED` (`baseFile` = the committed name, `baseHash`, `baseCount` = pushed count; its `u.N` line removed), after a resolution.
-
-**Host** `journal\<guestSiteId>\<region>.host.txt`, new: `x_z=file|hash|hostCount|hostEpoch|guestCount|guestEpoch` per bound tile, plus `u.N=name|hash` for each unbound `.sc4` with the hash both PCs held at the last `SYNCED` or `APPLIED` (the shared base).
-- `file`, `hash`: the version both PCs hold. `hostCount`, `hostEpoch`: the host save count of that version, as announced in the `MANIFEST` or `CHANGED` that `SYNCED` or `APPLIED` answered. `guestCount`, `guestEpoch`: the last commit.
-
-`Journal.cpp` gets `BuildHostJournalText` and `ParseHostJournalText` with the same strict rules. Written with `WriteAtomic` after every change; a failed write is an Error and a banner.
-
-**Missing or unreadable.** Host: every tile with a host `.saves` count > 0 is host-changed, so a guest-changed tile becomes a conflict, never an overwrite; banner `host journal missing: tiles saved on both PCs are kept apart`. Guest: slice 1's unknown-folder path stays.
-
-**Clocks** are never compared across PCs for decisions; `lastSaveUnix` is display only.
-
-## 9. Picker (2d)
-
-**When.** On the guest, after the `MANIFEST` diff and whenever a tile is flagged, once neither PC has that tile open. Slice 1's modal rules apply. The host shows a banner.
-
-**Rules:**
-- One row per flagged tile; layout is never a row (D12).
-- The suggestion is the later sim date as each PC reports it (a tie suggests the host), labelled `suggested from the dates each PC reports`.
-- **Keep host:** the guest copies its current file to `Conflicts\` if it differs from the copy already there, then the host's copy replaces it (7.1, D9).
-- **Keep guest:** `RESOLVE` with the shown `hostCount` and `hostEpoch`. If the host saved since: `RESOLVED ok=0 reason=changed`, asked again. Otherwise the host copies its file to its `Conflicts\`, adopts the pushed `epoch` and `count` as `guestEpoch` and `guestCount`, and accepts the guest's `PUSH` for that count without D3 1. The `PUSH` that follows passes the section 6 binding rule as usual.
-- **Decide later:** rows stay flagged, the banner stays.
-- Re-sync becomes "Keep all from host" for every flagged and not-sent tile.
-- At most 3 resolutions per tile per session (`REJECTED limit`).
-
-**Wording.** Title `Cities saved on both PCs`. Text `These cities were saved on both <host> and <guest> since they last synced. Choose which copy to keep. The other copy stays in RegionSyncLAN\Conflicts on the PC that saved it; nothing is deleted.` Columns `City`, `Tile`, `<host>`, `<guest>`, `Keep`; cell `pop 50,037, Jun 2153, saved 14:02 (3 saves)`, tooltip `(that PC's clock)`. Buttons `Keep all from <host>`, `Keep all from <guest>`, `OK`, `Decide later`. Guest banner `2 cities saved on both PCs: choose in Resolve`; host banner `2 cities wait for a choice on <guest>`.
-
-## 10. Failure handling
-
-| Case | Outcome |
-|---|---|
-| Disconnect mid-push or mid-delivery | The receiver deletes the part. The guest pushes again after the next `SYNCED`; the `MANIFEST` diff carries deliveries. |
-| Host crash after the move, before `COMMITTED` | The file is in place, the journal old. The host sees a hash change without a lit save (`same`). The guest re-pushes; the idempotent path journals it. |
-| Host crash before the move | Staging deleted at start; the guest re-pushes. |
-| Crash mid swap (2a) | Slice 1 rollback. 2c: the target is old or new, never missing (D9). |
-| Both save one tile (2a, or a 2b race) | `REJECTED hostSaved`; D10. |
-| Rename or founding | Waits for no game on the receiving PC; D8 keeps one file per tile. |
-| Push base or binding mismatch | `REJECTED base` or `bound`, conflict path with the reason shown (section 6). |
-| Disk full or caps reached | 11.1: sync pauses on that PC with a banner naming the folder. Nothing is replaced without its copy, nothing is dropped. |
-| `lastOk=0`, `saveCountFailed` | Never pushed or replaced on that PC; flagged. |
-| Epoch reset (store deleted, new `StoreDirectory`) | Changed here (D7): pushed if the other side is unchanged, else a conflict. |
-| Dark save on either PC | D11. |
-| Guest edits region layout | D12. |
-| Mixed elevation | The tile guard fails closed (dark city, Warning). The save lock degrades: after its timeout the game saves unlocked with a Warning and `lockDenied=1`, and the launcher then copies and replaces nothing on that PC (P4). An elevated launcher only logs a Warning (D14). |
-| `LiveSync=0` | 11.2. |
-
-## 11. Disk, settings and UI
-
-### 11.1 Disk
-
-- Free space >= size + 10 % + 256 MiB before any staging, archive copy or conflict copy, on both PCs. Otherwise `REJECTED space` (push) or the delivery waits, with a banner.
-- Copies made for a peer go under `archive\<peerSiteId>\` and `Conflicts\<peerSiteId>\`, each capped at 8 GiB per peer.
-- No copy is pruned by count. A copy that exists nowhere else (every `Conflicts\` copy, and an archived version the journals never show as held by both PCs) is kept until the player deletes it. An archived version whose hash the journal shows both PCs hold or held as a shared base, and archived neighbor-written files, are deleted after 14 days.
-- At the cap, or below the free-space floor, sync pauses on that PC: no staging, copy or replace, pushes get `REJECTED space`, deliveries wait, and the banner reads `Sync paused: RegionSyncLAN is full. Delete old copies in <full path of the folder>`. Nothing is dropped; sync resumes once space is freed.
-- At most 3 resolutions per tile per session (section 9).
-
-### 11.2 Settings
-
-- `[Lan] LiveSync=1`. `LiveSync=0` on either PC, exchanged in `HELLO`, gives slice 1 behaviour for the session on both: no `CHANGED`, `PUSH` or `RESOLVE`; the host journal is neither read nor written; the guard holds no mutex; guest saves stay "not sent" and the guest journal is updated only by the slice 1 swap. A stale host journal later only makes more tiles host-changed, never fewer.
-- Downgrade to a slice 1 build: it ignores `*.host.txt`; its strict parser rejects the five-field guest journal and treats it as empty, so every tile the guest ever saved shows "not sent" and is kept. Nothing is overwritten. `.saves` keys added by P3 are ignored and dropped at the next slice 1 save, which reads as an epoch change after re-upgrading (D7, conflict path).
-- Test-only, undocumented, in the shipped build: `DebugCommitPauseMs=0` (pause between move and `COMMITTED`) and `FreeSpaceFloorMiB=256`.
-
-### 11.3 UI
-
-- **Strip:** guest `pushing TuggersVille 4/18 MiB`, `TuggersVille sent 14:02:11`, `waiting for <host>: close SimCity 4 there` (2a) or `BumperVille open there` (2c); host `BumperVille sent to <guest> 14:03:40`, `commit pending, close SimCity 4`. The tooltip lists pending, waiting and flagged tiles.
-- **Banners added:** saved on both PCs; swap or commit pending; tile open on both PCs, naming the tile (2b); host journal missing; push refused; save failed here; RegionSyncLAN full; access denied on a mutex.
-- **Rows:** no new toolbar button until 2d adds `Resolve` (guest, enabled when tiles are flagged).
-
-## 12. Trust model
-
-Slice 1 pairing trusted the host with the guest's game. From 2a, pairing also lets the guest write city files into the host's Regions: a paired guest can replace any host city file the host has not changed since the shared base. That is what sync means. It cannot create case-variant duplicates, touch `region.ini`, `config.bmp` or non-`.sc4` names, bind one file to two tiles, overwrite a host-changed tile, push past the count bound, or skip the archive copy and disk caps of 11.1; every pushed file must carry the `DBPF` magic and fit the size cap. The host cannot check that a pushed file is a sound city or belongs to the tile it claims, because the launcher has no `.sc4` parser and slice 2 adds none; a malicious paired guest can hand the host's 2003 loader a hostile file, as a malicious host already can the guest. The paired peer is the player's own PC, and pairing is the trust boundary. README and `docs/DESIGN.md` must say this in plain words.
-
-## 13. Operator steps
-
-1. Create `## Q20` in `docs/OPEN-QUESTIONS.md` with the steps of section 15 and empty Observed slots, before any work starts.
-2. Run Q20 step 1 on the current build (design-freeze gate). Step 2 (740 fix, elevation) is the first step of 2a.
-3. Build once and deploy the same build to both PCs (`make deploy`, then copy the dist to the second PC); the build and `proto` checks refuse mixed builds.
-4. Back up `Regions\<region>` on both PCs.
-5. First connect after the upgrade: close SimCity 4 on both PCs (7.3).
-6. On completion of each increment, update the docs in section 17.
-
-## 14. Tests (`tests/launcher_lan.cpp`)
-
-- Frames: every new type round trip; unchanged slice 1 frames still parse; drop rules for out-of-state frames, `FILE` G to H without `READY`, a second push, `APPLIED` without its `CHANGED`, bad `reason` or `hostState`; a `proto` 1 `HELLO` refused with the section 6 message.
-- Fields: tile bounds, `count` canonical and u32, `epoch` format, `cityName` ASCII and cap, `simDate` format, the `|` split.
-- Push validation: each section 6 rule alone, including `region.ini`, `config.bmp`, a non-`.sc4` name, case-only matches resolving to the host's casing, a rename onto an existing name; binding: bound tile with matching and wrong `baseFile`, unbound tile binding an unbound file (hash equal, and hash moved by a neighbor write with the shared base matching), `baseFile` bound to another tile (`bound`), founding with the tile bound, with a guest base, and with a colliding name; count bounds (equal, +1, +1000, +1001), the `dark` exception; `DBPF` magic and size bounds.
-- `MANIFEST` with the new columns and `info` lines; a slice 1 line is refused.
-- Journals: guest and host round trip including `u.N` lines, strict parse, a slice 1 guest line adopting an epoch, a missing host journal making saved tiles host-changed.
-- Push trigger: `count > litCount` (dark over unsent lit) goes to conflict; `hostState=dark` only when `litCount == hostCount`; `APPLIED` for a hash served by an on-demand `GET`; an accepted `RESOLVE` adopting the epoch; the guest's first-save binding from `.saves` (`prevFile` or `file` matching an unbound line, and not matching); legacy `.saves` read (no `litCount`, no `epoch`).
-- Pruning: an archived version held by both PCs is prunable by age, one that exists nowhere else is not; the cap pauses sync.
-- `DecideCommit`: each D3 condition alone; idempotent re-push; rename and founding with D8 archiving every other file of the tile; epoch mismatch on either side; count below base; a host neighbor write between base and push (must commit); a host dark save (commits after the conflict copy).
-- `DecideDelivery`: each 7.1 row; a tile with `cityFile` set in a status but no counted save (open here, pending); re-decision inside the lock dropping on a moved count, epoch or journal hash (D6); a dark latest save.
-- Guard set (`Ownership`): peer `city` with `conflict=0` held, `conflict=1` not held, status gone released, wrong region ignored.
-- Picker suggestion; `RESOLVE` with a stale `hostCount` or `hostEpoch` refused; the resolution limit.
-- `ParseInstanceStatus` with `cityFile` and `lockDenied`; `ParseSaveCounter` with `epoch`, `dark`, `litCount`, and without them.
-
-Windows-only, tested by hand in Q20: change handles, staging and verify, mutex descriptors and access-denied paths, swaps and moves, free-space checks, the picker dialog.
-
-## 15. Experiment: Q20
-
-Region New York: BumperVille (4,6), TuggersVille (6,6), DumpsVille (4,4). Back up both region folders. Hashes as in Q18. Loopback (one box, `-LoopbackGuest 2`) first, then two PCs. Loopback limits: both sides share one session, so tile and save mutexes are shared and "no SimCity 4 process on that PC" sees every instance; steps marked **[2 PCs]** need two PCs. `lan.log` lines named below are added by this plan; `H8` is the first 8 hex of a hash. Timing: loopback figure first, two PCs (wired, files up to 50 MiB) second. No step uses a build that skips a check.
-
-**Gate** (the only step on the current build, before any slice 2 code):
-
-1. **Discarded neighbor write keeps deals (section 1).** One PC, two instances, a water deal across the TuggersVille-BumperVille edge. Save TuggersVille, copy its file aside. Save BumperVille (neighbor-writes TuggersVille). `RegionSyncDump` in both. Exit both; with no game running, copy the saved-aside TuggersVille file back over the neighbor-written one from PowerShell. Reopen both, `RegionSyncDump`.
-   - Pass: the deal appears once on each side with the pre-exit amounts, and connection counts equal the pre-exit dump.
-   - Fail: a missing or doubled deal or connection. Slice 2 stops (section 1).
-
-**2a (loopback unless marked):**
-
-2. **740 fix and mixed elevation [2 PCs, GOG guest].** (a) The non-elevated launcher launches the GOG instance. Pass: the instance starts and logs `SaveLock: ... opened`. Fail: the 740 message box. (b) Start the launcher elevated: one Warning in `lan.log`, Host and Join work, and games it starts sync (`Deliver` and `Commit` as in steps 3 and 4). (c) From an elevated PowerShell in the player's session, create `Local\SC4RegionSync.SaveLock.New York` with a default `[System.Threading.Mutex]`, then open TuggersVille in a medium game and press Ctrl+S. Pass: Warning `SaveLock: ... access denied`, the save `ok=1 unlocked=1`, status `lockDenied=1`, and `lan.log` `Sync paused: save lock unavailable`; no `Deliver` or `Commit` until that game exits. Fail: `CreateMutexW ... failed, error=5; saves run unlocked` with no Warning, or any copy or replace while paused.
-3. **Host save delivered closed.** Instance 1 saves BumperVille, exits to the region view, then quits. Pass: within 5 s / 15 s of the last game exit, `Deliver (4,6) ... applied` plus one per neighbor-written tile (`hostState=same`), equal hashes, host journal `hostCount` equal to the announced count, and `region.ini` hashes equal before and after the exit (A9). Fail: any `Deliver ... applied` while a game runs on the guest, unequal hashes, or `CHANGED layout=1`.
-4. **Guest push committed closed.** Instance 2 saves TuggersVille and quits; instance 1 not running. Pass: within 5 s / 15 s, `Commit (6,6) ... committed count=N`, equal hashes; on reopening on the host, `RegionSyncDump` equals the guest's. The guest's neighbor-written BumperVille is fetched again (`Refetch (4,6)`), never pushed. Fail: `REJECTED`, a push of (4,6), or unequal dumps.
-5. **No echo after commit.** After step 4, open and exit TuggersVille on the guest without saving, wait 60 s. Pass: no `Deliver (6,6)` line, hashes equal on both PCs. Fail: any delivery of (6,6).
-6. **Host neighbor write under a guest change.** The guest saves TuggersVille; before it commits, the host saves BumperVille (rewriting the host's TuggersVille with no lit save). Pass: `Commit (6,6) ... committed`. Fail: `REJECTED hostSaved`.
-7. **Both save one tile.** Both save TuggersVille while disconnected, then Join. Pass: `Conflict (6,6) copy -> Conflicts\...`, `conflict.txt` present, host file and guest file hashes unchanged, banner shown. Fail: any `Deliver (6,6)` or `Commit (6,6)`. Variant: a city the host never saved with the plugin, saved on the guest only: `Commit (6,6) ... bound` (the push binds the host file), one file for (6,6). Variant: the guest's `baseFile` bound to another tile on the host: `REJECTED bound`, conflict path, no file changed.
-8. **Rename, one file per tile.** (a) Rename TuggersVille on the guest and save; before the commit, reopen the renamed city on the guest. Pass: the guest log shows `SaveCount: (6,6) loaded from '<new name>'`, the guest journal keeps `baseFile` as the old name until `COMMITTED`; after commit the host holds exactly one `.sc4` for (6,6) (by `.saves` and a directory listing), and the old name is in `archive\`. Fail: two `.sc4` files for (6,6) on the host. (b) The same on the host toward the guest.
-9. **Disconnect mid-transfer.** A PowerShell loop tails `lan.log` (`Get-Content -Wait | Select-String 'FILE .* offset='`) and runs `Stop-Process` on the host launcher at the first progress line, once during a push and once during a delivery. Pass: parts deleted, the transfer redone after reconnect, equal hashes. Fail: a part in Regions or unequal hashes.
-10. **Crash mid-commit.** `DebugCommitPauseMs=10000`; kill the host launcher in the pause. Pass: no file missing; at restart the re-push logs `Commit (6,6) idempotent`. Fail: a missing file or a second move.
-11. **Disk, hostile input, failed save.** (a) `FreeSpaceFloorMiB` above the host's free space: `REJECTED space`, the `Sync paused` banner naming the folder, nothing in Regions. (b) S9's three unauthenticated cases again; authenticated hostile frames are covered by `make test-launcher` (the receiver calls the same validators). (c) Hold `City - TuggersVille.sc4` open on the guest from PowerShell (`[IO.File]::Open(..., 'Open', 'Read', 'Read')`) and press Ctrl+S: `SaveCount ... ok=0`, no `Push (6,6)`, "save failed here". Fail: any file written, or a push.
-12. **Staging beside a running game (A7).** Instance 1 in BumperVille on the host saves five times about 30 s apart while the host launcher stages the neighbor-written TuggersVille and DumpsVille after each. Pass: five `ok=1`, no `SaveLock` timeout, every staged hash equal to the file after the copy; record the number of `Stage: retry` lines and of saves after which a neighbor's mtime did not change (each is a skipped neighbor write). Fail: any `ok=0`, a timeout, or `Stage: retry exhausted`.
-
-**2b [2 PCs]:**
-
-13. **Guard.** The host is in BumperVille; the guest opens it. Pass: within 2 s of the host status landing on the guest, `Guard: holding tile (4,6) for <host>` in the guest's `lan.log`, then the guest plugin `TileLock: ... already exists, peer=1`, the `Conflict:` line names the host, both banners name the tile. The guest's Ctrl+S gives `dark=1` and never a `Commit (4,6)`. Reverse roles. Fail: a lit second opener or any commit of a dark save.
-14. **Guard release.** End the guest game: `Guard: released tile` within 2 s of the reap. Kill the guest launcher: the host keeps the mutex 10 minutes (plus or minus 30 s), then releases. Fail: an early or missing release.
-15. **Dark save on the host.** The guest opens TuggersVille; the host opens it (dark) and saves; the guest saves and exits. Pass: host `SaveCount: (6,6) ... dark=1`, `Conflict (6,6) dark copy -> Conflicts\...`, then `Commit (6,6)` and the guest's hash in the host's Regions. Variant: the host saves TuggersVille lit and exits, then, before the delivery, reopens it dark and saves: tile flagged, both copies kept, no `Commit (6,6)`. Fail: `Deliver (6,6)` of a dark file, or a dark file left in the host's Regions after the guest's push.
-16. **Guard across elevation.** With the D14 descriptor, an elevated PowerShell creates the tile mutex for (6,6); a medium game opens TuggersVille. Pass: `TileLock: ... already exists, peer=1`, no Warning. With a default `[System.Threading.Mutex]` instead: Warning `TileLock: ... access denied, peer assumed`, the city dark. Fail: `CreateMutexW ... failed, error=5; no same-tile guard`.
-17. **Mutex name case (A12).** Compare the `region=` value of a status file with the on-disk folder name on both PCs, and confirm step 13's guard with a region whose folder name has mixed case. Pass: byte-equal names and `peer=1`. Fail: a lit second opener.
-
-**2c gate** (18 and 19 from PowerShell before 2c code; 20 and 21 on the 2c build before it ships; the 2c ground-rule wording stays provisional until all four pass):
-
-18. **Copy right after a save (A1).** A PowerShell loop copies TuggersVille's file with `[IO.File]::Open(..., 'Open', 'Read', 'Read, Delete')` and hashes each copy, while the player presses Ctrl+S five times about 2 s apart. Pass: five `SaveCount ... ok=1`, no `SaveLock` timeout, and the copy taken after each `SaveLock: released` hashes equal to the file. Fail: any `ok=0`, a timeout, or a torn copy.
-19. **Rename over an open city fails (A3).** From PowerShell, `[IO.File]::Move($copy, $target, $true)` over TuggersVille's file while instance 2 has it open. Pass: a sharing violation (error 32), hash unchanged. Fail: the move succeeds.
-20. **Replace beside a running game (A2, A4).** Instance 2 in TuggersVille on the guest; the host saves DumpsVille, then BumperVille. Pass: both `Deliver ... applied` within 5 s / 15 s; no Error or Warning line in the guest's `SC4RegionSync.log` until its next `Pull`, and the game still running 60 s later. Then instance 2 exits to the region view and the host saves BumperVille again: `RegionWatch: N tile(s) due` and `Reload (4,6) ... recordPtrChanged=1` within 5 s / 15 s. Fail: a crash, a dialog, a `SaveLock` timeout.
-21. **City load during a delivery (A5).** Click Play on BumperVille on the guest during a delivery of it. Pass: `SaveCount: (4,6) loaded from` and a `RegionSyncDump` population equal to the dump of either the old or the new file; any failed move logs `Deliver (4,6) retry error=32`, then `applied` within 15 s / 30 s of the city closing. Fail: a load error, a crash, or a dump matching neither file.
-
-**2d and soak [2 PCs]:**
-
-22. **Picker.** Both save TuggersVille while apart; Join. Pass: one row; Keep guest puts the host file in the host's `Conflicts\` and commits the guest's, equal hashes; Keep host does the reverse on the guest and ends with `APPLIED`; Decide later keeps the banner; a host save between opening and OK gives `RESOLVED ok=0 reason=changed`. After a guest epoch reset (rename the guest's `_saves\New York`), Keep guest commits once and the next push is accepted. Fail: a file replaced without its copy, or `REJECTED epoch` after an accepted `RESOLVE`.
-23. **Latency.** Repeat 3, 4 and 7 wired. Record the time from `SaveLock: released` to `COMMITTED` or `APPLIED` with `w32tm`-synced clocks; 2a target 15 s after the receiver's last game exit, 2c target 15 s after the save.
-24. **Soak.** 60 minutes, host in BumperVille, guest in TuggersVille, saves every few minutes, one exit to the region view and back each. Pass: every save committed or delivered, no conflicts, no Warning lines; `Stage: retry` lines counted and recorded (A7).
-
-**Observed.** (empty, one slot per step)
-
-## 16. Game behaviour assumed, not yet observed
-
-| Increment | # | Assumption | Basis so far | Step |
-|---|---|---|---|---|
-| all | A0 | Discarding a neighbor-written file in favour of the tile's own save keeps deals and connections after reload | study 2.9 hypothesis; S8 drops them on connect; S10 saw a live deal only | 1 |
-| 2a | A6 | A city saved on one PC loads identically on the other | S10 GOG guest and Steam host share vtables; no file compare yet | 4 |
-| 2a | A7 | A staging copy beside a running game only skips a colliding neighbor write and never blocks a save | Q4 launcher note (theory); slice 1 stages at connect | 12, 24 |
-| 2a | A8 | A failed save leaves `lastOk=0` and the previous file restored by the game | save-641 step 8 (Ghidra) | 11c |
-| 2a | A9 | `region.ini` is rewritten on city exit with the same bytes, so no false `layout=1` | Q4 saw a write, bytes not compared | 3 |
-| 2a, 2b | A11 | A medium-integrity game opens a mutex made with the D14 descriptor by an elevated process | Windows docs | 2, 16 |
-| 2b | A10 | The plugin treats a launcher-held tile mutex like an instance's, with Q14's dark city | code reading (`TileLock::Open`) | 13 |
-| 2b | A12 | `GetDirectoryName()` returns the region folder name in its on-disk case | code reading only | 17 |
-| 2c | A1 | Copying a city's own `.sc4` right after its save never blocks or fails the next save | save-641 share modes (Ghidra) | 18 |
-| 2c | A2 | Replacing a tile file not open in a running game is as safe as a local peer's save | Q4, Q15, Q17 observed peer saves, not a launcher move | 20 |
-| 2c | A3 | A game with a city open holds its file with read sharing only, so a move over it fails with error 32 | save-641 (Ghidra); S4 saw error 32 from a PowerShell handle | 19 |
-| 2c | A4 | RegionWatch reloads a launcher-replaced tile like a peer's save | Q17 step 4 (peer save) | 20 |
-| 2c | A5 | A city load reads only its own file, held from `LoadCity`, and no other tile's `.sc4` after region init | unknown | 21 |
-
-## 17. Docs to update on completion
-
-- `release/README.txt`: saves flow both ways; when a save arrives (2a: other PC's games closed; 2c: live); `Conflicts\`; the trust paragraph (section 12); the uninstall line about where the launcher replaces files.
-- `release/SIMTROPOLIS-POST.md`: the same, replacing "Guest saves stay on the guest in this release".
-- `docs/DESIGN.md`: Two PCs section and trust model (section 12).
-- `docs/ARCHITECTURE.md`: host journal, counters and epochs, commit and delivery, guard mutexes and descriptor, `Conflicts\`, source map (`Ownership`).
-- `docs/PHASES.md`: split slice 2 into 2a to 2d checkboxes; the cross-PC same-tile guard moves from slice 3 to 2b.
-- `CLAUDE.md`: status line, the amended ground rule (section 3, 2c part provisional until observed), the launcher exception next to "Never write to `.sc4` save files or the Regions folder from the plugin", `launcher/Ownership` in the Windows-free list.
-- `docs/OPEN-QUESTIONS.md`: Q20 Observed slots; a Q4 note that the host launcher now try-locks the save mutex too.
+1. Add Q20 steps 2 to 7 to `docs/OPEN-QUESTIONS.md`; run them on the current build; record; review this plan with the results.
+2. Per increment: build once, deploy the same build to both PCs (the build and `proto` checks refuse mixed builds); back up `Regions\<region>` and the store on both PCs; first connect after the 2b upgrade with SimCity 4 closed on both.
+3. On completion of each increment update: `release/README.txt` and `release/SIMTROPOLIS-POST.md` (section 6 text, section 9), `docs/DESIGN.md` (route C, trust), `docs/ARCHITECTURE.md` (tile map, save window, journals, hashes, groups, pause, guard, `Conflicts\`, source map), `docs/PHASES.md` (2a to 2c; the cross-PC guard moves from slice 3 to 2a), `CLAUDE.md` (status, section 12), `docs/OPEN-QUESTIONS.md` (Q21, a Q4 note that both launchers try-lock the save mutex).
 
 ## Not in slice 2
 
-- More than one guest, more than one region per connection, launching instances on the other PC.
-- Encryption, the Plugins diff list, IPv6, non-ASCII region names.
-- Pushing region layout from the guest (D12).
-- Live renames, new or removed files while games run.
-- Reading a `.sc4` to check its tile or soundness: no parser exists; the paired peer is the player's own PC and pairing is the trust boundary (section 12).
-- An in-game notice for a dark city; the launcher banner and the Q14 log line are the signal, as on one PC.
-- Refusing a save in the plugin (owner decision pending, section 0).
-- Suppression of foreign neighbor writes by the plugin (study 2.9; slice 3).
-- A cross-PC save lock; the copy under the save mutex (D5), unless step 24 calls for it.
-- The tile picture refresh after a replace (Q17, parked).
+- More than one guest or region per connection, launching instances on the other PC, encryption, the Plugins diff list, IPv6, non-ASCII region names.
+- Writing any part of a `.sc4` from the launcher or the plugin; a plugin deal ledger or load-time reconciliation (rejected 2026-11-06); validating the record or directory entries.
+- Machinery for the D1 reverts; merging two records.
+- Guest-side region layout or removals reaching the host (D8, D12).
+- Refusing a save in the plugin; an in-game notice for a dark city; the tile picture refresh (Q17, parked).
+- The GOG 740 fix: already in the tree (`launcher/Launch.cpp`); its two-PC check is Q21 step 1.
