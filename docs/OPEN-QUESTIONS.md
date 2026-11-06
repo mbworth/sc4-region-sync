@@ -421,3 +421,18 @@ Plan: `docs/PLAN-DERIVED-DEMAND.md`. Snapshots carry all 39 region-use keys; wit
 6. Mixed builds: not run (single build on the box). The format argument stands: the parser clamps at the slot count and an old reader stops at 12 entries.
 
 Exit criteria met. Default flipped to `SyncDerivedDemand=1` in the following commit.
+
+## Q20. Can a tile's own save replace a neighbor-written copy of its file (slice 2 gate)?
+
+`docs/PLAN-LAN-2.md` section 1. D1 discards the game's rewrites of neighbouring city files. The gate asks whether a reload after that keeps deals and connections.
+
+**Observed 2026-11-06 (build 0.2.0+cd3dda9, one PC, two instances, region New York): fail.** A city's deal with a neighbour is loaded from the neighbour's file, so discarding a neighbor write reverts the saver's own deal change.
+
+1. Both cities open, existing water deal TuggersVille (6,6) to BumperVille (4,6), amount 6728. TuggersVille saved (`count=28`); file copied aside. BumperVille saved (`count=16`): TuggersVille's file hash unchanged. The save rewrote DumpsVille and two unplayed tiles only. A neighbour's file is not rewritten while another instance has that city open.
+2. TuggersVille's instance moved to region view; BumperVille saved again (`count=17`): TuggersVille's file hash changed, size unchanged.
+3. Both exited, TuggersVille's own save copied back, both reopened. Dumps before and after: deal once on each side, amount 6728, connections 10 and 13 on both. Pass for an unchanged deal. `expiresIn` moved across the reload on both sides (33 to 156, 232 to 32), and on BumperVille's deal with DumpsVille (232 to 156); cause unknown.
+4. Variant. TuggersVille saved (`count=29`) and copied aside, instance at region view. In BumperVille the water deal was cancelled, the city saved (`count=18`, dump `Deals (FindDealsAll): 1`), both exited. TuggersVille's file had been rewritten; its own save (made while the deal existed) was copied back.
+5. TuggersVille opened alone: `Publish (city load): (6,6) ... deals=1`, the water deal absent, before any pull (`Pull (city load): files=2 dead=1 applied=0`). It took the cancellation from BumperVille's file.
+6. BumperVille opened: `Capture: deal type=0x4773FFE3 otherTile=(6,6) amount=6728` and `Publish (city load): (4,6) ... deals=2` before its first pull. The deal it had cancelled and saved was back, read from the restored TuggersVille file. The plugin then mirrored it into TuggersVille (`MirrorDeals: ProposeDeal=1`, `AddDeal=1`, `Mirror (4,6): ... deals=1`).
+
+Conclusion: the neighbor-written part of a city file is the saving neighbour's own record of the shared deal. Whole-file rules that drop it resurrect cancelled deals (and presumably drop new ones). D1 cannot stand; slice 2 stops before code and the plan is reworked. One run, deals only; connections were not changed in the variant. Both file pairs (own save, neighbor-written) are kept on the test PC for a DBPF subfile diff.

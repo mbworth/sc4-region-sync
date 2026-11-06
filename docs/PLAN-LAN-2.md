@@ -21,6 +21,8 @@ Ordered by risk. Snapshots and status files mirror live throughout, as today.
 
 ## 1. Design-freeze gate
 
+**Gate failed 2026-11-06 (Q20 in `docs/OPEN-QUESTIONS.md`).** A city loads its deal with a neighbour from the neighbour's file, so a discarded neighbor write brought a cancelled deal back. D1 does not stand. Everything below is on hold until reworked and re-reviewed; no slice 2 code.
+
 Before any slice 2 code, Q20 step 1 (section 15) runs on the current build: a tile's own save restored over a neighbor-written copy, both cities reloaded, deals and connections compared. Every rule below discards neighbor writes into the other PC's tiles (D1); slice 1 S8 already does so on connect, but nobody has checked a reload after it.
 
 If it fails, D1 cannot stand: a tile's file would carry something the neighbor's load depends on. Slice 2 then stops before code. The likely rework is that each save carries its neighbor-written files and they commit only for tiles unchanged on the receiver (more conflicts, larger transfers); the plan is reviewed again.
